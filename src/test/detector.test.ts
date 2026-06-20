@@ -1,7 +1,7 @@
 import { describe, expect, it } from "vitest";
 import type { LoadedInput, VirtualFile } from "../types/deck";
 import { detectDeck, findIndexFile } from "../lib/detector";
-import { rewriteHtml } from "../lib/injector";
+import { convertInput, rewriteHtml } from "../lib/injector";
 import { textToBytes } from "../lib/text";
 
 function file(path: string, text: string): VirtualFile {
@@ -53,5 +53,15 @@ describe("runtime injection", () => {
     expect(html).toContain("<deck-stage");
     expect(html).toContain("runtime/html-deck-editor.js");
     expect(html).toContain("HtmlDeckEditor.mount");
+  });
+
+  it("converts a simple single-file deck into a downloadable zip blob", async () => {
+    const result = await convertInput(input([
+      file("index.html", "<main><section><h1>One</h1><p>Enough text here</p></section><section><h1>Two</h1><p>Enough text here</p></section></main>")
+    ]));
+    expect(result.blob).toBeTruthy();
+    expect(result.outputName).toBe("sample-editable.zip");
+    expect(result.filesAdded).toContain("runtime/html-deck-editor.js");
+    expect(result.filesModified).toEqual(["index.html"]);
   });
 });
