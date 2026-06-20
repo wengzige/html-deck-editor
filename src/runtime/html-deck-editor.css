@@ -1166,6 +1166,14 @@
       outline: 1px dashed rgba(31, 43, 224, 0.42);
       outline-offset: 4px;
       cursor: text;
+      user-select: text;
+      -webkit-user-select: text;
+    }
+
+    body.editing [data-editable] *,
+    body.editing [data-editor-kind="text"] * {
+      user-select: text;
+      -webkit-user-select: text;
     }
 
     body.editing [data-editable-media],

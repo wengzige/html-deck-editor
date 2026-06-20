@@ -108,7 +108,7 @@
       <section class="inspector-section">
         <p class="editor-title">Content</p>
         <label class="field-label" for="textInput">文字</label>
-        <p class="field-help">点选或双击文字后，在这里改内容；画面中不直接输入。</p>
+        <p class="field-help">拖选画面里的单字或片段后改字号；文字内容在这里改。</p>
         <textarea class="editor-textarea" id="textInput" disabled></textarea>
         <label class="field-label" for="imageInput">图片文件</label>
         <div class="file-picker-row">
@@ -335,7 +335,13 @@
     const stage = getStage();
     if (!stage) throw new Error("FrontendSlidesEditor requires #deckStage or .deck-stage");
     const presentation = input || {};
-    presentation.stage = presentation.stage || stage;
+    if (!presentation.stage || !presentation.stage.isConnected || presentation.stage !== stage) {
+      presentation.stage = stage;
+      delete presentation.showSlide;
+      delete presentation.scaleStage;
+      delete presentation.setEditorInsets;
+      presentation.currentSlide = computeCurrentSlide(Array.from(stage.querySelectorAll(".slide")));
+    }
     presentation.slides = Array.from(stage.querySelectorAll(".slide"));
     if (!Number.isFinite(presentation.currentSlide)) presentation.currentSlide = computeCurrentSlide(presentation.slides);
     presentation.editorInsets = normalizeInsets(presentation.editorInsets);
@@ -405,6 +411,10 @@
         this.motionStableBoxes = new WeakMap();
         this.motionStableAncestors = new WeakMap();
         this.motionAncestorCounts = new WeakMap();
+        this.textSelectionRange = null;
+        this.textSelectionElement = null;
+        this.globalListenerController = typeof AbortController !== "undefined" ? new AbortController() : null;
+        this.globalListeners = [];
         this.lastSlideReplay = { index: -1, at: 0 };
         this.motionHold = false;
         this.pendingConfirm = null;
@@ -988,26 +998,29 @@
         this.controls.previewMotion.addEventListener("click", () => this.previewMotion());
         this.controls.previewSlideMotion.addEventListener("click", () => this.replayActiveSlideMotion());
         this.controls.restoreMotion.addEventListener("click", () => this.restoreOriginalMotion(this.selected, true));
+        this.controls.fontSize.addEventListener("pointerdown", () => this.captureTextSelection());
+        this.controls.fontSize.addEventListener("focus", () => this.captureTextSelection());
 
         const liveInspectorControls = new Set(["text", "fontSize", "color", "bg", "opacity", "x", "y", "width", "height", "order", "delay", "duration"]);
         ["text", "shape", "fontFamily", "fontSize", "color", "bg", "opacity", "x", "y", "width", "height", "anim", "order", "delay", "duration"].forEach((name) => {
           const control = this.controls[name];
           if (liveInspectorControls.has(name)) {
-            control.addEventListener("input", () => this.applyInspectorValue(name, { recordHistory: false, refreshInspector: false }));
+            control.addEventListener("input", () => this.applyInspectorValue(name, { recordHistory: false, refreshInspector: false, live: true }));
           }
           control.addEventListener("change", () => this.applyInspectorValue(name, { recordHistory: true }));
         });
 
-        document.addEventListener("keydown", (event) => this.handleKeydown(event));
-        document.addEventListener("slidechange", (event) => this.handleSlideChange(event));
-        document.addEventListener("click", (event) => {
+        this.addGlobalListener(document, "keydown", (event) => this.handleKeydown(event));
+        this.addGlobalListener(document, "selectionchange", () => this.captureTextSelection());
+        this.addGlobalListener(document, "slidechange", (event) => this.handleSlideChange(event));
+        this.addGlobalListener(document, "click", (event) => {
           if (!event.target.closest(".shape-picker-wrap") && !event.target.closest("#shapeMenu")) this.closeShapeMenu();
         });
-        document.addEventListener("pointerdown", (event) => this.handleDocumentPointerDown(event), true);
-        document.addEventListener("pointermove", (event) => this.handlePointerMove(event));
-        document.addEventListener("pointerup", () => this.finishPointerAction());
-        document.addEventListener("pointercancel", () => this.finishPointerAction());
-        window.addEventListener("blur", () => this.finishPointerAction());
+        this.addGlobalListener(document, "pointerdown", (event) => this.handleDocumentPointerDown(event), true);
+        this.addGlobalListener(document, "pointermove", (event) => this.handlePointerMove(event));
+        this.addGlobalListener(document, "pointerup", () => this.finishPointerAction());
+        this.addGlobalListener(document, "pointercancel", () => this.finishPointerAction());
+        this.addGlobalListener(window, "blur", () => this.finishPointerAction());
 
         this.frameMove.addEventListener("pointerdown", (event) => this.startPointerAction(event, "move"));
         this.frameDelete.addEventListener("pointerdown", (event) => {
@@ -1021,17 +1034,43 @@
         });
         this.frameResize.addEventListener("pointerdown", (event) => this.startPointerAction(event, "resize"));
 
-        window.addEventListener("dragenter", (event) => this.handleDragEnter(event));
-        window.addEventListener("dragover", (event) => this.handleDrag(event));
+        this.addGlobalListener(window, "dragenter", (event) => this.handleDragEnter(event));
+        this.addGlobalListener(window, "dragover", (event) => this.handleDrag(event));
         this.controls.dropZone.addEventListener("dragenter", (event) => this.handleDrag(event));
         this.controls.dropZone.addEventListener("dragover", (event) => this.handleDrag(event));
-        window.addEventListener("dragleave", (event) => this.clearDrag(event));
-        window.addEventListener("drop", (event) => this.handleDrop(event));
-        window.addEventListener("resize", () => {
+        this.addGlobalListener(window, "dragleave", (event) => this.clearDrag(event));
+        this.addGlobalListener(window, "drop", (event) => this.handleDrop(event));
+        this.addGlobalListener(window, "resize", () => {
           this.applyEditorLayout();
           this.updateFrame();
           if (!this.controls.shapeMenu.hidden) this.positionShapeMenu();
         });
+      }
+
+      addGlobalListener(target, type, handler, options) {
+        this.globalListeners.push({ target, type, handler, options });
+        if (this.globalListenerController) {
+          const listenerOptions = typeof options === "boolean" ? { capture: options } : { ...(options || {}) };
+          listenerOptions.signal = this.globalListenerController.signal;
+          target.addEventListener(type, handler, listenerOptions);
+          return;
+        }
+        target.addEventListener(type, handler, options);
+      }
+
+      destroy() {
+        this.globalListenerController?.abort();
+        this.globalListeners.forEach(({ target, type, handler, options }) => {
+          target.removeEventListener(type, handler, options);
+        });
+        this.globalListeners = [];
+        this.clearTextSelection();
+        this.stopMotionFrameTracking();
+        window.clearTimeout(this.motionPreviewTimer);
+        window.clearTimeout(this.hideTimeout);
+        window.clearTimeout(this.toastTimer);
+        window.clearTimeout(this.textFocusTimer);
+        if (window.editor === this) delete window.editor;
       }
 
       bindEditableEvents() {
@@ -1044,6 +1083,11 @@
         element.addEventListener("pointerdown", (event) => {
           if (!this.isActive) return;
           const target = this.getEditableTarget(event.target);
+          if (this.isTextElement(target)) {
+            this.select(target);
+            this.clearTextSelection();
+            return;
+          }
           const canDragBody = this.isDraggableEditable(target);
           if (!canDragBody) return;
           event.preventDefault();
@@ -1053,18 +1097,22 @@
         });
         element.addEventListener("click", (event) => {
           if (!this.isActive) return;
-          event.preventDefault();
+          const target = this.getEditableTarget(event.target) || element;
           event.stopPropagation();
-          this.select(this.getEditableTarget(event.target) || element);
+          this.select(target);
+          if (this.isTextElement(target)) {
+            this.captureTextSelection();
+            return;
+          }
+          event.preventDefault();
         });
         element.addEventListener("dblclick", (event) => {
           if (!this.isActive) return;
           const target = this.getEditableTarget(event.target) || element;
-          event.preventDefault();
           event.stopPropagation();
           this.select(target);
           if (this.isTextElement(target)) {
-            this.focusTextEditor();
+            this.focusTextLayer(target);
           }
         });
         element.addEventListener("input", () => {
@@ -1145,6 +1193,10 @@
         }
         if (!this.isActive || formTarget) return;
         if (event.key === "Delete" || event.key === "Backspace") {
+          if (this.validTextSelectionRange(this.selected)) {
+            event.preventDefault();
+            return;
+          }
           event.preventDefault();
           this.confirmDeleteSelected();
         }
@@ -1198,7 +1250,7 @@
       }
 
       isFormTarget(target) {
-        return target && ["INPUT", "TEXTAREA", "SELECT"].includes(target.tagName);
+        return target && (["INPUT", "TEXTAREA", "SELECT"].includes(target.tagName) || target.isContentEditable);
       }
 
       showButtons() {
@@ -1284,6 +1336,7 @@
         this.getEditableElements().forEach((element) => {
           element.removeAttribute("contenteditable");
         });
+        if (!this.isActive) this.clearTextSelection();
         this.hideDeckResetControl();
         this.attachFrame();
         this.refreshEditorLayoutSoon();
@@ -1362,6 +1415,7 @@
         this.stopMotionFrameTracking();
         if (this.selected) this.selected.classList.remove("editor-selected");
         this.selected = null;
+        this.clearTextSelection();
         this.frame.classList.remove("active");
         if (update) this.updateInspector();
       }
@@ -1450,11 +1504,160 @@
         this.controls.text.select();
       }
 
+      focusTextLayer(element) {
+        if (!element || this.isSvgElement(element)) {
+          this.focusTextEditor();
+          return;
+        }
+        if (!element.hasAttribute("tabindex")) element.tabIndex = -1;
+        element.focus({ preventScroll: true });
+      }
+
+      clearTextSelection() {
+        this.textSelectionRange = null;
+        this.textSelectionElement = null;
+      }
+
+      selectionBelongsToElement(range, element) {
+        if (!range || !element) return false;
+        const belongs = (node) => {
+          const parent = node?.parentElement || node?.parentNode;
+          const target = node?.nodeType === Node.ELEMENT_NODE ? node : parent;
+          return Boolean(target && (target === element || element.contains(target)));
+        };
+        return belongs(range.startContainer) && belongs(range.endContainer);
+      }
+
+      isInspectorFocused() {
+        return Boolean(document.activeElement?.closest?.(".editor-shell"));
+      }
+
+      captureTextSelection(options = {}) {
+        if (!this.isActive || !this.selected || !this.isTextElement(this.selected) || this.isSvgElement(this.selected)) return;
+        const selection = window.getSelection?.();
+        if (!selection || selection.rangeCount === 0) return;
+        const range = selection.getRangeAt(0);
+        if (range.collapsed) {
+          return;
+        }
+        if (!this.selectionBelongsToElement(range, this.selected)) {
+          return;
+        }
+        this.textSelectionRange = range.cloneRange();
+        this.textSelectionElement = this.selected;
+        if (options.syncInspector !== false) this.syncInlineSelectionInspector();
+      }
+
+      validTextSelectionRange(element) {
+        const range = this.textSelectionRange;
+        if (!range || range.collapsed || this.textSelectionElement !== element) return null;
+        if (!element?.isConnected || !this.selectionBelongsToElement(range, element)) {
+          this.clearTextSelection();
+          return null;
+        }
+        return range.cloneRange();
+      }
+
+      rangeStyleElement(range, element) {
+        const node = range?.startContainer;
+        const parent = node?.parentElement || node?.parentNode;
+        const target = node?.nodeType === Node.ELEMENT_NODE ? node : parent;
+        if (!target || !element.contains(target)) return element;
+        return target;
+      }
+
+      syncInlineSelectionInspector() {
+        const range = this.validTextSelectionRange(this.selected);
+        if (!range || !this.controls.fontSize || this.controls.fontSize.disabled) return;
+        const styleTarget = this.rangeStyleElement(range, this.selected);
+        const size = Math.round(Number.parseFloat(getComputedStyle(styleTarget).fontSize)) || "";
+        this.controls.fontSize.value = String(size);
+      }
+
+      applyInlineTextStyle(element, property, value) {
+        const range = this.validTextSelectionRange(element);
+        if (!range) return false;
+        let wrapper = document.createElement("span");
+        wrapper.style.setProperty(property, value);
+        const fragment = range.extractContents();
+        if (!fragment.textContent || !fragment.textContent.trim()) {
+          range.insertNode(fragment);
+          return false;
+        }
+        wrapper.appendChild(fragment);
+        range.insertNode(wrapper);
+        this.unwrapNestedMatchingSpans(wrapper, property, value);
+        wrapper = this.mergeAdjacentInlineSpans(wrapper, property);
+        this.select(element);
+        this.restoreRangeAround(wrapper);
+        this.normalizeInlineTextStyles(element);
+        this.textSelectionRange = this.currentSelectionRangeFor(element);
+        this.textSelectionElement = element;
+        return true;
+      }
+
+      currentSelectionRangeFor(element) {
+        const selection = window.getSelection?.();
+        if (!selection || selection.rangeCount === 0) return null;
+        const range = selection.getRangeAt(0);
+        return this.selectionBelongsToElement(range, element) ? range.cloneRange() : null;
+      }
+
+      restoreRangeAround(element) {
+        const selection = window.getSelection?.();
+        if (!selection || !element?.isConnected) return;
+        const range = document.createRange();
+        range.selectNodeContents(element);
+        selection.removeAllRanges();
+        selection.addRange(range);
+      }
+
+      unwrapNestedMatchingSpans(root, property, value) {
+        root.querySelectorAll("span[style]").forEach((span) => {
+          if (span.style.getPropertyValue(property) !== value) return;
+          if (span.style.length !== 1) return;
+          while (span.firstChild) span.parentNode.insertBefore(span.firstChild, span);
+          span.remove();
+        });
+      }
+
+      mergeAdjacentInlineSpans(span, property) {
+        if (!span?.parentNode) return span;
+        let current = span;
+        const sameStyle = (candidate) =>
+          candidate &&
+          candidate.nodeType === Node.ELEMENT_NODE &&
+          candidate.tagName === "SPAN" &&
+          candidate.getAttribute("style") === current.getAttribute("style") &&
+          candidate.style.getPropertyValue(property) === current.style.getPropertyValue(property);
+        while (sameStyle(current.previousSibling)) {
+          const previous = current.previousSibling;
+          while (current.firstChild) previous.appendChild(current.firstChild);
+          current.remove();
+          current = previous;
+        }
+        while (sameStyle(current.nextSibling)) {
+          const next = current.nextSibling;
+          while (next.firstChild) current.appendChild(next.firstChild);
+          next.remove();
+        }
+        return current;
+      }
+
+      normalizeInlineTextStyles(element) {
+        element.normalize();
+        element.querySelectorAll("span").forEach((span) => {
+          if (span.textContent) return;
+          span.remove();
+        });
+      }
+
       applyInspectorValue(name, options = {}) {
         const element = this.selected;
         if (!element) return;
         const recordHistory = options.recordHistory !== false;
         const refreshInspector = options.refreshInspector !== false;
+        const live = options.live === true;
         if (name === "text") {
           this.setEditableText(element, this.controls.text.value);
         }
@@ -1470,11 +1673,21 @@
           }
         }
         if (name === "fontSize" && this.isTextElement(element)) {
+          this.captureTextSelection({ syncInspector: false });
           const value = this.controls.fontSize.value;
           if (value === "") {
             element.style.removeProperty("font-size");
           } else {
             const size = this.clampNumber(value, 16, 8, 220);
+            if (!live && this.validTextSelectionRange(element) && !this.isSvgElement(element)) {
+              if (this.applyInlineTextStyle(element, "font-size", `${size}px`)) {
+                this.controls.fontSize.value = String(size);
+                this.updateFrame();
+                this.save(false, true);
+                return;
+              }
+            }
+            if (live && this.validTextSelectionRange(element) && !this.isSvgElement(element)) return;
             element.style.fontSize = `${size}px`;
             if (recordHistory) this.controls.fontSize.value = String(size);
           }
@@ -3074,6 +3287,7 @@
     }
 
   function mount(options = {}) {
+    window.editor?.destroy?.();
     ensureEditorDom();
     const presentation = normalizePresentation(options.presentation || window.presentation);
     window.presentation = presentation;

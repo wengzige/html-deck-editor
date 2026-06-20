@@ -30,6 +30,7 @@ const originalGetBoundingClientRect = Element.prototype.getBoundingClientRect;
 
 describe("editor runtime", () => {
   beforeEach(() => {
+    window.getSelection()?.removeAllRanges();
     document.body.innerHTML = "";
     document.head.innerHTML = "";
     const storage = new Map<string, string>();
@@ -46,6 +47,8 @@ describe("editor runtime", () => {
   });
 
   afterEach(() => {
+    (window as any).editor?.destroy?.();
+    window.getSelection()?.removeAllRanges();
     Element.prototype.getBoundingClientRect = originalGetBoundingClientRect;
     vi.unstubAllGlobals();
   });
@@ -106,4 +109,39 @@ describe("editor runtime", () => {
     expect(y).toBeGreaterThanOrEqual(76);
     expect(scale).toBeLessThan(1);
   });
+
+  it("applies font size to selected text without replacing surrounding inline HTML", () => {
+    document.body.innerHTML = `
+      <div id="deckStage" class="deck-stage">
+        <section class="slide active">
+          <h1 id="title" style="font-size:96px">基于MaxEnt模型的<span style="font-style:italic">气候适宜性</span>评价</h1>
+        </section>
+      </div>
+    `;
+    const title = document.getElementById("title") as HTMLElement;
+    title.getBoundingClientRect = () => rect({ left: 100, top: 100, width: 1100, height: 210 });
+
+    installRuntime();
+    const editor = (window as any).FrontendSlidesEditor.mount();
+    editor.toggleEditMode(true);
+    editor.select(title);
+
+    const textNode = title.firstChild as Text;
+    const range = document.createRange();
+    range.setStart(textNode, 2);
+    range.setEnd(textNode, 3);
+    const selection = window.getSelection() as Selection;
+    selection.removeAllRanges();
+    selection.addRange(range);
+    document.dispatchEvent(new Event("selectionchange"));
+
+    const fontSize = document.getElementById("fontSizeInput") as HTMLInputElement;
+    fontSize.value = "42";
+    fontSize.dispatchEvent(new Event("change", { bubbles: true }));
+
+    expect(title.innerHTML).toContain('<span style="font-size: 42px;">M</span>');
+    expect(title.innerHTML).toContain('<span style="font-style:italic">气候适宜性</span>');
+    expect(title.textContent).toBe("基于MaxEnt模型的气候适宜性评价");
+  });
+
 });
