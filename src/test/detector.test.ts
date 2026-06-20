@@ -37,6 +37,15 @@ describe("deck detection", () => {
     expect(report.sourceKind).toBe("generic-section");
   });
 
+  it("detects complex deck containers even when sections are not pre-classed as slides", () => {
+    const report = detectDeck(input([
+      file("index.html", "<canvas id=\"bg\"></canvas><div id=\"deck\"><section><h1>One</h1><p>Enough text here</p></section><section><h1>Two</h1><p>Enough text here</p></section></div><script>window.deckBoot = true;</script>")
+    ]));
+    expect(report.status).toBe("adaptable");
+    expect(report.sourceKind).toBe("generic-section");
+    expect(report.slideCount).toBe(2);
+  });
+
   it("detects Reveal.js decks as adaptable", () => {
     const report = detectDeck(input([
       file("index.html", "<div class=\"reveal\"><div class=\"slides\"><section>One</section><section>Two</section></div></div>")
@@ -73,12 +82,72 @@ describe("deck detection", () => {
 describe("runtime injection", () => {
   it("wraps section decks and adds runtime links", () => {
     const report = detectDeck(input([
-      file("index.html", "<main><section><h1>One</h1><p>Enough text here</p></section><section><h1>Two</h1><p>Enough text here</p></section></main>")
+      file("index.html", "<header id=\"intro\">Keep me</header><main><section><h1>One</h1><p>Enough text here</p></section><section><h1>Two</h1><p>Enough text here</p></section></main><footer id=\"credits\">Keep me too</footer><script>window.keepMe = true;</script>")
     ]));
-    const html = rewriteHtml("<main><section><h1>One</h1><p>Enough text here</p></section><section><h1>Two</h1><p>Enough text here</p></section></main>", report);
-    expect(html).toContain("<deck-stage");
+    const html = rewriteHtml("<header id=\"intro\">Keep me</header><main><section><h1>One</h1><p>Enough text here</p></section><section><h1>Two</h1><p>Enough text here</p></section></main><footer id=\"credits\">Keep me too</footer><script>window.keepMe = true;</script>", report);
+    expect(html).toContain("data-html-deck-editor-stage=\"preserve\"");
+    expect(html).toContain("id=\"intro\"");
+    expect(html).toContain("id=\"credits\"");
+    expect(html).toContain("window.keepMe = true;");
     expect(html).toContain("runtime/html-deck-editor.js");
     expect(html).toContain("HtmlDeckEditor.mount");
+  });
+
+  it("preserves existing slide containers instead of rebuilding the body", () => {
+    const source = `
+      <body class="canvas-mode">
+        <script>window.__originalBoot = true;</script>
+        <canvas id="bg-grid" class="bg"></canvas>
+        <div id="hint">Keyboard help</div>
+        <div id="deck">
+          <section class="slide accent" data-layout="S01"><canvas class="ascii-bg" aria-hidden="true"></canvas><h1>One</h1></section>
+          <section class="slide dark" data-layout="S02"><h1>Two</h1></section>
+        </div>
+        <div id="nav"></div>
+        <script>
+          const deck = document.getElementById('deck');
+          function go(n) { deck.style.transform = 'translateX(' + (-n * 100) + 'vw)'; }
+        </script>
+      </body>
+    `;
+    const report = detectDeck(input([file("index.html", source)]));
+    const html = rewriteHtml(source, report);
+
+    expect(report.status).toBe("adaptable");
+    expect(html).toContain("id=\"deck\"");
+    expect(html).toContain("data-html-deck-editor-stage=\"preserve\"");
+    expect(html).toContain("data-html-deck-editor-navigation=\"horizontal\"");
+    expect(html).toContain("id=\"bg-grid\"");
+    expect(html).toContain("id=\"hint\"");
+    expect(html).toContain("id=\"nav\"");
+    expect(html).toContain("window.__originalBoot = true;");
+    expect(html).toContain("function go(n)");
+    expect(html).toContain("data-layout=\"S01\"");
+    expect(html).toContain("class=\"ascii-bg\"");
+    expect(html).not.toContain("<deck-stage");
+    expect(html).toContain("runtime/html-deck-editor.js");
+  });
+
+  it("adapts unclassed deck sections without dropping surrounding runtime", () => {
+    const source = `
+      <canvas id="bg-grid"></canvas>
+      <div id="deck">
+        <section data-layout="A"><h1>One</h1><p>Enough text here</p></section>
+        <section data-layout="B"><h1>Two</h1><p>Enough text here</p></section>
+      </div>
+      <script>window.originalNavigation = true;</script>
+    `;
+    const report = detectDeck(input([file("index.html", source)]));
+    const html = rewriteHtml(source, report);
+
+    expect(report.status).toBe("adaptable");
+    expect(html).toContain("id=\"deck\"");
+    expect(html).toContain("data-html-deck-editor-stage=\"preserve\"");
+    expect(html).toContain("data-html-deck-editor-navigation=\"horizontal\"");
+    expect(html).toContain("class=\"slide active visible\"");
+    expect(html).toContain("data-layout=\"A\"");
+    expect(html).toContain("id=\"bg-grid\"");
+    expect(html).toContain("window.originalNavigation = true;");
   });
 
   it("converts a simple single-file deck into a downloadable zip blob", async () => {

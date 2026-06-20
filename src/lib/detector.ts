@@ -86,10 +86,7 @@ export function detectDeck(input: LoadedInput): DetectionReport {
     };
   }
 
-  const sections = Array.from(doc.body.querySelectorAll("main > section, body > section")).filter((section) => {
-    const text = (section.textContent || "").trim();
-    return text.length > 10;
-  });
+  const sections = selectGenericSections(doc);
   if (sections.length >= 2 && sections.length <= 80) {
     return {
       status: "adaptable",
@@ -106,6 +103,24 @@ export function detectDeck(input: LoadedInput): DetectionReport {
     "这看起来更像普通网页或应用，不像 HTML 演示稿。",
     "第一版不会强行转换普通网站，避免生成难以编辑的结果。"
   ]);
+}
+
+function selectGenericSections(doc: Document): Element[] {
+  const containerSections = Array.from(doc.body.querySelectorAll([
+    "#deck > section",
+    ".deck > section",
+    ".slides > section",
+    "[data-deck] > section",
+    "[data-slides] > section"
+  ].join(", "))).filter(hasEnoughText);
+  if (containerSections.length >= 2) return containerSections;
+
+  return Array.from(doc.body.querySelectorAll("main > section, body > section")).filter(hasEnoughText);
+}
+
+function hasEnoughText(section: Element): boolean {
+  const text = (section.textContent || "").trim();
+  return text.length > 10;
 }
 
 function unsupported(indexPath: string | null, messages: string[]): DetectionReport {

@@ -126,7 +126,7 @@ export function rewriteHtml(html: string, report: DetectionReport): string {
   removeLegacyEditorArtifacts(doc);
 
   if (report.status === "adaptable") {
-    wrapAsDeckStage(doc, report);
+    prepareAdaptableStage(doc, report);
   }
 
   ensureRuntimeLinks(doc);
@@ -142,48 +142,106 @@ function ensureTitle(doc: Document): void {
   }
 }
 
-function wrapAsDeckStage(doc: Document, report: DetectionReport): void {
-  const existingStage = doc.querySelector("deck-stage#deckStage, #deckStage, .deck-stage");
+function prepareAdaptableStage(doc: Document, report: DetectionReport): void {
+  const existingStage = doc.querySelector("deck-stage#deckStage, #deckStage, .deck-stage, [data-html-deck-editor-stage]");
   if (existingStage) return;
 
   const sourceSlides = selectSlideCandidates(doc, report);
   if (sourceSlides.length < 2) return;
 
-  const stage = doc.createElement("deck-stage");
-  stage.id = "deckStage";
-  stage.setAttribute("width", "1920");
-  stage.setAttribute("height", "1080");
-  stage.setAttribute("aria-label", "Presentation");
-
   sourceSlides.forEach((source, index) => {
-    const slide = doc.createElement("section");
-    slide.className = index === 0 ? "slide active visible" : "slide";
-    slide.setAttribute("data-title", slideTitle(source, index));
-    slide.innerHTML = `<div class="html-deck-editor-slide-content">${source.innerHTML}</div>`;
-    stage.appendChild(slide);
+    source.classList.add("slide");
+    if (index === 0 && !source.classList.contains("active") && !source.classList.contains("visible")) {
+      source.classList.add("active", "visible");
+    }
+    if (!source.getAttribute("data-title")) {
+      source.setAttribute("data-title", slideTitle(source, index));
+    }
   });
 
-  doc.body.innerHTML = "";
-  doc.body.appendChild(stage);
-  const style = doc.createElement("style");
-  style.setAttribute("data-html-deck-editor-generated", "layout");
-  style.textContent = `
-    html, body { margin: 0; min-height: 100%; background: #f6f7f9; color: #111827; }
-    deck-stage { position: fixed; inset: 0; display: block; background: #fff; }
-    .slide { box-sizing: border-box; width: 1920px; height: 1080px; padding: 88px; background: #fff; overflow: hidden; }
-    .html-deck-editor-slide-content { width: 100%; height: 100%; }
-    .html-deck-editor-slide-content img, .html-deck-editor-slide-content video { max-width: 100%; height: auto; }
-  `;
-  doc.head.appendChild(style);
+  const reusableStage = findReusableStage(sourceSlides);
+  if (reusableStage) {
+    markPreservedStage(reusableStage, sourceSlides);
+    return;
+  }
+
+  wrapSlidesInPlace(doc, sourceSlides);
+}
+
+function findReusableStage(sourceSlides: Element[]): Element | null {
+  const parent = sourceSlides[0]?.parentElement;
+  if (!parent || !sourceSlides.every((slide) => slide.parentElement === parent)) return null;
+
+  const selector = [
+    "#deck",
+    ".deck",
+    ".slides",
+    "main",
+    "[role='main']",
+    "[data-deck]",
+    "[data-slides]"
+  ].join(", ");
+  if (parent.matches(selector)) return parent;
+
+  const elementChildren = Array.from(parent.children);
+  const slideSet = new Set(sourceSlides);
+  const onlySlides = elementChildren.length === sourceSlides.length && elementChildren.every((child) => slideSet.has(child));
+  return onlySlides ? parent : null;
+}
+
+function markPreservedStage(stage: Element, sourceSlides: Element[]): void {
+  stage.setAttribute("data-html-deck-editor-stage", "preserve");
+  if (shouldUseHorizontalNavigation(stage, sourceSlides)) {
+    stage.setAttribute("data-html-deck-editor-navigation", "horizontal");
+  }
+  if (!stage.id) stage.id = "deckStage";
+  if (!stage.getAttribute("aria-label")) stage.setAttribute("aria-label", "Presentation");
+}
+
+function shouldUseHorizontalNavigation(stage: Element, sourceSlides: Element[]): boolean {
+  if (stage.matches("#deck, .deck, [data-deck]")) return true;
+  const elementChildren = Array.from(stage.children);
+  const slideSet = new Set(sourceSlides);
+  return elementChildren.length === sourceSlides.length && elementChildren.every((child) => slideSet.has(child));
+}
+
+function wrapSlidesInPlace(doc: Document, sourceSlides: Element[]): void {
+  const stage = doc.createElement("div");
+  stage.id = "deckStage";
+  stage.className = "deck-stage";
+  stage.setAttribute("data-html-deck-editor-stage", "preserve");
+  stage.setAttribute("data-html-deck-editor-navigation", "horizontal");
+  stage.setAttribute("aria-label", "Presentation");
+
+  const firstSlide = sourceSlides[0];
+  firstSlide.parentNode?.insertBefore(stage, firstSlide);
+  sourceSlides.forEach((source, index) => {
+    if (index === 0) {
+      source.classList.add("active", "visible");
+    } else {
+      source.classList.remove("active", "visible");
+    }
+    stage.appendChild(source);
+  });
 }
 
 function selectSlideCandidates(doc: Document, report: DetectionReport): Element[] {
   if (report.sourceKind === "reveal") return Array.from(doc.querySelectorAll(".reveal .slides section"));
   if (report.sourceKind === "section-slide") return Array.from(doc.querySelectorAll("section.slide, .slide"));
-  return Array.from(doc.body.querySelectorAll("main > section, body > section")).filter((section) => {
-    const text = (section.textContent || "").trim();
-    return text.length > 10;
-  });
+  const containerSections = Array.from(doc.body.querySelectorAll([
+    "#deck > section",
+    ".deck > section",
+    ".slides > section",
+    "[data-deck] > section",
+    "[data-slides] > section"
+  ].join(", "))).filter(hasEnoughText);
+  if (containerSections.length >= 2) return containerSections;
+  return Array.from(doc.body.querySelectorAll("main > section, body > section")).filter(hasEnoughText);
+}
+
+function hasEnoughText(section: Element): boolean {
+  const text = (section.textContent || "").trim();
+  return text.length > 10;
 }
 
 function slideTitle(source: Element, index: number): string {
@@ -217,7 +275,7 @@ function ensureRuntimeMount(doc: Document): void {
   script.setAttribute(marker, RUNTIME_VERSION);
   script.textContent = `
     window.addEventListener("DOMContentLoaded", function () {
-      if (!document.getElementById("deckStage") && !document.querySelector(".deck-stage")) return;
+      if (!document.getElementById("deckStage") && !document.querySelector("[data-html-deck-editor-stage], .deck-stage, #deck")) return;
       if (window.HtmlDeckEditor && !window.editor) {
         window.editor = window.HtmlDeckEditor.mount();
       }

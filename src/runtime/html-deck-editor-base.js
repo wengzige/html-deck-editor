@@ -225,7 +225,7 @@
   }
 
   function getStage() {
-    return document.getElementById("deckStage") || document.querySelector(".deck-stage");
+    return document.getElementById("deckStage") || document.querySelector("[data-html-deck-editor-stage], .deck-stage, #deck");
   }
 
   function isDeckStageElement(element) {
@@ -233,11 +233,12 @@
   }
 
   function computeCurrentSlide(slides) {
-    const activeIndex = slides.findIndex((slide) => slide.classList.contains("active") || slide.classList.contains("visible"));
+    const activeIndex = slides.findIndex((slide) => slide.classList.contains("active") || slide.classList.contains("visible") || slide.hasAttribute("data-deck-active"));
     return activeIndex >= 0 ? activeIndex : 0;
   }
 
   function defaultScaleStage(stage) {
+    if (stage?.getAttribute("data-html-deck-editor-stage") === "preserve") return;
     const editing = document.body.classList.contains("editing") || document.body.classList.contains("editor-on");
     const compactEditor = editing && window.innerWidth <= 960;
     const editorInsets = editing
@@ -271,7 +272,11 @@
         this.slides.forEach((slide, i) => {
           slide.classList.toggle("active", i === this.currentSlide);
           slide.classList.toggle("visible", i === this.currentSlide);
+          slide.toggleAttribute("data-deck-active", i === this.currentSlide);
         });
+        if (stage.getAttribute("data-html-deck-editor-navigation") === "horizontal") {
+          stage.style.transform = `translateX(${-this.currentSlide * 100}vw)`;
+        }
         document.dispatchEvent(new CustomEvent("slidechange", { detail: { index: this.currentSlide } }));
       };
     }
