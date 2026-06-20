@@ -6,8 +6,22 @@ import { bytesToText, textToBytes } from "./text";
 
 const marker = "data-html-deck-editor-runtime";
 
-export async function convertInput(input: LoadedInput, inputWarnings: string[] = []): Promise<ConvertResult> {
+export type ConvertProgressEvent = {
+  stage: "detect" | "rewrite" | "runtime" | "zip";
+  percent: number;
+  detail: string;
+};
+
+type ConvertProgressCallback = (event: ConvertProgressEvent) => void;
+
+export async function convertInput(
+  input: LoadedInput,
+  inputWarnings: string[] = [],
+  onProgress?: ConvertProgressCallback
+): Promise<ConvertResult> {
+  onProgress?.({ stage: "detect", percent: 0, detail: "正在检查是不是 HTML 演示稿。" });
   const report = detectDeck(input);
+  onProgress?.({ stage: "detect", percent: 100, detail: report.messages[0] || "检测完成。" });
   if (report.status === "unsupported" || !report.indexPath) {
     return {
       report,
@@ -31,12 +45,16 @@ export async function convertInput(input: LoadedInput, inputWarnings: string[] =
     };
   }
 
+  onProgress?.({ stage: "rewrite", percent: 0, detail: `正在改写 ${indexFile.path}` });
   const sourceHtml = bytesToText(indexFile.data);
   const rewrittenHtml = rewriteHtml(sourceHtml, report);
+  onProgress?.({ stage: "rewrite", percent: 100, detail: "HTML 已加入编辑器入口。" });
+
   const zip = new JSZip();
   const indexDir = indexFile.path.includes("/") ? indexFile.path.split("/").slice(0, -1).join("/") : "";
   const runtimePrefix = indexDir ? `${indexDir}/runtime/` : "runtime/";
 
+  onProgress?.({ stage: "runtime", percent: 0, detail: "正在整理原文件和编辑器文件。" });
   for (const file of input.files) {
     if (file.path === indexFile.path) {
       zip.file(file.path, rewrittenHtml);
@@ -44,13 +62,18 @@ export async function convertInput(input: LoadedInput, inputWarnings: string[] =
       zip.file(file.path, file.data);
     }
   }
+  onProgress?.({ stage: "runtime", percent: 55, detail: `已放入 ${input.files.length} 个原文件。` });
 
   for (const [path, content] of Object.entries(runtimeAssets)) {
     const name = path.replace("runtime/", "");
     zip.file(`${runtimePrefix}${name}`, content);
   }
+  onProgress?.({ stage: "runtime", percent: 100, detail: `已加入 ${Object.keys(runtimeAssets).length} 个编辑器文件。` });
 
-  const blob = await zip.generateAsync({ type: "blob", compression: "DEFLATE" });
+  const blob = await zip.generateAsync({ type: "blob", compression: "DEFLATE" }, (metadata) => {
+    onProgress?.({ stage: "zip", percent: metadata.percent, detail: metadata.currentFile || "正在生成 ZIP。" });
+  });
+  onProgress?.({ stage: "zip", percent: 100, detail: "可编辑 ZIP 已生成。" });
 
   return {
     report,
