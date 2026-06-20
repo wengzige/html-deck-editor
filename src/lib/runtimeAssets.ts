@@ -3,7 +3,7 @@ import editorBase from "../runtime/html-deck-editor-base.js?raw";
 import editorWrapper from "../runtime/html-deck-editor-wrapper.js?raw";
 import editorCss from "../runtime/html-deck-editor.css?raw";
 
-export const RUNTIME_VERSION = "0.1.0";
+export const RUNTIME_VERSION = "0.1.3";
 
 export const runtimeAssets = {
   "runtime/deck-stage.js": deckStage,

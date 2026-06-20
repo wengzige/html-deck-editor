@@ -107,6 +107,88 @@ describe("runtime injection", () => {
     expect(zip.file("deck/assets/style.css")).toBeTruthy();
   });
 
+  it("removes old editor chrome and runtime files when upgrading an editable deck", async () => {
+    const result = await convertInput(input([
+      file("index.html", `
+        <deck-stage id="deckStage">
+          <section class="slide active"><h1>One</h1></section>
+          <section class="slide"><h1>Two</h1></section>
+        </deck-stage>
+        <button class="edit-toggle" id="editToggle" title="编辑模式 (E)">DONE</button>
+        <button class="save-html">SAVE HTML</button>
+        <script src="visual-editor/editor-runtime.js"></script>
+        <link rel="stylesheet" href="visual-editor/editor-runtime.css">
+        <style>.edit-toggle { width: 84px; }</style>
+        <script>window.FrontendSlidesEditor.mount({});</script>
+      `),
+      file("visual-editor/editor-runtime.js", "old editor js"),
+      file("visual-editor/editor-runtime.css", "old editor css"),
+      file("assets/style.css", "body { color: black; }")
+    ]));
+
+    expect(result.blob).toBeTruthy();
+
+    const zip = await JSZip.loadAsync(result.blob!);
+    const html = await zip.file("index.html")!.async("string");
+    expect(html).not.toContain("DONE");
+    expect(html).not.toContain("SAVE HTML");
+    expect(html).not.toContain("visual-editor/editor-runtime");
+    expect(html).not.toContain("window.FrontendSlidesEditor.mount({});");
+    expect(html).toContain("runtime/html-deck-editor.js");
+    expect(zip.file("visual-editor/editor-runtime.js")).toBeNull();
+    expect(zip.file("visual-editor/editor-runtime.css")).toBeNull();
+    expect(zip.file("assets/style.css")).toBeTruthy();
+  });
+
+  it("keeps deck styles and presentation scripts when removing a mixed legacy editor", async () => {
+    const result = await convertInput(input([
+      file("index.html", `
+        <style>
+          .deck-stage { position: absolute; width: 1920px; height: 1080px; }
+          .slide { position: absolute; inset: 0; visibility: hidden; }
+          .slide.active { visibility: visible; }
+          .edit-toggle { border-radius: 999px; }
+          .edit-export { background: orange; }
+        </style>
+        <div class="deck-viewport">
+          <main class="deck-stage" id="deckStage">
+            <section class="slide active"><h1>One</h1></section>
+            <section class="slide"><h1>Two</h1></section>
+          </main>
+        </div>
+        <button class="edit-toggle" id="editToggle">EDIT</button>
+        <button class="edit-export" id="editExport">SAVE HTML</button>
+        <script>
+          class SlidePresentation {
+            constructor() { this.stage = document.getElementById("deckStage"); }
+          }
+          class InlineDeckEditor {
+            constructor() { this.toggle = document.getElementById("editToggle"); }
+          }
+          window.addEventListener("DOMContentLoaded", () => {
+            new SlidePresentation();
+            new InlineDeckEditor();
+          });
+        </script>
+      `)
+    ]));
+
+    expect(result.blob).toBeTruthy();
+
+    const zip = await JSZip.loadAsync(result.blob!);
+    const html = await zip.file("index.html")!.async("string");
+    expect(html).toContain(".deck-stage { position: absolute");
+    expect(html).toContain(".slide { position: absolute");
+    expect(html).toContain("class SlidePresentation");
+    expect(html).toContain("new SlidePresentation();");
+    expect(html).toContain("legacy InlineDeckEditor disabled");
+    expect(html).not.toContain("new InlineDeckEditor();");
+    expect(html).not.toContain("id=\"editToggle\"");
+    expect(html).not.toContain("id=\"editExport\"");
+    expect(html).toContain("runtime/html-deck-editor.css");
+    expect(html).toContain("runtime/html-deck-editor.js");
+  });
+
   it("returns messages instead of a zip for unsupported inputs", async () => {
     const result = await convertInput(input([
       file("index.html", "<article><h1>Blog</h1><p>Just one normal page.</p></article>")

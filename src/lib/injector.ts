@@ -6,6 +6,39 @@ import { bytesToText, textToBytes } from "./text";
 
 const marker = "data-html-deck-editor-runtime";
 
+const legacyEditorShellSelectors = [
+  "[data-html-deck-editor-ui]",
+  "#editorShell",
+  ".editor-shell",
+  "#shapeMenu",
+  ".shape-menu",
+  "#editorFrame",
+  ".editor-frame",
+  "#editorToast",
+  ".editor-toast",
+  "#editorGuideV",
+  "#editorGuideH",
+  ".editor-guide"
+];
+
+const legacyEditorFloatingSelectors = [
+  "#editToggle",
+  "#editExport",
+  ".edit-toggle",
+  ".edit-export",
+  ".edit-hotzone"
+];
+
+const legacyEditorRootSelectors = [
+  ".editor-toolbar",
+  ".editor-slides",
+  ".editor-panel",
+  ".editor-help-modal",
+  ".visual-editor",
+  ".visual-editor-shell",
+  "#visualEditor"
+];
+
 export type ConvertProgressEvent = {
   stage: "detect" | "rewrite" | "runtime" | "zip";
   percent: number;
@@ -58,6 +91,8 @@ export async function convertInput(
   for (const file of input.files) {
     if (file.path === indexFile.path) {
       zip.file(file.path, rewrittenHtml);
+    } else if (isLegacyRuntimeFile(file.path)) {
+      continue;
     } else {
       zip.file(file.path, stableBytes(file.data));
     }
@@ -88,6 +123,7 @@ export async function convertInput(
 export function rewriteHtml(html: string, report: DetectionReport): string {
   const doc = new DOMParser().parseFromString(html, "text/html");
   ensureTitle(doc);
+  removeLegacyEditorArtifacts(doc);
 
   if (report.status === "adaptable") {
     wrapAsDeckStage(doc, report);
@@ -191,9 +227,110 @@ function ensureRuntimeMount(doc: Document): void {
 }
 
 function removeOwnedRuntime(doc: Document): void {
-  doc.querySelectorAll(`[${marker}], script[src*="editor-runtime"], link[href*="editor-runtime"]`).forEach((node) => {
+  doc.querySelectorAll([
+    `[${marker}]`,
+    'script[src*="editor-runtime"]',
+    'link[href*="editor-runtime"]',
+    'script[src*="html-deck-editor"]',
+    'link[href*="html-deck-editor"]'
+  ].join(", ")).forEach((node) => {
     node.parentNode?.removeChild(node);
   });
+}
+
+function removeLegacyEditorArtifacts(doc: Document): void {
+  doc.querySelectorAll(legacyEditorShellSelectors.join(", ")).forEach((node) => {
+    if (node instanceof Element && shouldRemoveEditorShell(node)) {
+      node.parentNode?.removeChild(node);
+    }
+  });
+
+  doc.querySelectorAll(legacyEditorFloatingSelectors.join(", ")).forEach((node) => {
+    if (node instanceof Element && !isInsideDeckContent(node)) {
+      node.parentNode?.removeChild(node);
+    }
+  });
+
+  doc.querySelectorAll(legacyEditorRootSelectors.join(", ")).forEach((node) => {
+    if (node instanceof Element && !isInsideDeckContent(node)) {
+      node.parentNode?.removeChild(node);
+    }
+  });
+
+  doc.querySelectorAll("button, a").forEach((node) => {
+    if (node instanceof HTMLElement && !isInsideDeckContent(node) && isLegacyEditorControl(node)) {
+      node.parentNode?.removeChild(node);
+    }
+  });
+
+  doc.querySelectorAll("script:not([src])").forEach((node) => {
+    const cleaned = cleanupLegacyEditorScript(node.textContent || "");
+    if (cleaned === null) {
+      node.parentNode?.removeChild(node);
+    } else if (cleaned !== node.textContent) {
+      node.textContent = cleaned;
+    }
+  });
+
+  doc.body.classList.remove("editing", "editor-on", "dragging-file");
+}
+
+function cleanupLegacyEditorScript(source: string): string | null {
+  const hasPresentationController = /class\s+SlidePresentation\b|new\s+SlidePresentation\s*\(/.test(source);
+  const hasLegacyInlineEditor = /class\s+InlineDeckEditor\b|new\s+InlineDeckEditor\s*\(/.test(source);
+
+  if (hasPresentationController && hasLegacyInlineEditor) {
+    return source.replace(
+      /\bnew\s+InlineDeckEditor\s*\(\s*\)\s*;?/g,
+      "/* html-deck-editor: legacy InlineDeckEditor disabled */"
+    );
+  }
+
+  if (hasLegacyInlineEditor) return null;
+
+  if (/FrontendSlidesEditor\.mount\s*\(|HtmlDeckEditor\.mount\s*\(/.test(source)) return null;
+
+  const targetsLegacyEditorChrome =
+    /getElementById\(["'](?:editToggle|editExport|editorShell)["']\)/.test(source) ||
+    /querySelector\(["']\.(?:edit-hotzone|edit-toggle|edit-export|editor-shell)["']\)/.test(source);
+  if (targetsLegacyEditorChrome && !hasPresentationController) return null;
+
+  return source;
+}
+
+function isInsideDeckContent(element: Element): boolean {
+  return Boolean(element.closest("deck-stage, #deckStage, .deck-stage, .slide"));
+}
+
+function shouldRemoveEditorShell(element: Element): boolean {
+  return element.hasAttribute("data-html-deck-editor-ui") || !isInsideDeckContent(element);
+}
+
+function isLegacyEditorControl(element: HTMLElement): boolean {
+  const text = (element.textContent || "").replace(/\s+/g, " ").trim().toUpperCase();
+  const label = [
+    element.id,
+    element.className,
+    element.getAttribute("title"),
+    element.getAttribute("aria-label")
+  ].join(" ");
+
+  return (
+    text === "DONE" ||
+    text === "EDIT" ||
+    text === "SAVE HTML" ||
+    text === "保存 HTML" ||
+    /edit mode|编辑模式|toggle edit mode/i.test(label) ||
+    /save[-_\s]?html|html[-_\s]?save/i.test(label)
+  );
+}
+
+function isLegacyRuntimeFile(path: string): boolean {
+  const normalized = path.replace(/\\/g, "/").toLowerCase();
+  return (
+    /(^|\/)editor-runtime\.(css|js)(\.map)?$/.test(normalized) ||
+    /(^|\/)visual-editor\/editor-runtime\.(css|js)(\.map)?$/.test(normalized)
+  );
 }
 
 function safeName(name: string): string {
