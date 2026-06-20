@@ -237,24 +237,98 @@
     return activeIndex >= 0 ? activeIndex : 0;
   }
 
-  function defaultScaleStage(stage) {
-    if (stage?.getAttribute("data-html-deck-editor-stage") === "preserve") return;
-    const editing = document.body.classList.contains("editing") || document.body.classList.contains("editor-on");
-    const compactEditor = editing && window.innerWidth <= 960;
-    const editorInsets = editing
-      ? compactEditor
-        ? { left: 12, right: 12, top: 150, bottom: 260 }
-        : { left: 252, right: 354, top: 78, bottom: 20 }
-      : { left: 0, right: 0, top: 0, bottom: 0 };
-    const availableWidth = Math.max(320, window.innerWidth - editorInsets.left - editorInsets.right);
-    const availableHeight = Math.max(240, window.innerHeight - editorInsets.top - editorInsets.bottom);
-    const factor = Math.min(availableWidth / 1920, availableHeight / 1080);
-    const x = editorInsets.left + (availableWidth - 1920 * factor) / 2;
-    const y = editorInsets.top + (availableHeight - 1080 * factor) / 2;
-    stage.style.transform = `translate(${x}px, ${y}px) scale(${factor})`;
-    stage.dataset.scale = String(factor);
-    stage.dataset.offsetX = String(x);
-    stage.dataset.offsetY = String(y);
+  function zeroInsets() {
+    return { left: 0, right: 0, top: 0, bottom: 0 };
+  }
+
+  function normalizeInsets(insets) {
+    const source = insets || zeroInsets();
+    return {
+      left: Math.max(0, Number(source.left) || 0),
+      right: Math.max(0, Number(source.right) || 0),
+      top: Math.max(0, Number(source.top) || 0),
+      bottom: Math.max(0, Number(source.bottom) || 0)
+    };
+  }
+
+  function safeAreaFromInsets(insets) {
+    const safeInsets = normalizeInsets(insets);
+    const width = Math.max(320, window.innerWidth - safeInsets.left - safeInsets.right);
+    const height = Math.max(240, window.innerHeight - safeInsets.top - safeInsets.bottom);
+    return { ...safeInsets, width, height };
+  }
+
+  function elementDesignSize(element, fallback = { width: 1920, height: 1080 }) {
+    if (!element) return fallback;
+    const attrWidth = Number.parseFloat(element.getAttribute?.("width") || element.dataset?.designWidth || "");
+    const attrHeight = Number.parseFloat(element.getAttribute?.("height") || element.dataset?.designHeight || "");
+    const rect = element.getBoundingClientRect?.();
+    const width = attrWidth || element.offsetWidth || rect?.width || fallback.width;
+    const height = attrHeight || element.offsetHeight || rect?.height || fallback.height;
+    return {
+      width: Math.max(1, width),
+      height: Math.max(1, height)
+    };
+  }
+
+  function stageDesignSize(stage) {
+    const slide = stage?.querySelector?.(".slide.active, .slide.visible, .slide[data-deck-active], .slide");
+    if (isDeckStageElement(stage)) {
+      return elementDesignSize(stage, { width: 1920, height: 1080 });
+    }
+    if (stage?.getAttribute?.("data-html-deck-editor-stage") === "preserve") {
+      return elementDesignSize(slide || stage, { width: window.innerWidth || 1920, height: window.innerHeight || 1080 });
+    }
+    return elementDesignSize(stage || slide, { width: 1920, height: 1080 });
+  }
+
+  function stageFitTransform(size, insets) {
+    const safe = safeAreaFromInsets(insets);
+    const scale = Math.max(0.05, Math.min(safe.width / size.width, safe.height / size.height));
+    return {
+      x: Math.round(safe.left + (safe.width - size.width * scale) / 2),
+      y: Math.round(safe.top + (safe.height - size.height * scale) / 2),
+      scale
+    };
+  }
+
+  function clearPreservedStageSafeLayout(stage) {
+    if (!stage) return;
+    stage.querySelectorAll(".slide").forEach((slide) => {
+      slide.style.removeProperty("--html-deck-editor-slide-x");
+      slide.style.removeProperty("--html-deck-editor-slide-y");
+      slide.style.removeProperty("--html-deck-editor-slide-scale");
+    });
+  }
+
+  function layoutPreservedStageForEditor(stage, insets) {
+    if (!stage || stage.getAttribute("data-html-deck-editor-stage") !== "preserve") return false;
+    const safeInsets = normalizeInsets(insets);
+    const editing = safeInsets.left || safeInsets.right || safeInsets.top || safeInsets.bottom;
+    if (!editing) {
+      clearPreservedStageSafeLayout(stage);
+      return true;
+    }
+
+    const size = stageDesignSize(stage);
+    const transform = stageFitTransform(size, safeInsets);
+    stage.querySelectorAll(".slide").forEach((slide) => {
+      slide.style.setProperty("--html-deck-editor-slide-x", `${transform.x}px`);
+      slide.style.setProperty("--html-deck-editor-slide-y", `${transform.y}px`);
+      slide.style.setProperty("--html-deck-editor-slide-scale", String(transform.scale));
+    });
+    return true;
+  }
+
+  function defaultScaleStage(stage, insets = zeroInsets()) {
+    if (!stage || stage.getAttribute("data-html-deck-editor-stage") === "preserve") return;
+    const size = stageDesignSize(stage);
+    const transform = stageFitTransform(size, insets);
+    stage.style.transform = `translate(${transform.x}px, ${transform.y}px) scale(${transform.scale})`;
+    stage.style.transformOrigin = "top left";
+    stage.dataset.scale = String(transform.scale);
+    stage.dataset.offsetX = String(transform.x);
+    stage.dataset.offsetY = String(transform.y);
   }
 
   function normalizePresentation(input) {
@@ -264,6 +338,7 @@
     presentation.stage = presentation.stage || stage;
     presentation.slides = Array.from(stage.querySelectorAll(".slide"));
     if (!Number.isFinite(presentation.currentSlide)) presentation.currentSlide = computeCurrentSlide(presentation.slides);
+    presentation.editorInsets = normalizeInsets(presentation.editorInsets);
 
     if (typeof presentation.showSlide !== "function") {
       presentation.showSlide = function showSlide(index) {
@@ -277,24 +352,33 @@
         if (stage.getAttribute("data-html-deck-editor-navigation") === "horizontal") {
           stage.style.transform = `translateX(${-this.currentSlide * 100}vw)`;
         }
+        this.scaleStage?.();
         document.dispatchEvent(new CustomEvent("slidechange", { detail: { index: this.currentSlide } }));
       };
     }
 
-    if (typeof presentation.scaleStage !== "function") {
-      presentation.scaleStage = () => {
-        if (isDeckStageElement(stage)) {
-          stage.fit?.();
-        } else {
-          defaultScaleStage(stage);
-        }
-      };
-      window.addEventListener("resize", presentation.scaleStage);
-    }
+    const originalScaleStage = typeof presentation.scaleStage === "function" ? presentation.scaleStage.bind(presentation) : null;
+    presentation.scaleStage = () => {
+      originalScaleStage?.();
+      if (isDeckStageElement(stage)) {
+        stage.fit?.();
+        return;
+      }
+      if (!layoutPreservedStageForEditor(stage, presentation.editorInsets)) {
+        defaultScaleStage(stage, presentation.editorInsets);
+      }
+    };
+    window.addEventListener("resize", presentation.scaleStage);
 
-    if (typeof presentation.setEditorInsets !== "function" && typeof stage.setEditorInsets === "function") {
-      presentation.setEditorInsets = (insets) => stage.setEditorInsets(insets);
-    }
+    const originalSetEditorInsets = typeof presentation.setEditorInsets === "function" ? presentation.setEditorInsets.bind(presentation) : null;
+    presentation.setEditorInsets = (insets) => {
+      presentation.editorInsets = normalizeInsets(insets);
+      if (typeof stage.setEditorInsets === "function") {
+        stage.setEditorInsets(presentation.editorInsets);
+      } else {
+        originalSetEditorInsets?.(presentation.editorInsets);
+      }
+    };
 
     if (typeof presentation.injectChrome !== "function") presentation.injectChrome = () => {};
     return presentation;
@@ -522,9 +606,10 @@
         const rect = this.elementClientRect(element);
         if (rect.width < 2 || rect.height < 2) return false;
         if (element.querySelector(this.mediaSelector())) return false;
-        const textTags = "h1,h2,h3,h4,h5,h6,p,li,blockquote,figcaption,caption,td,th,button,a,label,span,small,strong,em,b,i,code,pre";
-        if (element.matches(textTags)) return !this.hasTextBlockChild(element);
-        return this.hasDirectText(element) && !this.hasTextBlockChild(element);
+        const textContainerTags = "h1,h2,h3,h4,h5,h6,p,li,blockquote,figcaption,caption,td,th,button,a,label";
+        if (element.matches(textContainerTags)) return !this.hasTextBlockChild(element);
+        if (element.matches("span,small,strong,em,b,i,code,pre")) return !this.hasReadableTextAncestor(element) && !this.hasTextBlockChild(element);
+        return (this.hasDirectText(element) || this.isVisuallyObviousTextBlock(element, rect)) && !this.hasTextBlockChild(element);
       }
 
       hasVisibleText(element) {
@@ -537,13 +622,36 @@
 
       hasTextBlockChild(element) {
         return Array.from(element.children).some((child) => {
-          if (child.matches("span,small,strong,em,b,i,code")) return false;
+          if (this.isInlineTextChild(child)) return false;
           return this.hasVisibleText(child);
         });
       }
 
+      isInlineTextChild(element) {
+        if (element.matches("span,small,strong,em,b,i,code,mark,sup,sub,u,s,time,var,kbd,abbr,cite,q")) return true;
+        const display = getComputedStyle(element).display;
+        return display.startsWith("inline");
+      }
+
+      hasReadableTextAncestor(element) {
+        const ancestor = element.parentElement?.closest("h1,h2,h3,h4,h5,h6,p,li,blockquote,figcaption,caption,td,th,button,a,label,[data-editor-kind='text'],[data-editable]");
+        return Boolean(ancestor && this.stage.contains(ancestor) && ancestor.closest(".slide") === element.closest(".slide"));
+      }
+
+      isVisuallyObviousTextBlock(element, rect = this.elementClientRect(element)) {
+        if (element.matches("main, article, nav, header, footer, form, ul, ol, table, tbody, thead, tr, section, .slide")) return false;
+        if (!this.hasDirectText(element)) return false;
+        if (this.isBroadLayoutContainer(element)) return false;
+        const style = getComputedStyle(element);
+        const fontSize = Number.parseFloat(style.fontSize) || 0;
+        const singlePurpose = Array.from(element.children).every((child) => this.isInlineTextChild(child) || !this.hasVisibleText(child));
+        const compactTextBlock = rect.width <= window.innerWidth * 0.92 && rect.height <= window.innerHeight * 0.45;
+        return singlePurpose && compactTextBlock && fontSize >= 18;
+      }
+
       isVisualBoxCandidate(element) {
         if (this.isSvgGraphicCandidate(element)) return true;
+        if (this.hasReadableTextAncestor(element) && this.hasVisibleText(element) && !element.querySelector(this.mediaSelector())) return false;
         const rect = this.elementClientRect(element);
         if (rect.width > 1700 && rect.height > 850) return false;
         if (element.matches("main, article, nav, header, footer, form, ul, ol, table, tbody, thead, tr, section.slide")) return false;
@@ -1107,16 +1215,56 @@
       }
 
       editorInsets() {
-        if (!this.isActive) return { left: 0, right: 0, top: 0, bottom: 0 };
-        if (window.innerWidth <= 960) {
-          return { left: 12, right: 12, top: 150, bottom: 260 };
-        }
-        return { left: 252, right: 354, top: 78, bottom: 20 };
+        if (!this.isActive) return zeroInsets();
+        const gutter = window.innerWidth <= 960 ? 8 : 12;
+        const insets = {
+          left: gutter,
+          right: gutter,
+          top: gutter,
+          bottom: gutter
+        };
+        [
+          this.controls.help?.closest(".editor-toolbar"),
+          document.querySelector(".editor-slides"),
+          document.querySelector(".editor-panel")
+        ].forEach((element) => {
+          if (!element || element.hidden) return;
+          const style = getComputedStyle(element);
+          if (style.display === "none" || style.visibility === "hidden") return;
+          const rect = element.getBoundingClientRect();
+          if (rect.width <= 0 || rect.height <= 0) return;
+          const verticalCoverage = rect.height / Math.max(1, window.innerHeight);
+          const horizontalCoverage = rect.width / Math.max(1, window.innerWidth);
+          if (rect.left <= gutter * 2 && verticalCoverage > 0.45) {
+            insets.left = Math.max(insets.left, rect.right + gutter);
+          }
+          if (window.innerWidth - rect.right <= gutter * 2 && verticalCoverage > 0.45) {
+            insets.right = Math.max(insets.right, window.innerWidth - rect.left + gutter);
+          }
+          if (rect.top <= gutter * 2 && horizontalCoverage > 0.45) {
+            insets.top = Math.max(insets.top, rect.bottom + gutter);
+          }
+          if (window.innerHeight - rect.bottom <= gutter * 2 && horizontalCoverage > 0.45) {
+            insets.bottom = Math.max(insets.bottom, window.innerHeight - rect.top + gutter);
+          }
+        });
+        return normalizeInsets(insets);
       }
 
       applyEditorLayout() {
         this.presentation.setEditorInsets?.(this.editorInsets());
         this.presentation.scaleStage?.();
+      }
+
+      refreshEditorLayoutSoon() {
+        const refresh = () => {
+          this.applyEditorLayout();
+          this.updateFrame();
+        };
+        refresh();
+        requestAnimationFrame(refresh);
+        window.setTimeout(refresh, 80);
+        window.setTimeout(refresh, 220);
       }
 
       toggleEditMode(force) {
@@ -1136,9 +1284,9 @@
         this.getEditableElements().forEach((element) => {
           element.removeAttribute("contenteditable");
         });
-        this.applyEditorLayout();
         this.hideDeckResetControl();
         this.attachFrame();
+        this.refreshEditorLayoutSoon();
         this.updateFrame();
         if (!this.isActive) {
           this.hideGuides();
@@ -1526,8 +1674,19 @@
         return this.presentation.slides[this.presentation.currentSlide];
       }
 
+      activeSlideDesignSize(slide = this.activeSlide()) {
+        if (isDeckStageElement(this.stage)) {
+          return {
+            width: Math.max(1, Number(this.stage.getAttribute("width")) || this.stage.designWidth || 1920),
+            height: Math.max(1, Number(this.stage.getAttribute("height")) || this.stage.designHeight || 1080)
+          };
+        }
+        return elementDesignSize(slide || this.stage, stageDesignSize(this.stage));
+      }
+
       nextInsertPoint(width = 320, height = 180) {
         const slide = this.activeSlide().getBoundingClientRect();
+        const size = this.activeSlideDesignSize();
         const panel = document.querySelector(".editor-panel").getBoundingClientRect();
         const rail = document.querySelector(".editor-slides").getBoundingClientRect();
         const compactEditor = window.innerWidth <= 960;
@@ -1535,22 +1694,23 @@
         const visibleRight = compactEditor ? slide.right : Math.min(slide.right, panel.left - 18);
         const visibleTop = compactEditor ? Math.max(slide.top, rail.bottom + 16) : Math.max(slide.top, 92);
         const visibleBottom = compactEditor ? Math.min(slide.bottom, panel.top - 16) : Math.min(slide.bottom, window.innerHeight - 22);
-        const scale = slide.width / 1920;
+        const scale = slide.width / size.width;
         if (visibleRight > visibleLeft + 40 && visibleBottom > visibleTop + 40) {
           return {
-            x: Math.max(0, Math.min(1920 - width, ((visibleLeft + visibleRight) / 2 - slide.left) / scale - width / 2)),
-            y: Math.max(0, Math.min(1080 - height, ((visibleTop + visibleBottom) / 2 - slide.top) / scale - height / 2))
+            x: Math.max(0, Math.min(size.width - width, ((visibleLeft + visibleRight) / 2 - slide.left) / scale - width / 2)),
+            y: Math.max(0, Math.min(size.height - height, ((visibleTop + visibleBottom) / 2 - slide.top) / scale - height / 2))
           };
         }
         return {
-          x: Math.max(0, Math.min(1920 - width, this.lastInsert.x)),
-          y: Math.max(0, Math.min(1080 - height, this.lastInsert.y))
+          x: Math.max(0, Math.min(size.width - width, this.lastInsert.x)),
+          y: Math.max(0, Math.min(size.height - height, this.lastInsert.y))
         };
       }
 
       stagePointFromClient(clientX, clientY) {
         const rect = this.activeSlide().getBoundingClientRect();
-        const scale = rect.width / 1920;
+        const size = this.activeSlideDesignSize();
+        const scale = rect.width / size.width;
         return {
           x: (clientX - rect.left) / scale,
           y: (clientY - rect.top) / scale,
@@ -1559,9 +1719,11 @@
       }
 
       getStageBox(element) {
-        const stageRect = this.activeSlide().getBoundingClientRect();
+        const active = this.activeSlide();
+        const stageRect = active.getBoundingClientRect();
+        const size = this.activeSlideDesignSize(active);
         const rect = this.elementClientRect(element);
-        const scale = stageRect.width / 1920;
+        const scale = stageRect.width / size.width;
         return {
           x: (rect.left - stageRect.left) / scale,
           y: (rect.top - stageRect.top) / scale,
@@ -1571,8 +1733,10 @@
       }
 
       clientBoxFromStageBox(box) {
-        const slideRect = this.activeSlide().getBoundingClientRect();
-        const scale = slideRect.width / 1920;
+        const active = this.activeSlide();
+        const slideRect = active.getBoundingClientRect();
+        const size = this.activeSlideDesignSize(active);
+        const scale = slideRect.width / size.width;
         return {
           x: slideRect.left + box.x * scale,
           y: slideRect.top + box.y * scale,
@@ -1666,13 +1830,14 @@
       }
 
       clampStageBox(box, keepVisible = 24) {
-        const width = Math.max(10, Math.min(1920, box.width || 10));
-        const height = Math.max(10, Math.min(1080, box.height || 10));
+        const size = this.activeSlideDesignSize();
+        const width = Math.max(10, Math.min(size.width, box.width || 10));
+        const height = Math.max(10, Math.min(size.height, box.height || 10));
         const visibleX = Math.min(keepVisible, width);
         const visibleY = Math.min(keepVisible, height);
         return {
-          x: Math.max(-width + visibleX, Math.min(1920 - visibleX, box.x)),
-          y: Math.max(-height + visibleY, Math.min(1080 - visibleY, box.y)),
+          x: Math.max(-width + visibleX, Math.min(size.width - visibleX, box.x)),
+          y: Math.max(-height + visibleY, Math.min(size.height - visibleY, box.y)),
           width,
           height
         };
@@ -1731,15 +1896,16 @@
         const slide = element.closest(".slide");
         if (!slide) return;
         const slideBox = slide.getBoundingClientRect();
+        const size = this.activeSlideDesignSize(slide);
         const parent = element.offsetParent || slide;
         const parentBox = parent.getBoundingClientRect();
-        const scale = slideBox.width / 1920;
+        const scale = slideBox.width / size.width;
         const left = (parentBox.left - slideBox.left) / scale;
         const top = (parentBox.top - slideBox.top) / scale;
-        const safeWidth = Math.min(1920, Math.max(10, width));
-        const safeHeight = Math.min(1080, Math.max(10, height));
-        const safeX = Math.max(0, Math.min(1920 - safeWidth, x));
-        const safeY = Math.max(0, Math.min(1080 - safeHeight, y));
+        const safeWidth = Math.min(size.width, Math.max(10, width));
+        const safeHeight = Math.min(size.height, Math.max(10, height));
+        const safeX = Math.max(0, Math.min(size.width - safeWidth, x));
+        const safeY = Math.max(0, Math.min(size.height - safeHeight, y));
         element.style.position = "absolute";
         element.style.left = `${Math.round(safeX - left)}px`;
         element.style.top = `${Math.round(safeY - top)}px`;
@@ -1863,16 +2029,17 @@
 
       getSnapTargets(element) {
         const active = this.activeSlide();
+        const size = this.activeSlideDesignSize(active);
         const targets = {
           x: [
             { value: 0, bias: -6 },
-            { value: 960, bias: -8 },
-            { value: 1920, bias: -6 }
+            { value: size.width / 2, bias: -8 },
+            { value: size.width, bias: -6 }
           ],
           y: [
             { value: 0, bias: -6 },
-            { value: 540, bias: -8 },
-            { value: 1080, bias: -6 }
+            { value: size.height / 2, bias: -8 },
+            { value: size.height, bias: -6 }
           ]
         };
         this.getEditableElements().forEach((candidate) => {
@@ -1965,12 +2132,14 @@
       }
 
       showGuides(guides) {
-        const slideRect = this.activeSlide().getBoundingClientRect();
-        const scale = slideRect.width / 1920;
+        const active = this.activeSlide();
+        const slideRect = active.getBoundingClientRect();
+        const size = this.activeSlideDesignSize(active);
+        const scale = slideRect.width / size.width;
         if (guides.x !== null) {
           this.guideV.style.left = `${slideRect.left + guides.x * scale}px`;
           this.guideV.style.top = `${slideRect.top}px`;
-          this.guideV.style.height = `${1080 * scale}px`;
+          this.guideV.style.height = `${size.height * scale}px`;
           this.guideV.classList.add("active");
         } else {
           this.guideV.classList.remove("active");
@@ -1978,7 +2147,7 @@
         if (guides.y !== null) {
           this.guideH.style.left = `${slideRect.left}px`;
           this.guideH.style.top = `${slideRect.top + guides.y * scale}px`;
-          this.guideH.style.width = `${1920 * scale}px`;
+          this.guideH.style.width = `${size.width * scale}px`;
           this.guideH.classList.add("active");
         } else {
           this.guideH.classList.remove("active");
@@ -2812,12 +2981,26 @@
           node.hidden = true;
         });
         clone.querySelectorAll("#editorFrame, #editorGuideV, #editorGuideH, .editor-guide").forEach((node) => node.classList.remove("active"));
+        clone.querySelectorAll("[data-html-deck-editor-stage='preserve'] > .slide").forEach((node) => {
+          node.style.removeProperty("--html-deck-editor-slide-x");
+          node.style.removeProperty("--html-deck-editor-slide-y");
+          node.style.removeProperty("--html-deck-editor-slide-scale");
+        });
+        clone.querySelectorAll("[style]").forEach((node) => {
+          node.style.removeProperty("--html-deck-editor-slide-x");
+          node.style.removeProperty("--html-deck-editor-slide-y");
+          node.style.removeProperty("--html-deck-editor-slide-scale");
+          node.style.removeProperty("--deck-stage-inset-left");
+          node.style.removeProperty("--deck-stage-inset-right");
+          node.style.removeProperty("--deck-stage-inset-top");
+          node.style.removeProperty("--deck-stage-inset-bottom");
+        });
         clone.querySelectorAll("#editorToast").forEach((node) => {
           node.classList.remove("show");
           node.textContent = "";
         });
         const body = clone.querySelector("body");
-        if (body) body.classList.remove("editing", "dragging-file");
+        if (body) body.classList.remove("editing", "editor-on", "dragging-file");
       }
 
       buildExportHtml() {

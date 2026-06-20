@@ -53,6 +53,11 @@
       opacity: 1;
     }
 
+    body.editing [data-html-deck-editor-stage="preserve"] > .slide {
+      transform: translate(var(--html-deck-editor-slide-x, 0px), var(--html-deck-editor-slide-y, 0px)) scale(var(--html-deck-editor-slide-scale, 1));
+      transform-origin: top left;
+    }
+
     .editor-toolbar,
     .editor-slides,
     .editor-panel {
