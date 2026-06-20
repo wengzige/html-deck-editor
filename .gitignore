@@ -1,0 +1,12 @@
+node_modules/
+dist/
+build/
+.vite/
+.cache/
+coverage/
+release/
+*.log
+.DS_Store
+.env
+.env.*
+!.env.example
