@@ -59,7 +59,7 @@ export async function convertInput(
     if (file.path === indexFile.path) {
       zip.file(file.path, rewrittenHtml);
     } else {
-      zip.file(file.path, file.data);
+      zip.file(file.path, stableBytes(file.data));
     }
   }
   onProgress?.({ stage: "runtime", percent: 55, detail: `已放入 ${input.files.length} 个原文件。` });
@@ -198,4 +198,8 @@ function removeOwnedRuntime(doc: Document): void {
 
 function safeName(name: string): string {
   return name.replace(/[^a-z0-9._-]+/gi, "-").replace(/^-+|-+$/g, "") || "html-deck";
+}
+
+function stableBytes(data: Uint8Array): Uint8Array {
+  return new Uint8Array(data);
 }

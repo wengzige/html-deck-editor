@@ -5,6 +5,7 @@ build/
 .cache/
 coverage/
 release/
+output/
 *.log
 .DS_Store
 .env

@@ -42,7 +42,16 @@ export async function loadZip(file: File, onProgress?: LoadProgressCallback): Pr
   }
 
   onProgress?.({ stage: "read", percent: 0, detail: `正在打开 ${file.name}` });
-  const zip = await JSZip.loadAsync(file);
+  let zip: JSZip;
+  try {
+    zip = await JSZip.loadAsync(file);
+  } catch {
+    return {
+      input: null,
+      warnings: [],
+      errors: ["这个文件不是有效的 ZIP 压缩包，请重新压缩后再试。"]
+    };
+  }
   onProgress?.({ stage: "read", percent: 100, detail: "ZIP 已打开，正在读取里面的文件。" });
 
   const files: VirtualFile[] = [];
