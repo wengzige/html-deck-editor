@@ -380,6 +380,44 @@ describe("editor runtime", () => {
     expect(deck.style.getPropertyValue("--html-deck-editor-slide-offset-x")).toBe("1800px");
   });
 
+  it("uses top-level nested wrapper slides without treating slide-like cards as pages", () => {
+    document.body.innerHTML = `
+      <div id="deck" data-html-deck-editor-stage="preserve" data-html-deck-editor-navigation="horizontal" style="transform:translateX(-900px)">
+        <div class="slides">
+          <section class="slide"><h1>One</h1></section>
+          <section class="slide"><h1>Two</h1><div id="nestedCard" class="slide"><p id="cardText" data-editable>Nested card text</p></div></section>
+        </div>
+      </div>
+    `;
+    const sourceSlides = Array.from(document.querySelectorAll("#deck .slides > .slide")) as HTMLElement[];
+    sourceSlides.forEach((slide, index) => {
+      Object.defineProperty(slide, "offsetLeft", { value: index * 900, configurable: true });
+    });
+    Element.prototype.getBoundingClientRect = function getBoundingClientRect() {
+      const element = this as HTMLElement;
+      if (element.matches("#deck .slides > .slide")) return rect({ left: 0, top: 0, width: 900, height: 540 });
+      if (element.id === "cardText") return rect({ left: 48, top: 52, width: 120, height: 18 });
+      return rect({ left: 0, top: 0, width: 100, height: 40 });
+    };
+
+    installRuntime();
+    const editor = (window as any).FrontendSlidesEditor.mount();
+    editor.toggleEditMode(true);
+
+    const nestedCard = document.getElementById("nestedCard") as HTMLElement;
+    const cardText = document.getElementById("cardText") as HTMLElement;
+    expect(editor.presentation.slides).toHaveLength(2);
+    expect(editor.presentation.slides).not.toContain(nestedCard);
+    expect(sourceSlides[0].hasAttribute("data-html-deck-editor-page")).toBe(true);
+    expect(sourceSlides[1].hasAttribute("data-html-deck-editor-page")).toBe(true);
+    expect(nestedCard.hasAttribute("data-html-deck-editor-page")).toBe(false);
+    expect(sourceSlides[1].hasAttribute("data-html-deck-editor-current")).toBe(true);
+    expect(editor.pickNearbyEditableTarget({ clientX: 50, clientY: 54 })).toBe(cardText);
+
+    const html = editor.buildExportHtml();
+    expect(html).not.toContain("data-html-deck-editor-page");
+  });
+
   it("applies font size to selected text without replacing surrounding inline HTML", () => {
     document.body.innerHTML = `
       <div id="deckStage" class="deck-stage">

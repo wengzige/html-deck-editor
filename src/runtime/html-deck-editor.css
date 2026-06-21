@@ -58,12 +58,12 @@
       transform-origin: top left;
     }
 
-    body.editing [data-html-deck-editor-stage="preserve"] > .slide:not([data-html-deck-editor-current]) {
+    body.editing [data-html-deck-editor-stage="preserve"] [data-html-deck-editor-page]:not([data-html-deck-editor-current]) {
       visibility: hidden;
       pointer-events: none;
     }
 
-    body.editing [data-html-deck-editor-stage="preserve"] > .slide[data-html-deck-editor-current] {
+    body.editing [data-html-deck-editor-stage="preserve"] [data-html-deck-editor-page][data-html-deck-editor-current] {
       visibility: visible !important;
       pointer-events: auto;
     }

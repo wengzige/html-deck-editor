@@ -320,7 +320,11 @@
   function stageSlides(stage) {
     const directSlides = Array.from(stage?.children || []).filter((child) => child.classList?.contains("slide"));
     if (directSlides.length) return directSlides;
-    return Array.from(stage?.querySelectorAll?.(".slide") || []);
+    return topLevelElements(Array.from(stage?.querySelectorAll?.(".slide") || []));
+  }
+
+  function topLevelElements(elements) {
+    return elements.filter((element) => !elements.some((other) => other !== element && other.contains(element)));
   }
 
   function normalizeSlideIndex(index, slides) {
@@ -403,6 +407,7 @@
   function markEditorCurrentSlide(slides, index) {
     const current = normalizeSlideIndex(index, slides);
     slides.forEach((slide, i) => {
+      slide.setAttribute("data-html-deck-editor-page", "");
       slide.toggleAttribute("data-html-deck-editor-current", i === current);
     });
     return current;
@@ -486,8 +491,9 @@
     stage.style.removeProperty("--html-deck-editor-stage-scale");
     stage.style.removeProperty("--html-deck-editor-current-slide");
     stage.style.removeProperty("--html-deck-editor-slide-offset-x");
-    stage.querySelectorAll(".slide[data-html-deck-editor-current]").forEach((slide) => {
+    stage.querySelectorAll("[data-html-deck-editor-current], [data-html-deck-editor-page]").forEach((slide) => {
       slide.removeAttribute("data-html-deck-editor-current");
+      slide.removeAttribute("data-html-deck-editor-page");
     });
   }
 
@@ -789,6 +795,12 @@
         return Array.from(new Set(this.stage.querySelectorAll("[data-editable], [data-editable-media], [data-editable-box], [data-editor-kind], .editor-layer")));
       }
 
+      closestSlide(element) {
+        if (!element || !this.stage.contains(element)) return null;
+        const slides = this.presentation?.slides?.length ? this.presentation.slides : stageSlides(this.stage);
+        return slides.find((slide) => slide === element || slide.contains(element)) || null;
+      }
+
       prepareEditableElements() {
         this.stage.querySelectorAll("[data-editor-auto], [data-editor-kind], [data-editor-small]").forEach((element) => {
           delete element.dataset.editorAuto;
@@ -935,7 +947,7 @@
 
       hasReadableTextAncestor(element) {
         const ancestor = element.parentElement?.closest("h1,h2,h3,h4,h5,h6,p,li,blockquote,figcaption,caption,td,th,button,a,label,[data-editor-kind='text'],[data-editable]");
-        return Boolean(ancestor && this.stage.contains(ancestor) && ancestor.closest(".slide") === element.closest(".slide"));
+        return Boolean(ancestor && this.stage.contains(ancestor) && this.closestSlide(ancestor) === this.closestSlide(element));
       }
 
       isVisuallyObviousTextBlock(element, rect = this.elementClientRect(element)) {
@@ -1137,7 +1149,7 @@
         }
         let best = null;
         this.getEditableElements().forEach((candidate, index) => {
-          if (candidate.closest(".slide") !== active) return;
+          if (this.closestSlide(candidate) !== active) return;
           if (this.isEditorUiElement(candidate)) return;
           const rect = this.elementClientRect(candidate);
           if (rect.width <= 0 && rect.height <= 0) return;
@@ -1217,7 +1229,7 @@
       hasCompositeEditableChildren(element) {
         const rect = this.elementClientRect(element);
         const children = Array.from(element.querySelectorAll("[data-editor-kind]")).filter((child) => {
-          if (child === element || child.closest(".slide") !== element.closest(".slide")) return false;
+          if (child === element || this.closestSlide(child) !== this.closestSlide(element)) return false;
           return this.isSubstantialDescendant(child, rect);
         });
         if (children.length > 1) return true;
@@ -1851,7 +1863,7 @@
         if (!element || !this.stage.contains(element)) return null;
         if (this.isEditorUiElement(element)) return null;
         element = this.preferExplicitEditableAncestor(element);
-        return element.closest(".slide") ? element : null;
+        return this.closestSlide(element) ? element : null;
       }
 
       preferExplicitEditableAncestor(element) {
@@ -1860,7 +1872,7 @@
         const textParent = this.preferredTextContainerAncestor(element);
         if (textParent) return textParent;
         const explicitParent = element.parentElement?.closest("[data-editable], [data-editable-media], [data-editable-box], .editor-layer");
-        if (explicitParent && this.stage.contains(explicitParent) && explicitParent.closest(".slide") === element.closest(".slide")) {
+        if (explicitParent && this.stage.contains(explicitParent) && this.closestSlide(explicitParent) === this.closestSlide(element)) {
           return explicitParent;
         }
         const mediaParent = element.parentElement?.closest("[data-editor-auto='true'][data-editor-kind='media']");
@@ -1868,7 +1880,7 @@
           mediaParent &&
           mediaParent !== element &&
           this.stage.contains(mediaParent) &&
-          mediaParent.closest(".slide") === element.closest(".slide") &&
+          this.closestSlide(mediaParent) === this.closestSlide(element) &&
           this.isMediaWrapperCandidate(mediaParent)
         ) {
           return mediaParent;
@@ -1883,7 +1895,7 @@
           parent &&
           parent !== element &&
           this.stage.contains(parent) &&
-          parent.closest(".slide") === element.closest(".slide") &&
+          this.closestSlide(parent) === this.closestSlide(element) &&
           (parent.matches("[data-editable],[data-editor-kind='text']") || this.isTextCandidate(parent))
         ) {
           return parent;
@@ -3189,7 +3201,7 @@
           this.rememberMotionStableBox(element, safe);
           return;
         }
-        const slide = element.closest(".slide");
+        const slide = this.closestSlide(element);
         if (!slide) return;
         const slideBox = slide.getBoundingClientRect();
         const size = this.activeSlideDesignSize(slide);
@@ -3220,7 +3232,7 @@
       }
 
       updateFrame() {
-        if (!this.selected || !this.isActive || !this.selected.closest(".slide")) {
+        if (!this.selected || !this.isActive || !this.closestSlide(this.selected)) {
           this.frame.classList.remove("active");
           return;
         }
@@ -3271,7 +3283,7 @@
         this.lastSlideReplay = { index, at: now };
         this.stopMotionFrameTracking();
         const slide = this.presentation.slides[index];
-        if (this.isActive && this.selected && slide && this.selected.closest(".slide") !== slide) {
+        if (this.isActive && this.selected && slide && this.closestSlide(this.selected) !== slide) {
           this.clearSelection();
         }
         requestAnimationFrame(() => this.replayActiveSlideMotion(false));
@@ -3339,7 +3351,7 @@
           ]
         };
         this.getEditableElements().forEach((candidate) => {
-          if (candidate === element || candidate.closest(".slide") !== active) return;
+          if (candidate === element || this.closestSlide(candidate) !== active) return;
           if (element.contains(candidate) || candidate.contains(element)) return;
           if (candidate.closest(".editor-frame") || candidate.closest(".editor-guide")) return;
           const box = this.getStageBox(candidate);
@@ -3813,7 +3825,7 @@
       }
 
       nextMotionOrder(element) {
-        const slide = element?.closest(".slide");
+        const slide = this.closestSlide(element);
         if (!slide) return 1;
         const orders = Array.from(slide.querySelectorAll("[data-edit-anim]"))
           .filter((node) => node !== element && node.dataset.editAnim && node.dataset.editAnim !== "none")
@@ -3935,7 +3947,7 @@
       }
 
       stabilizeMotionAncestors(element) {
-        const slide = element?.closest(".slide");
+        const slide = this.closestSlide(element);
         if (!element || !slide) return;
         this.releaseMotionAncestors(element);
         const ancestors = [];
@@ -4056,7 +4068,7 @@
           element &&
           element.isConnected &&
           this.stage.contains(element) &&
-          element.closest(".slide") &&
+          this.closestSlide(element) &&
           !element.matches(".slide, .deck-stage, #deckStage, .editor-frame, .editor-guide, .editor-shell")
         );
       }
@@ -4109,8 +4121,9 @@
           delete node.dataset.editorKind;
           delete node.dataset.editorSmall;
         });
-        root.querySelectorAll("[data-html-deck-editor-current]").forEach((node) => {
+        root.querySelectorAll("[data-html-deck-editor-current], [data-html-deck-editor-page]").forEach((node) => {
           node.removeAttribute("data-html-deck-editor-current");
+          node.removeAttribute("data-html-deck-editor-page");
         });
         root.querySelectorAll("[data-html-deck-editor-stage='preserve']").forEach((node) => {
           node.style.removeProperty("--html-deck-editor-stage-x");
@@ -4276,8 +4289,9 @@
           delete node.dataset.editorKind;
           delete node.dataset.editorSmall;
         });
-        clone.querySelectorAll("[data-html-deck-editor-current]").forEach((node) => {
+        clone.querySelectorAll("[data-html-deck-editor-current], [data-html-deck-editor-page]").forEach((node) => {
           node.removeAttribute("data-html-deck-editor-current");
+          node.removeAttribute("data-html-deck-editor-page");
         });
         clone.querySelectorAll(".editor-motion-preview, .editor-motion-running").forEach((node) => {
           node.classList.remove("editor-motion-preview", "editor-motion-running");
