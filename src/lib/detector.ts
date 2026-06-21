@@ -35,7 +35,7 @@ export function detectDeck(input: LoadedInput): DetectionReport {
     Boolean(doc.querySelector('script[src*="html-deck-editor"], script[src*="editor-runtime"]'));
 
   const deckStage = doc.querySelector("deck-stage#deckStage, #deckStage, .deck-stage");
-  const slides = deckStage ? Array.from(deckStage.querySelectorAll(".slide")) : [];
+  const slides = deckStage ? stageSlides(deckStage) : [];
   if (hasExistingRuntime && deckStage && slides.length > 0) {
     return {
       status: "already-editable",
@@ -60,7 +60,7 @@ export function detectDeck(input: LoadedInput): DetectionReport {
     };
   }
 
-  const revealSlides = doc.querySelectorAll(".reveal .slides section");
+  const revealSlides = directChildren(doc.querySelector(".reveal .slides"), "section");
   if (revealSlides.length >= 2) {
     return {
       status: "adaptable",
@@ -73,7 +73,7 @@ export function detectDeck(input: LoadedInput): DetectionReport {
     };
   }
 
-  const sectionSlides = doc.querySelectorAll("section.slide, .slide");
+  const sectionSlides = selectTopLevelSlides(doc);
   if (sectionSlides.length >= 2) {
     return {
       status: "adaptable",
@@ -116,6 +116,24 @@ function selectGenericSections(doc: Document): Element[] {
   if (containerSections.length >= 2) return containerSections;
 
   return Array.from(doc.body.querySelectorAll("main > section, body > section")).filter(hasEnoughText);
+}
+
+function selectTopLevelSlides(doc: Document): Element[] {
+  return topLevelElements(Array.from(doc.body.querySelectorAll("section.slide, .slide")));
+}
+
+function stageSlides(stage: Element): Element[] {
+  const directSlides = directChildren(stage, ".slide");
+  return directSlides.length ? directSlides : topLevelElements(Array.from(stage.querySelectorAll(".slide")));
+}
+
+function topLevelElements(elements: Element[]): Element[] {
+  return elements.filter((element) => !elements.some((other) => other !== element && other.contains(element)));
+}
+
+function directChildren(parent: Element | null, selector: string): Element[] {
+  if (!parent) return [];
+  return Array.from(parent.children).filter((child) => child.matches(selector));
 }
 
 function hasEnoughText(section: Element): boolean {

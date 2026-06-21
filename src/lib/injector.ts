@@ -208,9 +208,19 @@ function findRepairableDeckStage(sourceSlides: Element[]): Element | null {
 }
 
 function moveSlidesIntoStage(stage: Element, sourceSlides: Element[]): void {
+  const marker = stage.ownerDocument.createTextNode("");
+  const firstExistingSlide = sourceSlides.find((slide) => slide.parentElement === stage);
+  if (firstExistingSlide) {
+    stage.insertBefore(marker, firstExistingSlide);
+  } else {
+    stage.appendChild(marker);
+  }
+
+  const fragment = stage.ownerDocument.createDocumentFragment();
   sourceSlides.forEach((source) => {
-    stage.appendChild(source);
+    fragment.appendChild(source);
   });
+  marker.parentNode?.replaceChild(fragment, marker);
 }
 
 function markPreservedStage(stage: Element, sourceSlides: Element[]): void {
@@ -250,8 +260,8 @@ function wrapSlidesInPlace(doc: Document, sourceSlides: Element[]): void {
 }
 
 function selectSlideCandidates(doc: Document, report: DetectionReport): Element[] {
-  if (report.sourceKind === "reveal") return Array.from(doc.querySelectorAll(".reveal .slides section"));
-  if (report.sourceKind === "section-slide") return Array.from(doc.querySelectorAll("section.slide, .slide"));
+  if (report.sourceKind === "reveal") return directChildren(doc.querySelector(".reveal .slides"), "section");
+  if (report.sourceKind === "section-slide") return selectTopLevelSlides(doc);
   const containerSections = Array.from(doc.body.querySelectorAll([
     "#deck > section",
     ".deck > section",
@@ -261,6 +271,19 @@ function selectSlideCandidates(doc: Document, report: DetectionReport): Element[
   ].join(", "))).filter(hasEnoughText);
   if (containerSections.length >= 2) return containerSections;
   return Array.from(doc.body.querySelectorAll("main > section, body > section")).filter(hasEnoughText);
+}
+
+function selectTopLevelSlides(doc: Document): Element[] {
+  return topLevelElements(Array.from(doc.body.querySelectorAll("section.slide, .slide")));
+}
+
+function topLevelElements(elements: Element[]): Element[] {
+  return elements.filter((element) => !elements.some((other) => other !== element && other.contains(element)));
+}
+
+function directChildren(parent: Element | null, selector: string): Element[] {
+  if (!parent) return [];
+  return Array.from(parent.children).filter((child) => child.matches(selector));
 }
 
 function hasEnoughText(section: Element): boolean {

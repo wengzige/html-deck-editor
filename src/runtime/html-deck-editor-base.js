@@ -317,6 +317,12 @@
     return element && element.tagName && element.tagName.toLowerCase() === "deck-stage";
   }
 
+  function stageSlides(stage) {
+    const directSlides = Array.from(stage?.children || []).filter((child) => child.classList?.contains("slide"));
+    if (directSlides.length) return directSlides;
+    return Array.from(stage?.querySelectorAll?.(".slide") || []);
+  }
+
   function normalizeSlideIndex(index, slides) {
     const count = slides?.length || 0;
     if (!count) return 0;
@@ -355,11 +361,27 @@
   function currentSlideFromStageTransform(stage, slides) {
     if (!stage || !slides?.length) return -1;
     const transform = stage.style?.transform || getComputedStyle(stage).transform || "";
-    const pxMatch = transform.match(/translateX\(\s*(-?\d+(?:\.\d+)?)px\s*\)/i);
-    if (pxMatch) return slideIndexFromOffsetX(Number.parseFloat(pxMatch[1]), slides, stage);
-    const vwMatch = transform.match(/translateX\(\s*(-?\d+(?:\.\d+)?)vw\s*\)/i);
+    const pxOffset = translatePxFromTransform(transform);
+    if (Number.isFinite(pxOffset)) return slideIndexFromOffsetX(pxOffset, slides, stage);
+    const vwMatch = transform.match(/translate(?:3d|X)?\(\s*(-?\d+(?:\.\d+)?)vw\s*/i);
     if (!vwMatch) return -1;
     return normalizeSlideIndex(Math.abs(Number.parseFloat(vwMatch[1])) / 100, slides);
+  }
+
+  function translatePxFromTransform(transform) {
+    const translateMatch = transform.match(/translate(?:3d|X)?\(\s*(-?\d+(?:\.\d+)?)px\s*/i);
+    if (translateMatch) return Number.parseFloat(translateMatch[1]);
+    const matrixMatch = transform.match(/^matrix\(([^)]+)\)$/i);
+    if (matrixMatch) {
+      const parts = matrixMatch[1].split(",").map((part) => Number.parseFloat(part.trim()));
+      if (parts.length >= 6) return parts[4];
+    }
+    const matrix3dMatch = transform.match(/^matrix3d\(([^)]+)\)$/i);
+    if (matrix3dMatch) {
+      const parts = matrix3dMatch[1].split(",").map((part) => Number.parseFloat(part.trim()));
+      if (parts.length >= 16) return parts[12];
+    }
+    return NaN;
   }
 
   function computeHostCurrentSlide(slides, stage) {
@@ -389,7 +411,7 @@
   function syncHostCurrentSlide(stage, index) {
     window.__currentSlideIndex = index;
     if (stage) {
-      const slides = Array.from(stage.querySelectorAll?.(".slide") || []);
+      const slides = stageSlides(stage);
       const isHorizontal = stage.getAttribute?.("data-html-deck-editor-navigation") === "horizontal";
       stage.style.setProperty("--html-deck-editor-current-slide", String(index));
       stage.style.setProperty("--html-deck-editor-slide-offset-x", `${isHorizontal ? slideOffsetX(stage, slides, index) : 0}px`);
@@ -431,7 +453,13 @@
   }
 
   function stageDesignSize(stage) {
-    const slide = stage?.querySelector?.(".slide[data-html-deck-editor-current], .slide.active, .slide.visible, .slide[data-deck-active], .slide");
+    const slides = stageSlides(stage);
+    const slide = slides.find((item) => (
+      item.hasAttribute("data-html-deck-editor-current") ||
+      item.classList.contains("active") ||
+      item.classList.contains("visible") ||
+      item.hasAttribute("data-deck-active")
+    )) || slides[0];
     if (isDeckStageElement(stage)) {
       return elementDesignSize(stage, { width: 1920, height: 1080 });
     }
@@ -500,9 +528,9 @@
       delete presentation.showSlide;
       delete presentation.scaleStage;
       delete presentation.setEditorInsets;
-      presentation.currentSlide = computeCurrentSlide(Array.from(stage.querySelectorAll(".slide")), stage);
+      presentation.currentSlide = computeCurrentSlide(stageSlides(stage), stage);
     }
-    presentation.slides = Array.from(stage.querySelectorAll(".slide"));
+    presentation.slides = stageSlides(stage);
     if (!Number.isFinite(presentation.currentSlide)) presentation.currentSlide = computeCurrentSlide(presentation.slides, stage);
     presentation.currentSlide = markEditorCurrentSlide(presentation.slides, presentation.currentSlide);
     syncHostCurrentSlide(stage, presentation.currentSlide);
@@ -510,11 +538,11 @@
 
     const originalShowSlide = typeof presentation.showSlide === "function" ? presentation.showSlide.bind(presentation) : null;
     presentation.showSlide = function showSlide(index) {
-      this.slides = Array.from(stage.querySelectorAll(".slide"));
+      this.slides = stageSlides(stage);
       const requestedSlide = normalizeSlideIndex(index, this.slides);
       if (originalShowSlide) {
         originalShowSlide(requestedSlide);
-        this.slides = Array.from(stage.querySelectorAll(".slide"));
+        this.slides = stageSlides(stage);
         const hostIndex = computeHostCurrentSlide(this.slides, stage);
         this.currentSlide = markEditorCurrentSlide(this.slides, hostIndex >= 0 ? hostIndex : requestedSlide);
       } else {
@@ -1707,7 +1735,7 @@
 
       syncCurrentSlideFromHost() {
         if (!this.stage || this.stage.getAttribute("data-html-deck-editor-stage") !== "preserve") return;
-        this.presentation.slides = Array.from(this.stage.querySelectorAll(".slide"));
+        this.presentation.slides = stageSlides(this.stage);
         const hostIndex = computeHostCurrentSlide(this.presentation.slides, this.stage);
         const next = hostIndex >= 0 ? hostIndex : this.presentation.currentSlide;
         this.presentation.currentSlide = markEditorCurrentSlide(this.presentation.slides, next);
@@ -4207,7 +4235,7 @@
         this.cleanEditorArtifacts(this.stage);
         this.attachFrame();
         this.selected = null;
-        this.presentation.slides = Array.from(this.stage.querySelectorAll(".slide"));
+        this.presentation.slides = stageSlides(this.stage);
         this.presentation.injectChrome?.();
         this.hideDeckResetControl();
         this.prepareEditableElements();

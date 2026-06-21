@@ -344,6 +344,42 @@ describe("editor runtime", () => {
     expect(deck.style.getPropertyValue("--html-deck-editor-slide-offset-x")).toBe("900px");
   });
 
+  it("uses only direct stage slides for preserved deck navigation", () => {
+    document.body.innerHTML = `
+      <div id="deck" data-html-deck-editor-stage="preserve" data-html-deck-editor-navigation="horizontal" style="transform:translate3d(-1800px, 0px, 0px)">
+        <section class="slide"><h1>One</h1><div id="nestedCard" class="slide">Nested card</div></section>
+        <section class="slide"><h1>Two</h1></section>
+        <section class="slide"><h1>Three</h1></section>
+      </div>
+    `;
+    const sourceSlides = Array.from(document.querySelectorAll("#deck > .slide")) as HTMLElement[];
+    sourceSlides.forEach((slide, index) => {
+      Object.defineProperty(slide, "offsetLeft", { value: index * 900, configurable: true });
+    });
+
+    Element.prototype.getBoundingClientRect = function getBoundingClientRect() {
+      const element = this as HTMLElement;
+      if (element.classList.contains("editor-toolbar")) return rect({ left: 12, top: 12, width: 1416, height: 52 });
+      if (element.classList.contains("editor-slides")) return rect({ left: 12, top: 76, width: 242, height: 810 });
+      if (element.classList.contains("editor-panel")) return rect({ left: 1086, top: 76, width: 342, height: 810 });
+      if (element.id === "nestedCard") return rect({ left: 30, top: 30, width: 180, height: 80 });
+      if (element.classList.contains("slide")) return rect({ left: 0, top: 0, width: 900, height: 540 });
+      if (element.id === "deck") return rect({ left: 0, top: 0, width: 2700, height: 540 });
+      return rect({ left: 0, top: 0, width: 100, height: 40 });
+    };
+
+    installRuntime();
+    const editor = (window as any).FrontendSlidesEditor.mount();
+    editor.toggleEditMode(true);
+
+    const deck = document.getElementById("deck") as HTMLElement;
+    const nestedCard = document.getElementById("nestedCard") as HTMLElement;
+    expect(editor.presentation.slides).toHaveLength(3);
+    expect(editor.presentation.slides).not.toContain(nestedCard);
+    expect(sourceSlides[2].hasAttribute("data-html-deck-editor-current")).toBe(true);
+    expect(deck.style.getPropertyValue("--html-deck-editor-slide-offset-x")).toBe("1800px");
+  });
+
   it("applies font size to selected text without replacing surrounding inline HTML", () => {
     document.body.innerHTML = `
       <div id="deckStage" class="deck-stage">

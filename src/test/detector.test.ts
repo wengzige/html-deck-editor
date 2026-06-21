@@ -29,6 +29,22 @@ describe("deck detection", () => {
     expect(report.slideCount).toBe(2);
   });
 
+  it("ignores nested slide-like content inside fixed-stage pages", () => {
+    const report = detectDeck(input([
+      file("index.html", "<deck-stage id=\"deckStage\"><section class=\"slide active\"><div class=\"slide\">Nested card</div></section><section class=\"slide\"></section></deck-stage>")
+    ]));
+    expect(report.status).toBe("ready");
+    expect(report.slideCount).toBe(2);
+  });
+
+  it("detects fixed-stage decks with a nested slide wrapper", () => {
+    const report = detectDeck(input([
+      file("index.html", "<div id=\"deckStage\"><div class=\"slides\"><section class=\"slide active\"></section><section class=\"slide\"></section></div></div>")
+    ]));
+    expect(report.status).toBe("ready");
+    expect(report.slideCount).toBe(2);
+  });
+
   it("detects simple section decks as adaptable", () => {
     const report = detectDeck(input([
       file("index.html", "<main><section><h1>One</h1><p>Enough text here</p></section><section><h1>Two</h1><p>Enough text here</p></section></main>")
@@ -49,6 +65,34 @@ describe("deck detection", () => {
   it("detects Reveal.js decks as adaptable", () => {
     const report = detectDeck(input([
       file("index.html", "<div class=\"reveal\"><div class=\"slides\"><section>One</section><section>Two</section></div></div>")
+    ]));
+    expect(report.status).toBe("adaptable");
+    expect(report.sourceKind).toBe("reveal");
+    expect(report.slideCount).toBe(2);
+  });
+
+  it("does not count nested slide-like elements as pages", () => {
+    const report = detectDeck(input([
+      file("index.html", `
+        <div id="deck">
+          <section class="slide"><h1>One</h1><div class="slide">Nested card, not a page</div></section>
+          <section class="slide"><h1>Two</h1></section>
+        </div>
+      `)
+    ]));
+    expect(report.status).toBe("adaptable");
+    expect(report.sourceKind).toBe("section-slide");
+    expect(report.slideCount).toBe(2);
+  });
+
+  it("counts only top-level Reveal sections as pages", () => {
+    const report = detectDeck(input([
+      file("index.html", `
+        <div class="reveal"><div class="slides">
+          <section><h1>One</h1><section><h2>Nested reveal step</h2></section></section>
+          <section><h1>Two</h1></section>
+        </div></div>
+      `)
     ]));
     expect(report.status).toBe("adaptable");
     expect(report.sourceKind).toBe("reveal");
@@ -153,8 +197,10 @@ describe("runtime injection", () => {
   it("repairs escaped slides back into an explicit deck container", () => {
     const source = `
       <div id="deck">
+        <div id="chrome">Deck chrome</div>
         <section class="slide"><h1>One</h1></section>
         <section class="slide"><h1>Two</h1></section>
+        <div id="tail">Deck tail</div>
       </div>
       <section class="slide"><h1>Three</h1></section>
       <script>const deck = document.getElementById("deck");</script>
@@ -169,9 +215,54 @@ describe("runtime injection", () => {
     expect(stage.getAttribute("data-html-deck-editor-stage")).toBe("preserve");
     expect(stage.getAttribute("data-html-deck-editor-navigation")).toBe("horizontal");
     expect(directSlides).toHaveLength(3);
+    expect(Array.from(stage.children).map((child) => child.id || child.tagName.toLowerCase())).toEqual([
+      "chrome",
+      "section",
+      "section",
+      "section",
+      "tail"
+    ]);
     expect(doc.body.querySelectorAll("body > section.slide")).toHaveLength(0);
     expect(doc.getElementById("deckStage")).toBeNull();
     expect(html).toContain("const deck = document.getElementById(\"deck\");");
+  });
+
+  it("keeps nested slide-like content inside its parent page", () => {
+    const source = `
+      <div id="deck">
+        <section class="slide"><h1>One</h1><div class="slide" data-card="nested">Nested card</div></section>
+        <section class="slide"><h1>Two</h1></section>
+      </div>
+    `;
+    const report = detectDeck(input([file("index.html", source)]));
+    const html = rewriteHtml(source, report);
+    const doc = new DOMParser().parseFromString(html, "text/html");
+    const stage = doc.getElementById("deck") as HTMLElement;
+    const directSlides = Array.from(stage.children).filter((child) => child.classList.contains("slide"));
+    const nestedCard = doc.querySelector("[data-card='nested']") as HTMLElement;
+
+    expect(directSlides).toHaveLength(2);
+    expect(nestedCard.closest("section.slide")).toBe(directSlides[0]);
+    expect(nestedCard.parentElement).toBe(directSlides[0]);
+  });
+
+  it("keeps nested Reveal sections inside their top-level page", () => {
+    const source = `
+      <div class="reveal"><div class="slides">
+        <section><h1>One</h1><section data-step="nested"><h2>Nested step</h2></section></section>
+        <section><h1>Two</h1></section>
+      </div></div>
+    `;
+    const report = detectDeck(input([file("index.html", source)]));
+    const html = rewriteHtml(source, report);
+    const doc = new DOMParser().parseFromString(html, "text/html");
+    const stage = doc.querySelector(".slides") as HTMLElement;
+    const directSlides = Array.from(stage.children).filter((child) => child.classList.contains("slide"));
+    const nestedStep = doc.querySelector("[data-step='nested']") as HTMLElement;
+
+    expect(directSlides).toHaveLength(2);
+    expect(nestedStep.closest(".slide")).toBe(directSlides[0]);
+    expect(nestedStep.parentElement).toBe(directSlides[0]);
   });
 
   it("does not remove user content that happens to use editor-like class names", () => {
