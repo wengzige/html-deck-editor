@@ -161,6 +161,13 @@ function prepareAdaptableStage(doc: Document, report: DetectionReport): void {
     return;
   }
 
+  const repairableStage = findRepairableDeckStage(sourceSlides);
+  if (repairableStage) {
+    moveSlidesIntoStage(repairableStage, sourceSlides);
+    markPreservedStage(repairableStage, sourceSlides);
+    return;
+  }
+
   wrapSlidesInPlace(doc, sourceSlides);
 }
 
@@ -183,6 +190,27 @@ function findReusableStage(sourceSlides: Element[]): Element | null {
   const slideSet = new Set(sourceSlides);
   const onlySlides = elementChildren.length === sourceSlides.length && elementChildren.every((child) => slideSet.has(child));
   return onlySlides ? parent : null;
+}
+
+function findRepairableDeckStage(sourceSlides: Element[]): Element | null {
+  const explicitDeckSelector = "#deck, .deck, .slides, [data-deck], [data-slides]";
+  const slideSet = new Set(sourceSlides);
+  const parents = Array.from(new Set(sourceSlides.map((slide) => slide.parentElement).filter(Boolean))) as Element[];
+  const firstParent = sourceSlides[0]?.parentElement;
+  const candidates = parents
+    .filter((parent) => parent.matches(explicitDeckSelector))
+    .sort((a, b) => (a === firstParent ? -1 : 0) - (b === firstParent ? -1 : 0));
+
+  return candidates.find((parent) => {
+    const directSlideCount = Array.from(parent.children).filter((child) => slideSet.has(child)).length;
+    return directSlideCount >= 2 && (parent === firstParent || directSlideCount >= Math.ceil(sourceSlides.length / 2));
+  }) || null;
+}
+
+function moveSlidesIntoStage(stage: Element, sourceSlides: Element[]): void {
+  sourceSlides.forEach((source) => {
+    stage.appendChild(source);
+  });
 }
 
 function markPreservedStage(stage: Element, sourceSlides: Element[]): void {

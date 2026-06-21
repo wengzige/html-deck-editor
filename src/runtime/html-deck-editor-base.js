@@ -325,12 +325,41 @@
     return Math.max(0, Math.min(count - 1, Math.round(number)));
   }
 
+  function slideOffsetX(stage, slides, index) {
+    const current = normalizeSlideIndex(index, slides);
+    const slide = slides?.[current];
+    if (!stage || !slide) return 0;
+    const offsetLeft = Number(slide.offsetLeft);
+    if (Number.isFinite(offsetLeft) && (offsetLeft !== 0 || current === 0)) {
+      return Math.max(0, offsetLeft);
+    }
+    const slideWidth = elementDesignSize(slide, stageDesignSize(stage)).width;
+    return Math.max(0, slideWidth * current);
+  }
+
+  function slideIndexFromOffsetX(offsetX, slides, stage) {
+    if (!slides?.length) return -1;
+    const target = Math.abs(Number(offsetX) || 0);
+    let bestIndex = 0;
+    let bestDistance = Infinity;
+    slides.forEach((slide, index) => {
+      const distance = Math.abs(slideOffsetX(stage, slides, index) - target);
+      if (distance < bestDistance) {
+        bestDistance = distance;
+        bestIndex = index;
+      }
+    });
+    return normalizeSlideIndex(bestIndex, slides);
+  }
+
   function currentSlideFromStageTransform(stage, slides) {
     if (!stage || !slides?.length) return -1;
     const transform = stage.style?.transform || getComputedStyle(stage).transform || "";
-    const match = transform.match(/translateX\(\s*(-?\d+(?:\.\d+)?)vw\s*\)/i);
-    if (!match) return -1;
-    return normalizeSlideIndex(Math.abs(Number.parseFloat(match[1])) / 100, slides);
+    const pxMatch = transform.match(/translateX\(\s*(-?\d+(?:\.\d+)?)px\s*\)/i);
+    if (pxMatch) return slideIndexFromOffsetX(Number.parseFloat(pxMatch[1]), slides, stage);
+    const vwMatch = transform.match(/translateX\(\s*(-?\d+(?:\.\d+)?)vw\s*\)/i);
+    if (!vwMatch) return -1;
+    return normalizeSlideIndex(Math.abs(Number.parseFloat(vwMatch[1])) / 100, slides);
   }
 
   function computeHostCurrentSlide(slides, stage) {
@@ -359,7 +388,12 @@
 
   function syncHostCurrentSlide(stage, index) {
     window.__currentSlideIndex = index;
-    if (stage) stage.style.setProperty("--html-deck-editor-current-slide", String(index));
+    if (stage) {
+      const slides = Array.from(stage.querySelectorAll?.(".slide") || []);
+      const isHorizontal = stage.getAttribute?.("data-html-deck-editor-navigation") === "horizontal";
+      stage.style.setProperty("--html-deck-editor-current-slide", String(index));
+      stage.style.setProperty("--html-deck-editor-slide-offset-x", `${isHorizontal ? slideOffsetX(stage, slides, index) : 0}px`);
+    }
   }
 
   function zeroInsets() {
@@ -423,6 +457,7 @@
     stage.style.removeProperty("--html-deck-editor-stage-y");
     stage.style.removeProperty("--html-deck-editor-stage-scale");
     stage.style.removeProperty("--html-deck-editor-current-slide");
+    stage.style.removeProperty("--html-deck-editor-slide-offset-x");
     stage.querySelectorAll(".slide[data-html-deck-editor-current]").forEach((slide) => {
       slide.removeAttribute("data-html-deck-editor-current");
     });
@@ -490,7 +525,7 @@
           slide.toggleAttribute("data-deck-active", i === this.currentSlide);
         });
         if (stage.getAttribute("data-html-deck-editor-navigation") === "horizontal") {
-          stage.style.transform = `translateX(${-this.currentSlide * 100}vw)`;
+          stage.style.transform = `translateX(${-slideOffsetX(stage, this.slides, this.currentSlide)}px)`;
           stage.style.setProperty("--html-deck-editor-current-slide", String(this.currentSlide));
         }
       }
@@ -4041,6 +4076,7 @@
           node.style.removeProperty("--html-deck-editor-stage-y");
           node.style.removeProperty("--html-deck-editor-stage-scale");
           node.style.removeProperty("--html-deck-editor-current-slide");
+          node.style.removeProperty("--html-deck-editor-slide-offset-x");
         });
       }
 
@@ -4218,6 +4254,7 @@
           node.style.removeProperty("--html-deck-editor-stage-y");
           node.style.removeProperty("--html-deck-editor-stage-scale");
           node.style.removeProperty("--html-deck-editor-current-slide");
+          node.style.removeProperty("--html-deck-editor-slide-offset-x");
         });
         clone.querySelectorAll("[style]").forEach((node) => {
           node.style.removeProperty("--html-deck-editor-slide-x");
@@ -4227,6 +4264,7 @@
           node.style.removeProperty("--html-deck-editor-stage-y");
           node.style.removeProperty("--html-deck-editor-stage-scale");
           node.style.removeProperty("--html-deck-editor-current-slide");
+          node.style.removeProperty("--html-deck-editor-slide-offset-x");
           node.style.removeProperty("--html-deck-editor-edit-opacity");
           node.style.removeProperty("--deck-stage-inset-left");
           node.style.removeProperty("--deck-stage-inset-right");

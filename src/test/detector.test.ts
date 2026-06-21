@@ -150,6 +150,30 @@ describe("runtime injection", () => {
     expect(html).toContain("window.originalNavigation = true;");
   });
 
+  it("repairs escaped slides back into an explicit deck container", () => {
+    const source = `
+      <div id="deck">
+        <section class="slide"><h1>One</h1></section>
+        <section class="slide"><h1>Two</h1></section>
+      </div>
+      <section class="slide"><h1>Three</h1></section>
+      <script>const deck = document.getElementById("deck");</script>
+    `;
+    const report = detectDeck(input([file("index.html", source)]));
+    const html = rewriteHtml(source, report);
+    const doc = new DOMParser().parseFromString(html, "text/html");
+    const stage = doc.getElementById("deck") as HTMLElement;
+    const directSlides = Array.from(stage.children).filter((child) => child.classList.contains("slide"));
+
+    expect(report.status).toBe("adaptable");
+    expect(stage.getAttribute("data-html-deck-editor-stage")).toBe("preserve");
+    expect(stage.getAttribute("data-html-deck-editor-navigation")).toBe("horizontal");
+    expect(directSlides).toHaveLength(3);
+    expect(doc.body.querySelectorAll("body > section.slide")).toHaveLength(0);
+    expect(doc.getElementById("deckStage")).toBeNull();
+    expect(html).toContain("const deck = document.getElementById(\"deck\");");
+  });
+
   it("does not remove user content that happens to use editor-like class names", () => {
     const source = `
       <style>

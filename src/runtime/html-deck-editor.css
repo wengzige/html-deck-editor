@@ -54,7 +54,7 @@
     }
 
     body.editing [data-html-deck-editor-stage="preserve"] {
-      transform: translate(var(--html-deck-editor-stage-x, 0px), var(--html-deck-editor-stage-y, 0px)) scale(var(--html-deck-editor-stage-scale, 1)) translateX(calc(var(--html-deck-editor-current-slide, 0) * -100vw)) !important;
+      transform: translate(var(--html-deck-editor-stage-x, 0px), var(--html-deck-editor-stage-y, 0px)) scale(var(--html-deck-editor-stage-scale, 1)) translateX(calc(var(--html-deck-editor-slide-offset-x, 0px) * -1)) !important;
       transform-origin: top left;
     }
 
