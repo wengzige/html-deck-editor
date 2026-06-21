@@ -1,5 +1,6 @@
 import { afterEach, beforeEach, describe, expect, it, vi } from "vitest";
 import editorRuntime from "../runtime/html-deck-editor-base.js?raw";
+import editorCss from "../runtime/html-deck-editor.css?raw";
 
 type RectInput = {
   left: number;
@@ -23,6 +24,9 @@ function rect({ left, top, width, height }: RectInput): DOMRect {
 }
 
 function installRuntime(): void {
+  const style = document.createElement("style");
+  style.textContent = editorCss;
+  document.head.appendChild(style);
   window.eval(editorRuntime);
 }
 
@@ -184,6 +188,45 @@ describe("editor runtime", () => {
 
     expect(headline.dataset.editorKind).toBe("text");
     expect(wrapper.dataset.editorKind).toBeUndefined();
+  });
+
+  it("recognizes compact eyebrow labels as editable text without marking their layout wrapper", () => {
+    document.body.innerHTML = `
+      <div id="deckStage" class="deck-stage">
+        <section class="slide active">
+          <div id="chrome" style="display:flex;justify-content:space-between">
+            <div id="crumb" class="l" style="font-size:11px;letter-spacing:.16em;text-transform:uppercase">气候因子分析 · FACTOR CONTRIBUTION</div>
+            <div id="page" class="r" style="font-size:11px;letter-spacing:.16em">05 / 15</div>
+          </div>
+          <div id="titleBlock" data-anim="line" style="display:flex;flex-direction:column;gap:10px">
+            <div id="tag" class="t-cat accent" style="font-size:11px;letter-spacing:.18em;text-transform:uppercase">PERCENT CONTRIBUTION</div>
+            <h2 id="headline" style="font-size:74px">气候因子贡献率排名</h2>
+          </div>
+        </section>
+      </div>
+    `;
+    const chrome = document.getElementById("chrome") as HTMLElement;
+    const crumb = document.getElementById("crumb") as HTMLElement;
+    const page = document.getElementById("page") as HTMLElement;
+    const titleBlock = document.getElementById("titleBlock") as HTMLElement;
+    const tag = document.getElementById("tag") as HTMLElement;
+    const headline = document.getElementById("headline") as HTMLElement;
+    chrome.getBoundingClientRect = () => rect({ left: 80, top: 44, width: 1280, height: 18 });
+    crumb.getBoundingClientRect = () => rect({ left: 80, top: 44, width: 330, height: 16 });
+    page.getBoundingClientRect = () => rect({ left: 1300, top: 44, width: 60, height: 16 });
+    titleBlock.getBoundingClientRect = () => rect({ left: 80, top: 110, width: 900, height: 120 });
+    tag.getBoundingClientRect = () => rect({ left: 80, top: 110, width: 210, height: 16 });
+    headline.getBoundingClientRect = () => rect({ left: 80, top: 136, width: 820, height: 82 });
+
+    installRuntime();
+    (window as any).FrontendSlidesEditor.mount();
+
+    expect(crumb.dataset.editorKind).toBe("text");
+    expect(page.dataset.editorKind).toBe("text");
+    expect(tag.dataset.editorKind).toBe("text");
+    expect(headline.dataset.editorKind).toBe("text");
+    expect(chrome.dataset.editorKind).toBeUndefined();
+    expect(titleBlock.dataset.editorKind).toBeUndefined();
   });
 
   it("moves preserved HTML slides into the editor safe area instead of leaving panels over the canvas", () => {
@@ -952,6 +995,75 @@ describe("editor runtime", () => {
     expect(title.style.fontStyle).toBe("");
     expect(italic.getAttribute("aria-pressed")).toBe("true");
     expect(title.textContent).toBe("甲乙丙丁");
+  });
+
+  it("keeps manually edited layout values for flow text instead of syncing back to its original CSS layout", () => {
+    document.body.innerHTML = `
+      <div id="deckStage" class="deck-stage">
+        <section class="slide active">
+          <div style="display:grid;place-items:start">
+            <h1 id="title" style="font-size:96px">Flow layout title</h1>
+          </div>
+        </section>
+      </div>
+    `;
+    const slide = document.querySelector(".slide") as HTMLElement;
+    const title = document.getElementById("title") as HTMLElement;
+    slide.getBoundingClientRect = () => rect({ left: 0, top: 0, width: 1440, height: 900 });
+    title.getBoundingClientRect = () => rect({ left: 100, top: 120, width: 600, height: 120 });
+
+    installRuntime();
+    const editor = (window as any).FrontendSlidesEditor.mount();
+    editor.toggleEditMode(true);
+    editor.select(title);
+
+    const x = document.getElementById("xInput") as HTMLInputElement;
+    const width = document.getElementById("widthInput") as HTMLInputElement;
+    expect(x.value).toBe("100");
+    expect(width.value).toBe("600");
+
+    x.value = "240";
+    width.value = "420";
+    x.dispatchEvent(new Event("change", { bubbles: true }));
+    width.dispatchEvent(new Event("change", { bubbles: true }));
+    editor.updateInspector();
+
+    expect(title.classList.contains("edit-moved")).toBe(true);
+    expect(title.dataset.editStageX).toBe("240");
+    expect(title.dataset.editStageWidth).toBe("420");
+    expect(x.value).toBe("240");
+    expect(width.value).toBe("420");
+  });
+
+  it("keeps layout edits on animated text elements while editing mode freezes original motion", () => {
+    document.body.innerHTML = `
+      <div id="deckStage" class="deck-stage">
+        <section class="slide active" data-html-deck-editor-current>
+          <h1 id="title" data-anim="title" style="font-size:96px">Animated title</h1>
+        </section>
+      </div>
+    `;
+    const slide = document.querySelector(".slide") as HTMLElement;
+    const title = document.getElementById("title") as HTMLElement;
+    slide.getBoundingClientRect = () => rect({ left: 0, top: 0, width: 1440, height: 900 });
+    title.getBoundingClientRect = () => rect({ left: 60, top: 90, width: 680, height: 120 });
+
+    installRuntime();
+    const editor = (window as any).FrontendSlidesEditor.mount();
+    editor.toggleEditMode(true);
+    editor.select(title);
+
+    const x = document.getElementById("xInput") as HTMLInputElement;
+    const width = document.getElementById("widthInput") as HTMLInputElement;
+    x.value = "120";
+    x.dispatchEvent(new Event("input", { bubbles: true }));
+    width.focus();
+    editor.updateInspector();
+
+    expect(title.classList.contains("edit-moved")).toBe(true);
+    expect(title.dataset.editStageX).toBe("120");
+    expect(x.value).toBe("120");
+    expect(getComputedStyle(title).transform).not.toBe("none");
   });
 
 });

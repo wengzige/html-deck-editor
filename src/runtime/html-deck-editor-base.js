@@ -873,8 +873,26 @@
         const singlePurpose = this.hasOnlyInlineTextChildren(element);
         const compactTextBlock = rect.width <= window.innerWidth * 0.92 && rect.height <= window.innerHeight * 0.45;
         const textLength = (element.textContent || "").replace(/\s+/g, "").length;
+        const text = (element.textContent || "").replace(/\s+/g, " ").trim();
         const prominentText = fontSize >= 18 || rect.height >= 34 || (fontSize >= 14 && textLength <= 120);
-        return singlePurpose && compactTextBlock && prominentText && !["grid", "table", "contents"].includes(display);
+        const shortLabel = this.isShortLabelTextCandidate(element, rect, style, text);
+        return singlePurpose && compactTextBlock && (prominentText || shortLabel) && !["grid", "table", "contents"].includes(display);
+      }
+
+      isShortLabelTextCandidate(element, rect, style, text) {
+        if (!text || text.length > 96) return false;
+        if (rect.width < 18 || rect.height < 8) return false;
+        if (rect.height > Math.max(34, window.innerHeight * 0.08)) return false;
+        const fontSize = Number.parseFloat(style.fontSize) || 0;
+        if (fontSize < 9) return false;
+        const letterSpacing = Number.parseFloat(style.letterSpacing) || 0;
+        const words = text.match(/[A-Za-z]{2,}/g) || [];
+        const uppercaseWords = words.filter((word) => word === word.toUpperCase());
+        const uppercaseRatio = words.length ? uppercaseWords.length / words.length : 0;
+        const hasCjk = /[\u3400-\u9fff]/.test(text);
+        const hasLabelSeparator = /[·•|/:[\]（）()_-]/.test(text);
+        const classHint = /\b(t-cat|t-meta|label|caption|eyebrow|kicker|row-lbl|row-val|unit|lbl|note)\b/i.test(element.className || "");
+        return letterSpacing >= 0.8 || uppercaseRatio >= 0.5 || (hasCjk && words.length > 0) || hasLabelSeparator || classHint;
       }
 
       hasOnlyInlineTextChildren(element) {
@@ -3014,6 +3032,9 @@
         const liveBox = this.getStageBox(element);
         if (!this.isUsableStageBox(liveBox)) return storedBox;
         if (options.mode === "sync") {
+          if (storedBox && element.classList.contains("edit-moved")) {
+            return this.rememberMotionStableBox(element, storedBox);
+          }
           this.storeStageBox(element, liveBox);
           return this.rememberMotionStableBox(element, liveBox);
         }
