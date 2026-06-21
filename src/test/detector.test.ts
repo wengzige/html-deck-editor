@@ -181,6 +181,29 @@ describe("runtime injection", () => {
     expect(html).toContain(".editor-panel { display: grid; }");
   });
 
+  it("does not remove user buttons just because their text looks editor-ish", () => {
+    const source = `
+      <div id="deck">
+        <section>
+          <h1>One</h1><p>Enough text here</p>
+          <button id="workflow-done" data-keep="done">DONE</button>
+        </section>
+        <section>
+          <h1>Two</h1><p>Enough text here</p>
+          <button class="business-action" data-keep="edit">EDIT</button>
+          <a href="#save" data-keep="save">SAVE HTML</a>
+        </section>
+      </div>
+    `;
+    const report = detectDeck(input([file("index.html", source)]));
+    const html = rewriteHtml(source, report);
+
+    expect(report.status).toBe("adaptable");
+    expect(html).toContain('id="workflow-done" data-keep="done"');
+    expect(html).toContain('class="business-action" data-keep="edit"');
+    expect(html).toContain('href="#save" data-keep="save"');
+  });
+
   it("converts a simple single-file deck into a downloadable zip blob", async () => {
     const result = await convertInput(input([
       file("index.html", "<main><section><h1>One</h1><p>Enough text here</p></section><section><h1>Two</h1><p>Enough text here</p></section></main>")

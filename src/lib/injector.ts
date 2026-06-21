@@ -416,12 +416,10 @@ function isLegacyEditorControl(element: HTMLElement): boolean {
     element.getAttribute("title"),
     element.getAttribute("aria-label")
   ].join(" ");
+  const editorishLabel = /edit|editor|编辑|save[-_\s]?html|html[-_\s]?save/i.test(label);
 
   return (
-    text === "DONE" ||
-    text === "EDIT" ||
-    text === "SAVE HTML" ||
-    text === "保存 HTML" ||
+    ((text === "DONE" || text === "EDIT" || text === "SAVE HTML" || text === "保存 HTML") && editorishLabel) ||
     /edit mode|编辑模式|toggle edit mode/i.test(label) ||
     /save[-_\s]?html|html[-_\s]?save/i.test(label)
   );
