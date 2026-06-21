@@ -491,6 +491,19 @@
     });
   }
 
+  function resetPreservedStageForExport(stage) {
+    if (!stage || stage.getAttribute("data-html-deck-editor-stage") !== "preserve") return;
+    if (stage.getAttribute("data-html-deck-editor-navigation") !== "horizontal") return;
+    stage.style.removeProperty("transform");
+    const slides = stageSlides(stage);
+    slides.forEach((slide, index) => {
+      const isFirst = index === 0;
+      slide.classList.toggle("active", isFirst);
+      slide.classList.toggle("visible", isFirst);
+      slide.toggleAttribute("data-deck-active", isFirst);
+    });
+  }
+
   function layoutPreservedStageForEditor(stage, insets) {
     if (!stage || stage.getAttribute("data-html-deck-editor-stage") !== "preserve") return false;
     const safeInsets = normalizeInsets(insets);
@@ -4278,6 +4291,7 @@
         });
         clone.querySelectorAll("#editorFrame, #editorGuideV, #editorGuideH").forEach((node) => node.classList.remove("active"));
         clone.querySelectorAll("[data-html-deck-editor-stage='preserve']").forEach((node) => {
+          resetPreservedStageForExport(node);
           node.style.removeProperty("--html-deck-editor-stage-x");
           node.style.removeProperty("--html-deck-editor-stage-y");
           node.style.removeProperty("--html-deck-editor-stage-scale");

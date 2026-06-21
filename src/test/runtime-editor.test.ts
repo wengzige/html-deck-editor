@@ -460,6 +460,37 @@ describe("editor runtime", () => {
     expect(html).not.toContain("--html-deck-editor-current-slide");
   });
 
+  it("exports preserved horizontal decks from a clean first-slide position", () => {
+    document.body.innerHTML = `
+      <div id="deck" data-html-deck-editor-stage="preserve" data-html-deck-editor-navigation="horizontal">
+        <section class="slide active visible" data-deck-active><h1>One slide</h1></section>
+        <section class="slide"><h1>Two slide</h1></section>
+        <section class="slide"><h1>Three slide</h1></section>
+      </div>
+    `;
+    const sourceSlides = Array.from(document.querySelectorAll(".slide")) as HTMLElement[];
+    sourceSlides.forEach((slide, index) => {
+      Object.defineProperty(slide, "offsetLeft", { value: index * 900, configurable: true });
+    });
+
+    installRuntime();
+    const editor = (window as any).FrontendSlidesEditor.mount();
+    editor.presentation.showSlide(2);
+
+    const html = editor.buildExportHtml();
+    const doc = new DOMParser().parseFromString(html, "text/html");
+    const deck = doc.getElementById("deck") as HTMLElement;
+    const slides = Array.from(doc.querySelectorAll("#deck > .slide")) as HTMLElement[];
+
+    expect(deck.getAttribute("style") || "").not.toContain("transform");
+    expect(slides[0].classList.contains("active")).toBe(true);
+    expect(slides[0].classList.contains("visible")).toBe(true);
+    expect(slides[0].hasAttribute("data-deck-active")).toBe(true);
+    expect(slides[2].classList.contains("active")).toBe(false);
+    expect(slides[2].classList.contains("visible")).toBe(false);
+    expect(slides[2].hasAttribute("data-deck-active")).toBe(false);
+  });
+
   it("selects directly clicked editable text on the slide", () => {
     document.body.innerHTML = `
       <div id="deckStage" class="deck-stage">
