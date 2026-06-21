@@ -26,6 +26,59 @@ function installRuntime(): void {
   window.eval(editorRuntime);
 }
 
+function installPickerStub(): any[] {
+  const instances: any[] = [];
+  class PickerStub {
+    options: any;
+    color = "";
+    destroyed = false;
+    onChange?: (color: any) => void;
+    onDone?: (color: any) => void;
+
+    constructor(options: any) {
+      this.options = options;
+      instances.push(this);
+      const root = document.createElement("div");
+      root.className = "picker_wrapper layout_default";
+      options.parent.appendChild(root);
+    }
+
+    setColor(color: string): void {
+      this.color = color;
+    }
+
+    show(): boolean {
+      return true;
+    }
+
+    destroy(): void {
+      this.destroyed = true;
+    }
+  }
+  vi.stubGlobal("Picker", PickerStub);
+  return instances;
+}
+
+function pickerColor(hex: string): any {
+  return { hex, rgbString: hex, rgbaString: hex };
+}
+
+function chooseBackground(value: string): void {
+  const bg = document.getElementById("bgInput") as HTMLButtonElement;
+  bg.click();
+  const choice = document.querySelector(`[data-bg-value="${value}"]`) as HTMLButtonElement;
+  expect(choice).toBeTruthy();
+  choice.click();
+}
+
+function chooseTextColor(value: string): void {
+  const color = document.getElementById("colorButton") as HTMLButtonElement;
+  color.click();
+  const choice = document.querySelector(`[data-color-value="${value}"]`) as HTMLButtonElement;
+  expect(choice).toBeTruthy();
+  choice.click();
+}
+
 const originalGetBoundingClientRect = Element.prototype.getBoundingClientRect;
 
 describe("editor runtime", () => {
@@ -78,6 +131,61 @@ describe("editor runtime", () => {
     expect(subtitle.dataset.editorKind).toBe("text");
   });
 
+  it("selects the whole heading when clicking inline highlighted text inside it", () => {
+    document.body.innerHTML = `
+      <div id="deckStage" class="deck-stage">
+        <section class="slide active">
+          <h2 id="headline" style="font-size:92px;line-height:1.08">烤烟种植的<mark id="highlight">气候适宜性</mark><br>直接决定烟叶品质与产量</h2>
+        </section>
+      </div>
+    `;
+    const headline = document.getElementById("headline") as HTMLElement;
+    const highlight = document.getElementById("highlight") as HTMLElement;
+    headline.getBoundingClientRect = () => rect({ left: 120, top: 100, width: 1040, height: 230 });
+    highlight.getBoundingClientRect = () => rect({ left: 520, top: 116, width: 360, height: 92 });
+
+    installRuntime();
+    const editor = (window as any).FrontendSlidesEditor.mount();
+    editor.toggleEditMode(true);
+
+    expect(headline.dataset.editorKind).toBe("text");
+    expect(highlight.dataset.editorKind).toBeUndefined();
+
+    highlight.dispatchEvent(new Event("pointerdown", { bubbles: true }));
+    highlight.click();
+
+    expect(editor.selected).toBe(headline);
+    expect(headline.classList.contains("editor-selected")).toBe(true);
+    expect(highlight.classList.contains("editor-selected")).toBe(false);
+  });
+
+  it("recognizes semantic headings inside animated wrapper divs without selecting the wrapper text block", () => {
+    document.body.innerHTML = `
+      <style>
+        body.motion-ready [data-anim="line"] { opacity: 0; transform: translateY(10px); }
+      </style>
+      <div id="deckStage" class="deck-stage">
+        <section class="slide active">
+          <div id="wrapper" data-anim="line" style="display:flex;flex-direction:column;gap:12px;opacity:0">
+            <div class="t-cat">WHY THIS MATTERS</div>
+            <h2 id="headline" style="font-size:82px;line-height:1.05">复杂 HTML 的大标题</h2>
+          </div>
+        </section>
+      </div>
+    `;
+    document.body.classList.add("motion-ready");
+    const wrapper = document.getElementById("wrapper") as HTMLElement;
+    const headline = document.getElementById("headline") as HTMLElement;
+    wrapper.getBoundingClientRect = () => rect({ left: 100, top: 100, width: 980, height: 180 });
+    headline.getBoundingClientRect = () => rect({ left: 100, top: 148, width: 900, height: 108 });
+
+    installRuntime();
+    (window as any).FrontendSlidesEditor.mount();
+
+    expect(headline.dataset.editorKind).toBe("text");
+    expect(wrapper.dataset.editorKind).toBeUndefined();
+  });
+
   it("moves preserved HTML slides into the editor safe area instead of leaving panels over the canvas", () => {
     document.body.innerHTML = `
       <div id="deck" data-html-deck-editor-stage="preserve" data-html-deck-editor-navigation="horizontal">
@@ -100,14 +208,52 @@ describe("editor runtime", () => {
     const editor = (window as any).FrontendSlidesEditor.mount();
     editor.toggleEditMode(true);
 
-    const slide = document.querySelector(".slide") as HTMLElement;
-    const x = Number.parseFloat(slide.style.getPropertyValue("--html-deck-editor-slide-x"));
-    const y = Number.parseFloat(slide.style.getPropertyValue("--html-deck-editor-slide-y"));
-    const scale = Number.parseFloat(slide.style.getPropertyValue("--html-deck-editor-slide-scale"));
+    const stage = document.getElementById("deck") as HTMLElement;
+    const x = Number.parseFloat(stage.style.getPropertyValue("--html-deck-editor-stage-x"));
+    const y = Number.parseFloat(stage.style.getPropertyValue("--html-deck-editor-stage-y"));
+    const scale = Number.parseFloat(stage.style.getPropertyValue("--html-deck-editor-stage-scale"));
 
     expect(x).toBeGreaterThanOrEqual(266);
     expect(y).toBeGreaterThanOrEqual(76);
     expect(scale).toBeLessThan(1);
+    expect(document.querySelector(".slide")?.hasAttribute("data-html-deck-editor-current")).toBe(true);
+  });
+
+  it("keeps preserved horizontal slides addressable in edit mode without removing later pages", () => {
+    document.body.innerHTML = `
+      <div id="deck" data-html-deck-editor-stage="preserve" data-html-deck-editor-navigation="horizontal" style="transform:translateX(-200vw)">
+        <section class="slide"><h1>One</h1></section>
+        <section class="slide"><h1>Two</h1></section>
+        <section class="slide"><h1>Three</h1><div class="row-fill" style="opacity:0;transform:translateY(30px)">Shown while editing</div></section>
+      </div>
+    `;
+    (window as any).__currentSlideIndex = 2;
+    const playSlide = vi.fn();
+    (window as any).__playSlide = playSlide;
+
+    Element.prototype.getBoundingClientRect = function getBoundingClientRect() {
+      const element = this as HTMLElement;
+      if (element.classList.contains("editor-toolbar")) return rect({ left: 12, top: 12, width: 1416, height: 52 });
+      if (element.classList.contains("editor-slides")) return rect({ left: 12, top: 76, width: 242, height: 810 });
+      if (element.classList.contains("editor-panel")) return rect({ left: 1086, top: 76, width: 342, height: 810 });
+      if (element.classList.contains("slide")) return rect({ left: 0, top: 0, width: 1440, height: 900 });
+      if (element.id === "deck") return rect({ left: 0, top: 0, width: 4320, height: 900 });
+      return rect({ left: 0, top: 0, width: 100, height: 40 });
+    };
+
+    installRuntime();
+    const editor = (window as any).FrontendSlidesEditor.mount();
+    editor.toggleEditMode(true);
+
+    const slides = Array.from(document.querySelectorAll(".slide")) as HTMLElement[];
+    expect(slides).toHaveLength(3);
+    expect(slides[2].hasAttribute("data-html-deck-editor-current")).toBe(true);
+    expect((document.getElementById("deck") as HTMLElement).style.getPropertyValue("--html-deck-editor-current-slide")).toBe("2");
+    expect((document.querySelector(".row-fill") as HTMLElement).style.getPropertyValue("--html-deck-editor-edit-opacity")).toBe("1");
+
+    editor.presentation.showSlide(1);
+    expect(slides[1].hasAttribute("data-html-deck-editor-current")).toBe(true);
+    expect(playSlide).toHaveBeenCalledWith(1);
   });
 
   it("applies font size to selected text without replacing surrounding inline HTML", () => {
@@ -171,6 +317,46 @@ describe("editor runtime", () => {
     expect(html).not.toContain('data-html-deck-editor-ui');
   });
 
+  it("does not export editor current-slide markers or stage safe-area variables", () => {
+    document.body.innerHTML = `
+      <div id="deck" data-html-deck-editor-stage="preserve" data-html-deck-editor-navigation="horizontal">
+        <section class="slide active"><h1>One slide</h1></section>
+        <section class="slide"><h1>Two slide</h1></section>
+      </div>
+    `;
+
+    installRuntime();
+    const editor = (window as any).FrontendSlidesEditor.mount();
+    editor.toggleEditMode(true);
+
+    const html = editor.buildExportHtml();
+
+    expect(html).not.toContain("data-html-deck-editor-current");
+    expect(html).not.toContain("--html-deck-editor-stage-x");
+    expect(html).not.toContain("--html-deck-editor-current-slide");
+  });
+
+  it("selects directly clicked editable text on the slide", () => {
+    document.body.innerHTML = `
+      <div id="deckStage" class="deck-stage">
+        <section class="slide active"><h1 id="title" style="font-size:96px">Huge title</h1></section>
+      </div>
+    `;
+    const title = document.getElementById("title") as HTMLElement;
+    title.getBoundingClientRect = () => rect({ left: 100, top: 100, width: 760, height: 120 });
+
+    installRuntime();
+    const editor = (window as any).FrontendSlidesEditor.mount();
+    editor.toggleEditMode(true);
+    const event = new Event("pointerdown", { bubbles: true }) as Event & { clientX: number; clientY: number };
+    event.clientX = 120;
+    event.clientY = 120;
+    title.dispatchEvent(event);
+
+    expect(editor.selected).toBe(title);
+    expect((document.getElementById("bgInput") as HTMLButtonElement).disabled).toBe(false);
+  });
+
   it("keeps editor panel scroll and keyboard events from reaching slide navigation handlers", () => {
     document.body.innerHTML = `
       <div id="deckStage" class="deck-stage">
@@ -196,6 +382,29 @@ describe("editor runtime", () => {
     text.dispatchEvent(new KeyboardEvent("keydown", { bubbles: true, key: " " }));
 
     expect(wheelSpy).not.toHaveBeenCalled();
+    expect(keySpy).not.toHaveBeenCalled();
+  });
+
+  it("blocks host deck shortcuts from reaching window while edit mode is active", () => {
+    document.body.innerHTML = `
+      <div id="deckStage" class="deck-stage">
+        <section class="slide active"><h1 id="title">One slide</h1></section>
+        <section class="slide"><h1>Two slide</h1></section>
+      </div>
+    `;
+
+    installRuntime();
+    const editor = (window as any).FrontendSlidesEditor.mount();
+    editor.toggleEditMode(true);
+
+    const keySpy = vi.fn();
+    window.addEventListener("keydown", keySpy);
+
+    document.dispatchEvent(new KeyboardEvent("keydown", { bubbles: true, key: "Escape" }));
+    document.dispatchEvent(new KeyboardEvent("keydown", { bubbles: true, key: "ArrowRight" }));
+    document.dispatchEvent(new KeyboardEvent("keydown", { bubbles: true, key: "PageDown" }));
+    document.dispatchEvent(new KeyboardEvent("keydown", { bubbles: true, key: "b" }));
+
     expect(keySpy).not.toHaveBeenCalled();
   });
 
@@ -227,9 +436,9 @@ describe("editor runtime", () => {
     };
 
     selectCharacter(1, 2);
-    const color = document.getElementById("colorInput") as HTMLInputElement;
-    color.value = "#ff0000";
-    color.dispatchEvent(new Event("change", { bubbles: true }));
+    const color = document.getElementById("colorButton") as HTMLButtonElement;
+    color.dataset.value = "#ff0000";
+    editor.applyInspectorValue("color", { recordHistory: true });
     expect(title.innerHTML).toContain('甲<span style="color: rgb(255, 0, 0);">乙</span>丙丁');
     expect(title.style.color).toBe("");
 
@@ -241,13 +450,11 @@ describe("editor runtime", () => {
     selection.removeAllRanges();
     selection.addRange(range);
     document.dispatchEvent(new Event("selectionchange"));
-    const bg = document.getElementById("bgInput") as HTMLInputElement;
-    bg.value = "#00ff00";
-    bg.dispatchEvent(new Event("change", { bubbles: true }));
+    chooseBackground("#d9f99d");
 
     const span = title.querySelector("span") as HTMLElement;
     expect(span.style.color).toBe("rgb(255, 0, 0)");
-    expect(span.style.backgroundColor).toBe("rgb(0, 255, 0)");
+    expect(span.style.backgroundColor).toBe("rgb(217, 249, 157)");
     expect(title.style.backgroundColor).toBe("");
     expect(title.textContent).toBe("甲乙丙丁");
   });
@@ -301,6 +508,165 @@ describe("editor runtime", () => {
     expect(title.textContent).toBe("甲乙丙丁");
   });
 
+  it("supports expanded font choices, custom fonts, text color presets, and background custom colors", () => {
+    document.body.innerHTML = `
+      <div id="deckStage" class="deck-stage">
+        <section class="slide active">
+          <h1 id="title" style="font-size:96px">甲乙丙丁</h1>
+        </section>
+      </div>
+    `;
+    const title = document.getElementById("title") as HTMLElement;
+    title.getBoundingClientRect = () => rect({ left: 100, top: 100, width: 600, height: 120 });
+
+    const pickers = installPickerStub();
+    installRuntime();
+    const editor = (window as any).FrontendSlidesEditor.mount();
+    editor.toggleEditMode(true);
+    editor.select(title);
+
+    const fontFamily = document.getElementById("fontFamilyInput") as HTMLSelectElement;
+    expect(fontFamily.options.length).toBeGreaterThan(10);
+    fontFamily.value = "__custom__";
+    fontFamily.dispatchEvent(new Event("change", { bubbles: true }));
+    const customFont = document.getElementById("fontFamilyCustomInput") as HTMLInputElement;
+    expect(customFont.disabled).toBe(false);
+    customFont.value = '"LXGW WenKai", serif';
+    customFont.dispatchEvent(new Event("change", { bubbles: true }));
+    expect(title.style.fontFamily).toContain("LXGW WenKai");
+
+    expect(document.querySelectorAll("[data-color-value]").length).toBeGreaterThan(20);
+    chooseTextColor("#ff3d8b");
+    expect(title.style.color).toBe("rgb(255, 61, 139)");
+    expect((document.getElementById("colorPalette") as HTMLDivElement).hidden).toBe(true);
+
+    pickers[1].onDone(pickerColor("#123456"));
+    expect(title.style.backgroundColor).toBe("rgb(18, 52, 86)");
+    expect((document.getElementById("bgInput") as HTMLButtonElement).dataset.value).toBe("#123456");
+  });
+
+  it("renders picker controls and high-contrast edit outlines", () => {
+    document.body.innerHTML = `
+      <div id="deckStage" class="deck-stage">
+        <section class="slide active">
+          <h1 id="title" style="font-size:96px">甲乙丙丁</h1>
+        </section>
+      </div>
+    `;
+    const title = document.getElementById("title") as HTMLElement;
+    title.getBoundingClientRect = () => rect({ left: 100, top: 100, width: 600, height: 120 });
+
+    const pickers = installPickerStub();
+    installRuntime();
+    const editor = (window as any).FrontendSlidesEditor.mount();
+    editor.toggleEditMode(true);
+    editor.select(title);
+
+    expect(pickers).toHaveLength(2);
+    expect(document.getElementById("colorEyedropperBtn")).toBeTruthy();
+    expect(document.getElementById("bgEyedropperBtn")).toBeTruthy();
+    expect(document.querySelectorAll(".picker_wrapper")).toHaveLength(2);
+    expect((document.getElementById("colorPalette") as HTMLDivElement).hidden).toBe(true);
+    expect((document.getElementById("bgPalette") as HTMLDivElement).hidden).toBe(true);
+    expect(document.getElementById("colorPresetGrid")?.children.length).toBeGreaterThan(20);
+
+    (document.getElementById("colorButton") as HTMLButtonElement).click();
+    expect((document.getElementById("colorPalette") as HTMLDivElement).hidden).toBe(false);
+
+    (document.getElementById("bgInput") as HTMLButtonElement).click();
+    expect((document.getElementById("colorPalette") as HTMLDivElement).hidden).toBe(true);
+    expect((document.getElementById("bgPalette") as HTMLDivElement).hidden).toBe(false);
+    expect(document.querySelector("[data-color-value]")?.className).toContain("color-preset");
+    expect(document.querySelector("[data-bg-value]")?.className).toContain("color-preset");
+  });
+
+  it("uses the native eyedropper from the picker panels", async () => {
+    document.body.innerHTML = `
+      <div id="deckStage" class="deck-stage">
+        <section class="slide active">
+          <h1 id="title" style="font-size:96px">甲乙丙丁</h1>
+        </section>
+      </div>
+    `;
+    const title = document.getElementById("title") as HTMLElement;
+    title.getBoundingClientRect = () => rect({ left: 100, top: 100, width: 600, height: 120 });
+    const open = vi.fn()
+      .mockResolvedValueOnce({ sRGBHex: "#abcdef" })
+      .mockResolvedValueOnce({ sRGBHex: "#123456" });
+    const eyedropper = vi.fn().mockImplementation(() => ({ open }));
+    vi.stubGlobal("EyeDropper", eyedropper);
+    installPickerStub();
+
+    installRuntime();
+    const editor = (window as any).FrontendSlidesEditor.mount();
+    editor.toggleEditMode(true);
+    editor.select(title);
+
+    (document.getElementById("colorEyedropperBtn") as HTMLButtonElement).click();
+    await Promise.resolve();
+    await Promise.resolve();
+    expect(title.style.color).toBe("rgb(171, 205, 239)");
+
+    (document.getElementById("bgEyedropperBtn") as HTMLButtonElement).click();
+    await Promise.resolve();
+    await Promise.resolve();
+    expect(title.style.backgroundColor).toBe("rgb(18, 52, 86)");
+  });
+
+  it("applies custom colors through the open-source picker", () => {
+    document.body.innerHTML = `
+      <div id="deckStage" class="deck-stage">
+        <section class="slide active">
+          <h1 id="title" style="font-size:96px">甲乙丙丁</h1>
+        </section>
+      </div>
+    `;
+    const title = document.getElementById("title") as HTMLElement;
+    title.getBoundingClientRect = () => rect({ left: 100, top: 100, width: 600, height: 120 });
+
+    const pickers = installPickerStub();
+    installRuntime();
+    const editor = (window as any).FrontendSlidesEditor.mount();
+    editor.toggleEditMode(true);
+    editor.select(title);
+
+    pickers[0].onDone(pickerColor("#abcdef"));
+    expect(title.style.color).toBe("rgb(171, 205, 239)");
+    expect((document.getElementById("colorButton") as HTMLButtonElement).dataset.value).toBe("#abcdef");
+
+    pickers[1].onDone(pickerColor("#abcdef"));
+    expect(title.style.backgroundColor).toBe("rgb(171, 205, 239)");
+    expect((document.getElementById("bgInput") as HTMLButtonElement).dataset.value).toBe("#abcdef");
+  });
+
+  it("applies live picker colors without closing the palette", () => {
+    document.body.innerHTML = `
+      <div id="deckStage" class="deck-stage">
+        <section class="slide active">
+          <h1 id="title" style="font-size:96px">甲乙丙丁</h1>
+        </section>
+      </div>
+    `;
+    const title = document.getElementById("title") as HTMLElement;
+    title.getBoundingClientRect = () => rect({ left: 100, top: 100, width: 600, height: 120 });
+
+    const pickers = installPickerStub();
+    installRuntime();
+    const editor = (window as any).FrontendSlidesEditor.mount();
+    editor.toggleEditMode(true);
+    editor.select(title);
+
+    (document.getElementById("colorButton") as HTMLButtonElement).click();
+    pickers[0].onChange(pickerColor("#13579b"));
+    expect(title.style.color).toBe("rgb(19, 87, 155)");
+    expect((document.getElementById("colorPalette") as HTMLDivElement).hidden).toBe(false);
+
+    (document.getElementById("bgInput") as HTMLButtonElement).click();
+    pickers[1].onChange(pickerColor("#2468ac"));
+    expect(title.style.backgroundColor).toBe("rgb(36, 104, 172)");
+    expect((document.getElementById("bgPalette") as HTMLDivElement).hidden).toBe(false);
+  });
+
   it("applies styles to text selected in the inspector textarea", () => {
     document.body.innerHTML = `
       <div id="deckStage" class="deck-stage">
@@ -322,10 +688,10 @@ describe("editor runtime", () => {
     text.setSelectionRange(2, 3);
     text.dispatchEvent(new Event("select", { bubbles: true }));
 
-    const color = document.getElementById("colorInput") as HTMLInputElement;
+    const color = document.getElementById("colorButton") as HTMLButtonElement;
     color.dispatchEvent(new Event("pointerdown", { bubbles: true }));
-    color.value = "#0000ff";
-    color.dispatchEvent(new Event("change", { bubbles: true }));
+    color.dataset.value = "#0000ff";
+    editor.applyInspectorValue("color", { recordHistory: true });
 
     const span = title.querySelector("span") as HTMLElement;
     expect(span.textContent).toBe("丙");
@@ -355,15 +721,168 @@ describe("editor runtime", () => {
     text.setSelectionRange(1, 3);
     text.dispatchEvent(new Event("select", { bubbles: true }));
 
-    const bg = document.getElementById("bgInput") as HTMLInputElement;
-    bg.dispatchEvent(new Event("pointerdown", { bubbles: true }));
-    bg.value = "#ffff00";
-    bg.dispatchEvent(new Event("change", { bubbles: true }));
+    chooseBackground("#fff2b8");
 
     expect(title.innerHTML).toContain('font-style:italic');
     expect(title.querySelector("span[style*='background-color']")?.textContent).toBe("乙丙");
     expect(title.style.backgroundColor).toBe("");
     expect(title.textContent).toBe("甲乙丙丁");
+  });
+
+  it("clears only the selected middle text background using the no-background palette cell", () => {
+    document.body.innerHTML = `
+      <div id="deckStage" class="deck-stage">
+        <section class="slide active">
+          <h1 id="title" style="font-size:96px"><span style="background-color: rgb(255, 242, 184);">甲乙丙丁</span></h1>
+        </section>
+      </div>
+    `;
+    const title = document.getElementById("title") as HTMLElement;
+    title.getBoundingClientRect = () => rect({ left: 100, top: 100, width: 600, height: 120 });
+
+    installRuntime();
+    const editor = (window as any).FrontendSlidesEditor.mount();
+    editor.toggleEditMode(true);
+    editor.select(title);
+
+    const styledText = title.querySelector("span")?.firstChild as Text;
+    const range = document.createRange();
+    range.setStart(styledText, 1);
+    range.setEnd(styledText, 3);
+    const selection = window.getSelection() as Selection;
+    selection.removeAllRanges();
+    selection.addRange(range);
+    document.dispatchEvent(new Event("selectionchange"));
+
+    chooseBackground("");
+
+    const spans = Array.from(title.querySelectorAll("span")) as HTMLElement[];
+    expect(spans.map((span) => span.textContent).join("")).toBe("甲乙丙丁");
+    expect(spans.some((span) => span.textContent === "乙丙" && !span.style.backgroundColor)).toBe(true);
+    expect(spans.some((span) => span.textContent === "甲" && span.style.backgroundColor)).toBe(true);
+    expect(spans.some((span) => span.textContent === "丁" && span.style.backgroundColor)).toBe(true);
+  });
+
+  it("reads italic and background state from the actual slide text selection", () => {
+    document.body.innerHTML = `
+      <div id="deckStage" class="deck-stage">
+        <section class="slide active">
+          <h1 id="title" style="font-size:96px">甲<span style="font-style:italic;background-color: rgb(217, 249, 157);">乙丙</span>丁</h1>
+        </section>
+      </div>
+    `;
+    const title = document.getElementById("title") as HTMLElement;
+    title.getBoundingClientRect = () => rect({ left: 100, top: 100, width: 600, height: 120 });
+
+    installRuntime();
+    const editor = (window as any).FrontendSlidesEditor.mount();
+    editor.toggleEditMode(true);
+    editor.select(title);
+
+    const italic = document.getElementById("fontStyleBtn") as HTMLButtonElement;
+    const bg = document.getElementById("bgInput") as HTMLButtonElement;
+    const selection = window.getSelection() as Selection;
+    const selectRange = (node: Text, start: number, end: number) => {
+      const range = document.createRange();
+      range.setStart(node, start);
+      range.setEnd(node, end);
+      selection.removeAllRanges();
+      selection.addRange(range);
+      document.dispatchEvent(new Event("selectionchange"));
+    };
+
+    selectRange(title.lastChild as Text, 0, 1);
+    expect(italic.getAttribute("aria-pressed")).toBe("false");
+    expect(bg.dataset.value).toBe("");
+    expect(document.getElementById("bgInputText")?.textContent).toBe("无背景");
+
+    selectRange(title.querySelector("span")?.firstChild as Text, 0, 2);
+    expect(italic.getAttribute("aria-pressed")).toBe("true");
+    expect(bg.dataset.value).toBe("#d9f99d");
+    expect(document.getElementById("bgInputText")?.textContent).toBe("浅绿");
+  });
+
+  it("reads inline background state from text selected in the inspector textarea", () => {
+    document.body.innerHTML = `
+      <div id="deckStage" class="deck-stage">
+        <section class="slide active">
+          <h1 id="title" style="font-size:96px">甲<span style="background-color: rgb(255, 242, 184);">乙丙</span>丁</h1>
+        </section>
+      </div>
+    `;
+    const title = document.getElementById("title") as HTMLElement;
+    title.getBoundingClientRect = () => rect({ left: 100, top: 100, width: 600, height: 120 });
+
+    installRuntime();
+    const editor = (window as any).FrontendSlidesEditor.mount();
+    editor.toggleEditMode(true);
+    editor.select(title);
+
+    const text = document.getElementById("textInput") as HTMLTextAreaElement;
+    text.focus();
+    text.setSelectionRange(1, 3);
+    text.dispatchEvent(new Event("select", { bubbles: true }));
+
+    expect((document.getElementById("bgInput") as HTMLButtonElement).dataset.value).toBe("#fff2b8");
+    expect(document.getElementById("bgInputText")?.textContent).toBe("浅黄");
+  });
+
+  it("reads inline background inherited from a selected text parent", () => {
+    document.body.innerHTML = `
+      <div id="deckStage" class="deck-stage">
+        <section class="slide active">
+          <h1 id="title" style="font-size:96px">甲<span style="background-color: rgb(191, 219, 254);"><em>乙丙</em></span>丁</h1>
+        </section>
+      </div>
+    `;
+    const title = document.getElementById("title") as HTMLElement;
+    title.getBoundingClientRect = () => rect({ left: 100, top: 100, width: 600, height: 120 });
+
+    installRuntime();
+    const editor = (window as any).FrontendSlidesEditor.mount();
+    editor.toggleEditMode(true);
+    editor.select(title);
+
+    const textNode = title.querySelector("em")?.firstChild as Text;
+    const range = document.createRange();
+    range.setStart(textNode, 0);
+    range.setEnd(textNode, 2);
+    const selection = window.getSelection() as Selection;
+    selection.removeAllRanges();
+    selection.addRange(range);
+    document.dispatchEvent(new Event("selectionchange"));
+
+    expect((document.getElementById("bgInput") as HTMLButtonElement).dataset.value).toBe("#bfdbfe");
+    expect(document.getElementById("bgInputText")?.textContent).toBe("浅蓝");
+  });
+
+  it("opens the background palette when clicking the button text or swatch", () => {
+    document.body.innerHTML = `
+      <div id="deckStage" class="deck-stage">
+        <section class="slide active">
+          <h1 id="title" style="font-size:96px">甲乙丙丁</h1>
+        </section>
+      </div>
+    `;
+    const title = document.getElementById("title") as HTMLElement;
+    title.getBoundingClientRect = () => rect({ left: 100, top: 100, width: 600, height: 120 });
+
+    installRuntime();
+    const editor = (window as any).FrontendSlidesEditor.mount();
+    editor.toggleEditMode(true);
+    editor.select(title);
+
+    const palette = document.getElementById("bgPalette") as HTMLDivElement;
+    const text = document.getElementById("bgInputText") as HTMLSpanElement;
+    const swatch = document.getElementById("bgSwatch") as HTMLSpanElement;
+
+    text.dispatchEvent(new Event("pointerdown", { bubbles: true }));
+    text.click();
+    expect(palette.hidden).toBe(false);
+
+    swatch.dispatchEvent(new Event("pointerdown", { bubbles: true }));
+    swatch.click();
+    expect(palette.hidden).toBe(true);
   });
 
   it("toggles bold on a selected range from the slide", () => {

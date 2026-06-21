@@ -4,6 +4,46 @@
   const FONT_CJK_SERIF_STACK = '"Noto Serif SC", "Songti SC", SimSun, serif';
   const FONT_LATIN_SERIF_STACK = 'Georgia, "Times New Roman", Times, serif';
   const FONT_MONO_STACK = '"SFMono-Regular", Consolas, "Liberation Mono", Menlo, monospace';
+  const FONT_HEITI_STACK = '"PingFang SC", "Microsoft YaHei", "Noto Sans SC", sans-serif';
+  const FONT_SONGTI_STACK = '"Songti SC", STSong, SimSun, serif';
+  const FONT_KAITI_STACK = '"Kaiti SC", STKaiti, KaiTi, serif';
+  const FONT_DISPLAY_STACK = '"DIN Alternate", "Arial Narrow", Impact, sans-serif';
+  const TEXT_COLOR_PALETTE = [
+    "#111111", "#444444", "#737373", "#a3a3a3", "#d4d4d4", "#ffffff",
+    "#b42318", "#ef4444", "#f97316", "#f59e0b", "#eab308", "#84cc16",
+    "#16a34a", "#14b8a6", "#06b6d4", "#0ea5e9", "#2563eb", "#1f2be0",
+    "#7c3aed", "#a855f7", "#d946ef", "#ff3d8b", "#f43f5e", "#7f1d1d",
+    "#78350f", "#365314", "#064e3b", "#0f172a", "#312e81", "#581c87"
+  ];
+  const BACKGROUND_COLOR_PALETTE = [
+    { value: "", label: "无背景" },
+    { value: "#ffffff", label: "白色" },
+    { value: "#f7f7f5", label: "浅灰" },
+    { value: "#e5e7eb", label: "灰色" },
+    { value: "#d4d4d4", label: "中灰" },
+    { value: "#111111", label: "黑色" },
+    { value: "#fff2b8", label: "浅黄" },
+    { value: "#fde68a", label: "暖黄" },
+    { value: "#ffd6e7", label: "浅粉" },
+    { value: "#fecdd3", label: "玫瑰粉" },
+    { value: "#d9f99d", label: "浅绿" },
+    { value: "#bbf7d0", label: "薄荷绿" },
+    { value: "#99f6e4", label: "青绿" },
+    { value: "#bfdbfe", label: "浅蓝" },
+    { value: "#bae6fd", label: "天蓝" },
+    { value: "#c4b5fd", label: "浅紫" },
+    { value: "#fed7aa", label: "浅橙" },
+    { value: "#fca5a5", label: "浅红" },
+    { value: "#ff3d8b", label: "洋红" },
+    { value: "#f97316", label: "橙色" },
+    { value: "#eab308", label: "黄色" },
+    { value: "#22c55e", label: "绿色" },
+    { value: "#14b8a6", label: "青色" },
+    { value: "#0ea5e9", label: "亮蓝" },
+    { value: "#1f2be0", label: "蓝色" },
+    { value: "#7c3aed", label: "紫色" },
+    { value: "#0f172a", label: "深蓝灰" }
+  ];
 
   const EDITOR_HTML = `
 <div class="edit-hotzone" data-html-deck-editor-ui aria-hidden="true"></div>
@@ -137,20 +177,56 @@
         <select class="editor-select" id="fontFamilyInput" disabled>
           <option value="">跟随原样式</option>
           <option value='${FONT_BODY_STACK}'>正文无衬线</option>
+          <option value='${FONT_HEITI_STACK}'>中文黑体</option>
           <option value='${FONT_CJK_SERIF_STACK}'>中文标题衬线</option>
+          <option value='${FONT_SONGTI_STACK}'>中文宋体</option>
+          <option value='${FONT_KAITI_STACK}'>中文楷体</option>
           <option value='${FONT_LATIN_SERIF_STACK}'>英文衬线</option>
+          <option value='Inter, Arial, Helvetica, sans-serif'>Inter / Arial</option>
+          <option value='Aptos, Calibri, Arial, sans-serif'>Aptos / Calibri</option>
+          <option value='Arial, Helvetica, sans-serif'>Arial</option>
+          <option value='"Times New Roman", Times, serif'>Times New Roman</option>
+          <option value='${FONT_DISPLAY_STACK}'>窄体展示</option>
           <option value='${FONT_MONO_STACK}'>等宽代码</option>
+          <option value="__custom__">自定义字体...</option>
         </select>
+        <input class="editor-field font-custom-field" id="fontFamilyCustomInput" type="text" placeholder='输入字体名或字体栈，如 "霞鹜文楷", serif' disabled>
         <div class="field-grid">
           <label><span class="field-label">字号</span><input class="editor-field" id="fontSizeInput" type="number" min="8" max="220" disabled></label>
-          <label><span class="field-label">颜色</span><input class="editor-field" id="colorInput" type="color" disabled></label>
+          <div class="color-field">
+            <span class="field-label" id="colorInputLabel">颜色</span>
+            <button class="editor-field color-picker-button" id="colorButton" type="button" aria-haspopup="menu" aria-expanded="false" aria-labelledby="colorInputLabel colorInputText" disabled>
+              <span class="color-swatch no-color" id="colorSwatch" aria-hidden="true"></span>
+              <span id="colorInputText">未选中</span>
+            </button>
+            <div class="color-popover" id="colorPalette" role="menu" hidden>
+              <div class="color-preset-grid" id="colorPresetGrid" aria-label="文字颜色预设"></div>
+              <div class="color-picker-host" id="colorPickerHost" aria-label="自定义文字颜色"></div>
+              <div class="color-picker-actions">
+                <button class="editor-button color-eyedropper-button" id="colorEyedropperBtn" type="button" title="吸管取文字色" aria-label="吸管取文字色" disabled><span aria-hidden="true">⌖</span><span>吸管取文字色</span></button>
+              </div>
+            </div>
+          </div>
         </div>
         <div class="text-style-controls" aria-label="文字样式">
           <button class="editor-button text-style-button" id="fontWeightBtn" type="button" title="粗体" aria-label="粗体" aria-pressed="false" disabled><strong>B</strong></button>
           <button class="editor-button text-style-button text-style-italic" id="fontStyleBtn" type="button" title="斜体" aria-label="斜体" aria-pressed="false" disabled><span aria-hidden="true">I</span></button>
         </div>
         <div class="field-grid">
-          <label><span class="field-label">背景</span><input class="editor-field" id="bgInput" type="color" disabled></label>
+          <div class="background-field">
+            <span class="field-label" id="bgInputLabel">背景</span>
+            <button class="editor-field color-picker-button" id="bgInput" type="button" aria-haspopup="menu" aria-expanded="false" aria-labelledby="bgInputLabel bgInputText" disabled>
+              <span class="color-swatch no-color" id="bgSwatch" aria-hidden="true"></span>
+              <span id="bgInputText">无背景</span>
+            </button>
+            <div class="color-popover bg-palette" id="bgPalette" role="menu" hidden>
+              <div class="color-preset-grid" id="bgPresetGrid" aria-label="背景颜色预设"></div>
+              <div class="color-picker-host" id="bgPickerHost" aria-label="自定义背景色"></div>
+              <div class="color-picker-actions">
+                <button class="editor-button color-eyedropper-button" id="bgEyedropperBtn" type="button" title="吸管取背景色" aria-label="吸管取背景色" disabled><span aria-hidden="true">⌖</span><span>吸管取背景色</span></button>
+              </div>
+            </div>
+          </div>
           <label><span class="field-label">透明</span><input class="editor-field" id="opacityInput" type="number" min="0" max="100" step="5" disabled></label>
         </div>
       </section>
@@ -241,9 +317,49 @@
     return element && element.tagName && element.tagName.toLowerCase() === "deck-stage";
   }
 
-  function computeCurrentSlide(slides) {
+  function normalizeSlideIndex(index, slides) {
+    const count = slides?.length || 0;
+    if (!count) return 0;
+    const number = Number(index);
+    if (!Number.isFinite(number)) return 0;
+    return Math.max(0, Math.min(count - 1, Math.round(number)));
+  }
+
+  function currentSlideFromStageTransform(stage, slides) {
+    if (!stage || !slides?.length) return -1;
+    const transform = stage.style?.transform || getComputedStyle(stage).transform || "";
+    const match = transform.match(/translateX\(\s*(-?\d+(?:\.\d+)?)vw\s*\)/i);
+    if (!match) return -1;
+    return normalizeSlideIndex(Math.abs(Number.parseFloat(match[1])) / 100, slides);
+  }
+
+  function computeHostCurrentSlide(slides, stage) {
+    const hostIndex = Number(window.__currentSlideIndex);
+    if (Number.isFinite(hostIndex)) return normalizeSlideIndex(hostIndex, slides);
+    const transformIndex = currentSlideFromStageTransform(stage, slides);
+    return transformIndex >= 0 ? transformIndex : -1;
+  }
+
+  function computeCurrentSlide(slides, stage) {
+    const markedIndex = slides.findIndex((slide) => slide.hasAttribute("data-html-deck-editor-current"));
+    if (markedIndex >= 0) return markedIndex;
     const activeIndex = slides.findIndex((slide) => slide.classList.contains("active") || slide.classList.contains("visible") || slide.hasAttribute("data-deck-active"));
-    return activeIndex >= 0 ? activeIndex : 0;
+    if (activeIndex >= 0) return activeIndex;
+    const hostIndex = computeHostCurrentSlide(slides, stage);
+    return hostIndex >= 0 ? hostIndex : 0;
+  }
+
+  function markEditorCurrentSlide(slides, index) {
+    const current = normalizeSlideIndex(index, slides);
+    slides.forEach((slide, i) => {
+      slide.toggleAttribute("data-html-deck-editor-current", i === current);
+    });
+    return current;
+  }
+
+  function syncHostCurrentSlide(stage, index) {
+    window.__currentSlideIndex = index;
+    if (stage) stage.style.setProperty("--html-deck-editor-current-slide", String(index));
   }
 
   function zeroInsets() {
@@ -281,7 +397,7 @@
   }
 
   function stageDesignSize(stage) {
-    const slide = stage?.querySelector?.(".slide.active, .slide.visible, .slide[data-deck-active], .slide");
+    const slide = stage?.querySelector?.(".slide[data-html-deck-editor-current], .slide.active, .slide.visible, .slide[data-deck-active], .slide");
     if (isDeckStageElement(stage)) {
       return elementDesignSize(stage, { width: 1920, height: 1080 });
     }
@@ -303,10 +419,12 @@
 
   function clearPreservedStageSafeLayout(stage) {
     if (!stage) return;
-    stage.querySelectorAll(".slide").forEach((slide) => {
-      slide.style.removeProperty("--html-deck-editor-slide-x");
-      slide.style.removeProperty("--html-deck-editor-slide-y");
-      slide.style.removeProperty("--html-deck-editor-slide-scale");
+    stage.style.removeProperty("--html-deck-editor-stage-x");
+    stage.style.removeProperty("--html-deck-editor-stage-y");
+    stage.style.removeProperty("--html-deck-editor-stage-scale");
+    stage.style.removeProperty("--html-deck-editor-current-slide");
+    stage.querySelectorAll(".slide[data-html-deck-editor-current]").forEach((slide) => {
+      slide.removeAttribute("data-html-deck-editor-current");
     });
   }
 
@@ -321,11 +439,9 @@
 
     const size = stageDesignSize(stage);
     const transform = stageFitTransform(size, safeInsets);
-    stage.querySelectorAll(".slide").forEach((slide) => {
-      slide.style.setProperty("--html-deck-editor-slide-x", `${transform.x}px`);
-      slide.style.setProperty("--html-deck-editor-slide-y", `${transform.y}px`);
-      slide.style.setProperty("--html-deck-editor-slide-scale", String(transform.scale));
-    });
+    stage.style.setProperty("--html-deck-editor-stage-x", `${transform.x}px`);
+    stage.style.setProperty("--html-deck-editor-stage-y", `${transform.y}px`);
+    stage.style.setProperty("--html-deck-editor-stage-scale", String(transform.scale));
     return true;
   }
 
@@ -349,16 +465,25 @@
       delete presentation.showSlide;
       delete presentation.scaleStage;
       delete presentation.setEditorInsets;
-      presentation.currentSlide = computeCurrentSlide(Array.from(stage.querySelectorAll(".slide")));
+      presentation.currentSlide = computeCurrentSlide(Array.from(stage.querySelectorAll(".slide")), stage);
     }
     presentation.slides = Array.from(stage.querySelectorAll(".slide"));
-    if (!Number.isFinite(presentation.currentSlide)) presentation.currentSlide = computeCurrentSlide(presentation.slides);
+    if (!Number.isFinite(presentation.currentSlide)) presentation.currentSlide = computeCurrentSlide(presentation.slides, stage);
+    presentation.currentSlide = markEditorCurrentSlide(presentation.slides, presentation.currentSlide);
+    syncHostCurrentSlide(stage, presentation.currentSlide);
     presentation.editorInsets = normalizeInsets(presentation.editorInsets);
 
-    if (typeof presentation.showSlide !== "function") {
-      presentation.showSlide = function showSlide(index) {
+    const originalShowSlide = typeof presentation.showSlide === "function" ? presentation.showSlide.bind(presentation) : null;
+    presentation.showSlide = function showSlide(index) {
+      this.slides = Array.from(stage.querySelectorAll(".slide"));
+      const requestedSlide = normalizeSlideIndex(index, this.slides);
+      if (originalShowSlide) {
+        originalShowSlide(requestedSlide);
         this.slides = Array.from(stage.querySelectorAll(".slide"));
-        this.currentSlide = Math.max(0, Math.min(index, this.slides.length - 1));
+        const hostIndex = computeHostCurrentSlide(this.slides, stage);
+        this.currentSlide = markEditorCurrentSlide(this.slides, hostIndex >= 0 ? hostIndex : requestedSlide);
+      } else {
+        this.currentSlide = markEditorCurrentSlide(this.slides, requestedSlide);
         this.slides.forEach((slide, i) => {
           slide.classList.toggle("active", i === this.currentSlide);
           slide.classList.toggle("visible", i === this.currentSlide);
@@ -366,11 +491,20 @@
         });
         if (stage.getAttribute("data-html-deck-editor-navigation") === "horizontal") {
           stage.style.transform = `translateX(${-this.currentSlide * 100}vw)`;
+          stage.style.setProperty("--html-deck-editor-current-slide", String(this.currentSlide));
         }
-        this.scaleStage?.();
-        document.dispatchEvent(new CustomEvent("slidechange", { detail: { index: this.currentSlide } }));
-      };
-    }
+      }
+      syncHostCurrentSlide(stage, this.currentSlide);
+      if (typeof window.__playSlide === "function") {
+        try {
+          window.__playSlide(this.currentSlide);
+        } catch (error) {
+          console.warn("HtmlDeckEditor could not sync the host slide player.", error);
+        }
+      }
+      this.scaleStage?.();
+      document.dispatchEvent(new CustomEvent("slidechange", { detail: { index: this.currentSlide } }));
+    };
 
     const originalScaleStage = typeof presentation.scaleStage === "function" ? presentation.scaleStage.bind(presentation) : null;
     presentation.scaleStage = () => {
@@ -428,6 +562,7 @@
         this.lastSlideReplay = { index: -1, at: 0 };
         this.motionHold = false;
         this.pendingConfirm = null;
+        this.colorPickers = {};
         this.deleteConfirmKey = `${this.storageKey}:delete-confirm-seen`;
         this.fileHandle = null;
         this.toggle = document.getElementById("editToggle");
@@ -472,11 +607,24 @@
           image: document.getElementById("imageInput"),
           shape: document.getElementById("shapeInput"),
           fontFamily: document.getElementById("fontFamilyInput"),
+          fontFamilyCustom: document.getElementById("fontFamilyCustomInput"),
           fontSize: document.getElementById("fontSizeInput"),
           fontWeight: document.getElementById("fontWeightBtn"),
           fontStyle: document.getElementById("fontStyleBtn"),
-          color: document.getElementById("colorInput"),
+          colorButton: document.getElementById("colorButton"),
+          colorPalette: document.getElementById("colorPalette"),
+          colorPresetGrid: document.getElementById("colorPresetGrid"),
+          colorPickerHost: document.getElementById("colorPickerHost"),
+          colorEyedropper: document.getElementById("colorEyedropperBtn"),
+          colorSwatch: document.getElementById("colorSwatch"),
+          colorText: document.getElementById("colorInputText"),
           bg: document.getElementById("bgInput"),
+          bgPickerHost: document.getElementById("bgPickerHost"),
+          bgEyedropper: document.getElementById("bgEyedropperBtn"),
+          bgSwatch: document.getElementById("bgSwatch"),
+          bgText: document.getElementById("bgInputText"),
+          bgPalette: document.getElementById("bgPalette"),
+          bgPresetGrid: document.getElementById("bgPresetGrid"),
           opacity: document.getElementById("opacityInput"),
           x: document.getElementById("xInput"),
           y: document.getElementById("yInput"),
@@ -495,8 +643,14 @@
           delete: document.getElementById("deleteBtn"),
           reset: document.getElementById("resetBtn")
         };
+        [this.controls.colorPalette, this.controls.bgPalette].forEach((palette) => {
+          if (palette && palette.parentElement !== this.shell) this.shell.appendChild(palette);
+        });
         this.prepareEditableElements();
         this.prepareEditableIds();
+        this.renderTextColorPalette();
+        this.renderBackgroundPalette();
+        this.initColorPickers();
         this.restore();
         this.pushHistory();
         this.renderSlideRail();
@@ -565,6 +719,7 @@
           delete element.dataset.editorKind;
           delete element.dataset.editorSmall;
         });
+        this.withEditVisibleElements(() => {
         const candidates = Array.from(this.stage.querySelectorAll(".slide *")).filter((element) => !this.shouldIgnoreEditorCandidate(element));
         candidates.forEach((element) => {
           const explicitKind = this.explicitEditorKind(element);
@@ -581,6 +736,40 @@
           if (kind) this.markEditorKind(element, kind, true);
         });
         this.pruneCompositeAutoContainers();
+        });
+      }
+
+      withEditVisibleElements(callback) {
+        const selector = [
+          "[data-anim]",
+          ".row-fill",
+          ".tl-node",
+          ".stack-block",
+          ".bar-tower",
+          ".sub-card",
+          ".col",
+          ".vrule",
+          ".kpi-cell",
+          ".card-fill",
+          ".card-accent",
+          ".card-ink"
+        ].join(", ");
+        const changed = [];
+        this.stage.querySelectorAll(selector).forEach((element) => {
+          changed.push({ element, opacity: element.style.getPropertyValue("--html-deck-editor-edit-opacity") });
+          element.style.setProperty("--html-deck-editor-edit-opacity", "1");
+        });
+        try {
+          callback();
+        } finally {
+          changed.forEach(({ element, opacity }) => {
+            if (opacity) {
+              element.style.setProperty("--html-deck-editor-edit-opacity", opacity);
+            } else {
+              element.style.removeProperty("--html-deck-editor-edit-opacity");
+            }
+          });
+        }
       }
 
       markEditorKind(element, kind, automatic) {
@@ -634,9 +823,9 @@
         if (rect.width < 2 || rect.height < 2) return false;
         if (element.querySelector(this.mediaSelector())) return false;
         const textContainerTags = "h1,h2,h3,h4,h5,h6,p,li,blockquote,figcaption,caption,td,th,button,a,label";
-        if (element.matches(textContainerTags)) return !this.hasTextBlockChild(element);
-        if (element.matches("span,small,strong,em,b,i,code,pre")) return !this.hasReadableTextAncestor(element) && !this.hasTextBlockChild(element);
-        return (this.hasDirectText(element) || this.isVisuallyObviousTextBlock(element, rect)) && !this.hasTextBlockChild(element);
+        if (element.matches(textContainerTags)) return !this.hasNestedTextContainerChild(element);
+        if (this.isInlineTextChild(element)) return !this.hasReadableTextAncestor(element) && this.isVisuallyObviousTextBlock(element, rect);
+        return this.isVisuallyObviousTextBlock(element, rect);
       }
 
       hasVisibleText(element) {
@@ -654,6 +843,14 @@
         });
       }
 
+      hasNestedTextContainerChild(element) {
+        return Array.from(element.children).some((child) => {
+          if (this.isInlineTextChild(child)) return false;
+          if (child.matches?.("h1,h2,h3,h4,h5,h6,p,li,blockquote,figcaption,caption,td,th,button,a,label,[data-editor-kind='text'],[data-editable]")) return true;
+          return false;
+        });
+      }
+
       isInlineTextChild(element) {
         if (element.matches("span,small,strong,em,b,i,code,mark,sup,sub,u,s,time,var,kbd,abbr,cite,q")) return true;
         const display = getComputedStyle(element).display;
@@ -667,18 +864,27 @@
 
       isVisuallyObviousTextBlock(element, rect = this.elementClientRect(element)) {
         if (element.matches("main, article, nav, header, footer, form, ul, ol, table, tbody, thead, tr, section, .slide")) return false;
-        if (!this.hasDirectText(element)) return false;
+        if (!this.hasDirectText(element) && !this.hasOnlyInlineTextChildren(element)) return false;
+        if (this.hasNestedTextContainerChild(element)) return false;
         if (this.isBroadLayoutContainer(element)) return false;
         const style = getComputedStyle(element);
         const fontSize = Number.parseFloat(style.fontSize) || 0;
-        const singlePurpose = Array.from(element.children).every((child) => this.isInlineTextChild(child) || !this.hasVisibleText(child));
+        const display = style.display;
+        const singlePurpose = this.hasOnlyInlineTextChildren(element);
         const compactTextBlock = rect.width <= window.innerWidth * 0.92 && rect.height <= window.innerHeight * 0.45;
-        return singlePurpose && compactTextBlock && fontSize >= 18;
+        const textLength = (element.textContent || "").replace(/\s+/g, "").length;
+        const prominentText = fontSize >= 18 || rect.height >= 34 || (fontSize >= 14 && textLength <= 120);
+        return singlePurpose && compactTextBlock && prominentText && !["grid", "table", "contents"].includes(display);
+      }
+
+      hasOnlyInlineTextChildren(element) {
+        return Array.from(element.children).every((child) => this.isInlineTextChild(child) || !this.hasVisibleText(child));
       }
 
       isVisualBoxCandidate(element) {
         if (this.isSvgGraphicCandidate(element)) return true;
         if (this.hasReadableTextAncestor(element) && this.hasVisibleText(element) && !element.querySelector(this.mediaSelector())) return false;
+        if (this.hasNestedTextContainerChild(element) && !element.querySelector(this.mediaSelector())) return false;
         const rect = this.elementClientRect(element);
         if (rect.width > 1700 && rect.height > 850) return false;
         if (element.matches("main, article, nav, header, footer, form, ul, ol, table, tbody, thead, tr, section.slide")) return false;
@@ -1015,16 +1221,61 @@
         this.controls.previewMotion.addEventListener("click", () => this.previewMotion());
         this.controls.previewSlideMotion.addEventListener("click", () => this.replayActiveSlideMotion());
         this.controls.restoreMotion.addEventListener("click", () => this.restoreOriginalMotion(this.selected, true));
-        [this.controls.fontFamily, this.controls.fontSize, this.controls.fontWeight, this.controls.fontStyle, this.controls.color, this.controls.bg, this.controls.opacity].forEach((control) => {
+        [this.controls.fontFamily, this.controls.fontFamilyCustom, this.controls.fontSize, this.controls.fontWeight, this.controls.fontStyle, this.controls.colorButton, this.controls.colorEyedropper, this.controls.bg, this.controls.bgEyedropper, this.controls.opacity].filter(Boolean).forEach((control) => {
           control.addEventListener("pointerdown", () => this.captureTextSelection());
           control.addEventListener("focus", () => this.captureTextSelection());
         });
         ["select", "keyup", "pointerup", "mouseup"].forEach((type) => {
           this.controls.text.addEventListener(type, () => this.captureTextSelection());
         });
-
-        const liveInspectorControls = new Set(["text", "fontSize", "color", "bg", "opacity", "x", "y", "width", "height", "order", "delay", "duration"]);
-        ["text", "shape", "fontFamily", "fontSize", "color", "bg", "opacity", "x", "y", "width", "height", "anim", "order", "delay", "duration"].forEach((name) => {
+        this.controls.colorButton.addEventListener("pointerdown", (event) => {
+          if (this.controls.colorButton.disabled) return;
+          event.preventDefault();
+          event.stopPropagation();
+          this.captureTextSelection();
+        });
+        this.controls.colorButton.addEventListener("click", (event) => {
+          event.preventDefault();
+          event.stopPropagation();
+          if (this.controls.colorButton.disabled) return;
+          this.captureTextSelection();
+          this.toggleTextColorPalette();
+        });
+        this.controls.bg.addEventListener("pointerdown", (event) => {
+          if (this.controls.bg.disabled) return;
+          event.preventDefault();
+          event.stopPropagation();
+          this.captureTextSelection();
+        });
+        this.controls.bg.addEventListener("click", (event) => {
+          event.preventDefault();
+          event.stopPropagation();
+          if (this.controls.bg.disabled) return;
+          this.captureTextSelection();
+          this.toggleBackgroundPalette();
+        });
+        this.controls.colorEyedropper.addEventListener("click", (event) => {
+          event.preventDefault();
+          event.stopPropagation();
+          this.pickTextColor();
+        });
+        this.controls.bgEyedropper.addEventListener("click", (event) => {
+          event.preventDefault();
+          event.stopPropagation();
+          this.pickBackgroundColor();
+        });
+        this.controls.fontFamily.addEventListener("change", () => {
+          if (this.controls.fontFamily.value === "__custom__") {
+            this.controls.fontFamilyCustom.disabled = !this.selected || !this.isTextElement(this.selected);
+            this.controls.fontFamilyCustom.focus({ preventScroll: true });
+            return;
+          }
+          this.controls.fontFamilyCustom.value = "";
+        });
+        this.controls.fontFamilyCustom.addEventListener("input", () => this.applyInspectorValue("fontFamily", { recordHistory: false, refreshInspector: false, live: true }));
+        this.controls.fontFamilyCustom.addEventListener("change", () => this.applyInspectorValue("fontFamily", { recordHistory: true }));
+        const liveInspectorControls = new Set(["text", "fontSize", "opacity", "x", "y", "width", "height", "order", "delay", "duration"]);
+        ["text", "shape", "fontFamily", "fontSize", "bg", "opacity", "x", "y", "width", "height", "anim", "order", "delay", "duration"].forEach((name) => {
           const control = this.controls[name];
           if (liveInspectorControls.has(name)) {
             control.addEventListener("input", () => this.applyInspectorValue(name, { recordHistory: false, refreshInspector: false, live: true }));
@@ -1044,6 +1295,8 @@
         this.addGlobalListener(document, "slidechange", (event) => this.handleSlideChange(event));
         this.addGlobalListener(document, "click", (event) => {
           if (!event.target.closest(".shape-picker-wrap") && !event.target.closest("#shapeMenu")) this.closeShapeMenu();
+          if (!event.target.closest("#colorButton") && !event.target.closest("#colorPalette")) this.closeTextColorPalette();
+          if (!event.target.closest("#bgInput") && !event.target.closest("#bgPalette")) this.closeBackgroundPalette();
         });
         this.addGlobalListener(document, "pointerdown", (event) => this.handleDocumentPointerDown(event), true);
         this.addGlobalListener(document, "pointermove", (event) => this.handlePointerMove(event));
@@ -1073,6 +1326,8 @@
           this.applyEditorLayout();
           this.updateFrame();
           if (!this.controls.shapeMenu.hidden) this.positionShapeMenu();
+          if (!this.controls.colorPalette.hidden) this.positionTextColorPalette();
+          if (!this.controls.bgPalette.hidden) this.positionBackgroundPalette();
         });
       }
 
@@ -1101,6 +1356,8 @@
         window.clearTimeout(this.hideTimeout);
         window.clearTimeout(this.toastTimer);
         window.clearTimeout(this.textFocusTimer);
+        Object.values(this.colorPickers || {}).forEach((picker) => picker?.destroy?.());
+        this.colorPickers = {};
         if (window.editor === this) delete window.editor;
       }
 
@@ -1181,58 +1438,70 @@
         const formTarget = this.isFormTarget(event.target);
         if (event.key === "Escape" && !this.controls.confirmModal.hidden) {
           event.preventDefault();
+          event.stopPropagation();
           this.closeConfirm();
           return;
         }
         if (event.key === "Escape" && !this.controls.resetHelpModal.hidden) {
           event.preventDefault();
+          event.stopPropagation();
           this.closeResetHelp();
           return;
         }
         if (event.key === "Escape" && !this.controls.helpModal.hidden) {
           event.preventDefault();
+          event.stopPropagation();
           this.closeHelp();
           return;
         }
         if (event.key === "Escape" && !this.controls.shapeMenu.hidden) {
           event.preventDefault();
+          event.stopPropagation();
           this.closeShapeMenu();
           return;
         }
         if ((event.metaKey || event.ctrlKey) && event.key.toLowerCase() === "z" && this.isActive && event.shiftKey && !formTarget) {
           event.preventDefault();
+          event.stopPropagation();
           this.redo();
           return;
         }
         if ((event.ctrlKey && !event.metaKey) && event.key.toLowerCase() === "y" && this.isActive && !formTarget) {
           event.preventDefault();
+          event.stopPropagation();
           this.redo();
           return;
         }
         if ((event.metaKey || event.ctrlKey) && event.key.toLowerCase() === "z" && this.isActive && !event.shiftKey && !formTarget) {
           event.preventDefault();
+          event.stopPropagation();
           this.undo();
           return;
         }
         if ((event.key === "e" || event.key === "E") && !formTarget) {
           event.preventDefault();
+          event.stopPropagation();
           this.toggleEditMode();
         }
         if ((event.metaKey || event.ctrlKey) && event.key.toLowerCase() === "s") {
           event.preventDefault();
+          event.stopPropagation();
           this.exportHtml();
         }
         if (!this.isActive || formTarget) return;
         if (event.key === "Delete" || event.key === "Backspace") {
           if (this.validTextSelectionRange(this.selected)) {
             event.preventDefault();
+            event.stopPropagation();
             return;
           }
           event.preventDefault();
+          event.stopPropagation();
           this.confirmDeleteSelected();
         }
         if (this.selected && ["ArrowUp", "ArrowDown", "ArrowLeft", "ArrowRight"].includes(event.key)) {
           event.preventDefault();
+          event.stopPropagation();
           const step = event.shiftKey ? 10 : 1;
           this.clearElementMotionState(this.selected);
           const box = this.getStableStageBox(this.selected);
@@ -1241,6 +1510,10 @@
           this.setStagePosition(this.selected, box.x + dx, box.y + dy, box.width, box.height);
           this.updateInspector();
           this.save(false, true);
+        }
+        if (this.isHostDeckShortcut(event)) {
+          event.preventDefault();
+          event.stopPropagation();
         }
       }
 
@@ -1289,10 +1562,24 @@
         event.stopPropagation();
       }
 
+      isHostDeckShortcut(event) {
+        const key = event.key;
+        if (["Escape", " ", "Spacebar", "ArrowUp", "ArrowDown", "ArrowLeft", "ArrowRight", "PageUp", "PageDown", "Home", "End"].includes(key)) return true;
+        return key?.toLowerCase?.() === "b" && !event.metaKey && !event.ctrlKey && !event.altKey;
+      }
+
       stopEditorUiShortcutLeak(event) {
-        if (!this.isActive || !this.isEditorUiElement(event.target)) return;
+        if (!this.isActive) return;
+        if (!this.isEditorUiElement(event.target)) {
+          if (!this.isFormTarget(event.target) && this.isHostDeckShortcut(event)) {
+            this.handleKeydown(event);
+            event.stopImmediatePropagation();
+          }
+          return;
+        }
         const key = event.key;
         const navigationKeys = [
+          "Escape",
           " ",
           "Spacebar",
           "ArrowUp",
@@ -1360,8 +1647,42 @@
       }
 
       applyEditorLayout() {
+        this.syncCurrentSlideFromHost();
         this.presentation.setEditorInsets?.(this.editorInsets());
         this.presentation.scaleStage?.();
+      }
+
+      syncCurrentSlideFromHost() {
+        if (!this.stage || this.stage.getAttribute("data-html-deck-editor-stage") !== "preserve") return;
+        this.presentation.slides = Array.from(this.stage.querySelectorAll(".slide"));
+        const hostIndex = computeHostCurrentSlide(this.presentation.slides, this.stage);
+        const next = hostIndex >= 0 ? hostIndex : this.presentation.currentSlide;
+        this.presentation.currentSlide = markEditorCurrentSlide(this.presentation.slides, next);
+        syncHostCurrentSlide(this.stage, this.presentation.currentSlide);
+        this.revealActiveSlideForEditing(this.presentation.currentSlide);
+      }
+
+      revealActiveSlideForEditing(index = this.presentation.currentSlide) {
+        if (!this.isActive) return;
+        const slide = this.presentation.slides[index];
+        if (!slide) return;
+        const selector = [
+          "[data-anim]",
+          ".row-fill",
+          ".tl-node",
+          ".stack-block",
+          ".bar-tower",
+          ".sub-card",
+          ".col",
+          ".vrule",
+          ".kpi-cell",
+          ".card-fill",
+          ".card-accent",
+          ".card-ink"
+        ].join(", ");
+        slide.querySelectorAll(selector).forEach((node) => {
+          node.style.setProperty("--html-deck-editor-edit-opacity", "1");
+        });
       }
 
       refreshEditorLayoutSoon() {
@@ -1384,6 +1705,7 @@
         this.toggle.classList.toggle("active", this.isActive);
         this.showButtons();
         if (this.isActive) {
+          this.syncCurrentSlideFromHost();
           this.motionHold = false;
           window.clearTimeout(this.motionPreviewTimer);
           this.motionPreviewTimer = null;
@@ -1415,7 +1737,10 @@
         if (!this.isActive) return;
         if (this.isEditorUiElement(event.target)) return;
         const directTarget = this.getEditableTarget(event.target);
-        if (directTarget) return;
+        if (directTarget) {
+          this.select(directTarget);
+          return;
+        }
         const nearbyTarget = this.pickNearbyEditableTarget(event);
         if (nearbyTarget) {
           event.preventDefault();
@@ -1438,6 +1763,8 @@
       preferExplicitEditableAncestor(element) {
         if (!element || element.classList.contains("editor-layer")) return element;
         if (element.dataset.editorAuto !== "true") return element;
+        const textParent = this.preferredTextContainerAncestor(element);
+        if (textParent) return textParent;
         const explicitParent = element.parentElement?.closest("[data-editable], [data-editable-media], [data-editable-box], .editor-layer");
         if (explicitParent && this.stage.contains(explicitParent) && explicitParent.closest(".slide") === element.closest(".slide")) {
           return explicitParent;
@@ -1453,6 +1780,21 @@
           return mediaParent;
         }
         return element;
+      }
+
+      preferredTextContainerAncestor(element) {
+        if (!this.isInlineTextChild(element) && element.dataset.editorKind === "text") return null;
+        const parent = element.parentElement?.closest("h1,h2,h3,h4,h5,h6,p,li,blockquote,figcaption,caption,td,th,button,a,label,[data-editable],[data-editor-auto='true'][data-editor-kind='text']");
+        if (
+          parent &&
+          parent !== element &&
+          this.stage.contains(parent) &&
+          parent.closest(".slide") === element.closest(".slide") &&
+          (parent.matches("[data-editable],[data-editor-kind='text']") || this.isTextCandidate(parent))
+        ) {
+          return parent;
+        }
+        return null;
       }
 
       select(element) {
@@ -1491,11 +1833,14 @@
         this.controls.image.disabled = false;
         this.controls.shape.disabled = !shapeCapable;
         this.controls.fontFamily.disabled = !textCapable;
+        this.controls.fontFamilyCustom.disabled = !textCapable || this.controls.fontFamily.value !== "__custom__";
         this.controls.fontSize.disabled = !textCapable;
         this.controls.fontWeight.disabled = !textCapable;
         this.controls.fontStyle.disabled = !textCapable;
-        this.controls.color.disabled = !hasSelection;
+        this.controls.colorButton.disabled = !hasSelection;
+        this.controls.colorEyedropper.disabled = !hasSelection;
         this.controls.bg.disabled = !hasSelection;
+        this.controls.bgEyedropper.disabled = !hasSelection;
         this.controls.opacity.disabled = !hasSelection;
         this.controls.x.disabled = !hasSelection;
         this.controls.y.disabled = !hasSelection;
@@ -1519,9 +1864,11 @@
           this.controls.text.value = "";
           this.controls.image.value = "";
           this.controls.shape.value = "rect";
-          ["fontFamily", "fontSize", "color", "bg", "opacity", "x", "y", "width", "height", "anim", "order", "delay", "duration"].forEach((name) => {
+          ["fontFamily", "fontFamilyCustom", "fontSize", "opacity", "x", "y", "width", "height", "anim", "order", "delay", "duration"].forEach((name) => {
             this.controls[name].value = "";
           });
+          this.updateBackgroundPickerState("");
+          this.updateTextColorState("");
           this.updateTextStyleButtons(null);
           this.controls.motionStatus.textContent = "未选中元素";
           return;
@@ -1532,10 +1879,10 @@
         const box = this.getStableStageBox(element);
         this.controls.text.value = textCapable ? this.getEditableText(element) : "";
         this.controls.shape.value = shapeCapable ? (element.dataset.shape || "rect") : "rect";
-        this.controls.fontFamily.value = textCapable ? this.matchFontFamilyValue(computed.fontFamily) : "";
+        this.updateFontFamilyControls(textCapable ? computed.fontFamily : "");
         this.controls.fontSize.value = Math.round(Number.parseFloat(computed.fontSize)) || "";
-        this.controls.color.value = this.toHex(this.editableTextColor(element, computed));
-        this.controls.bg.value = this.toHex(this.editableSurfaceColor(element, computed));
+        this.updateTextColorState(this.toHex(this.editableTextColor(element, computed)));
+        this.updateBackgroundPickerState(this.editableSurfaceColor(element, computed));
         this.controls.opacity.value = Math.round((Number.parseFloat(computed.opacity) || 1) * 100);
         this.updateTextStyleButtons(textCapable ? computed : null);
         this.controls.x.value = Math.round(box.x);
@@ -1685,18 +2032,74 @@
         return target;
       }
 
+      textNodesInRange(range, element) {
+        if (!range || !element) return [];
+        const walker = document.createTreeWalker(element, NodeFilter.SHOW_TEXT, {
+          acceptNode: (node) => {
+            if (!node.textContent) return NodeFilter.FILTER_REJECT;
+            if (!node.textContent.trim()) return NodeFilter.FILTER_REJECT;
+            return range.intersectsNode(node) ? NodeFilter.FILTER_ACCEPT : NodeFilter.FILTER_REJECT;
+          }
+        });
+        const nodes = [];
+        let node = walker.nextNode();
+        while (node) {
+          const start = node === range.startContainer ? range.startOffset : 0;
+          const end = node === range.endContainer ? range.endOffset : node.textContent.length;
+          if (end > start && node.textContent.slice(start, end).trim()) nodes.push(node);
+          node = walker.nextNode();
+        }
+        return nodes;
+      }
+
+      selectedTextStyleSummary(range, element) {
+        const textNodes = this.textNodesInRange(range, element);
+        const targets = textNodes.map((node) => node.parentElement).filter(Boolean);
+        if (!targets.length) targets.push(this.rangeStyleElement(range, element));
+        const styles = targets.map((target) => getComputedStyle(target));
+        const first = styles[0] || getComputedStyle(element);
+        const same = (mapper) => {
+          const value = mapper(first);
+          return styles.every((style) => mapper(style) === value) ? value : "";
+        };
+        const backgrounds = targets.map((target) => this.nearestTextBackgroundColor(target, element));
+        const visibleBackgrounds = backgrounds.filter(Boolean);
+        const backgroundColor = visibleBackgrounds.length && visibleBackgrounds.every((value) => value === visibleBackgrounds[0])
+          ? visibleBackgrounds[0]
+          : (backgrounds.every((value) => value === backgrounds[0]) ? backgrounds[0] : "");
+        return {
+          fontFamily: same((style) => this.matchFontFamilyValue(style.fontFamily)),
+          fontFamilyRaw: same((style) => style.fontFamily),
+          fontSize: same((style) => String(Math.round(Number.parseFloat(style.fontSize)) || "")),
+          color: same((style) => this.toHex(style.color)),
+          backgroundColor,
+          opacity: same((style) => String(Math.round((Number.parseFloat(style.opacity) || 1) * 100))),
+          fontWeight: styles.length > 0 && styles.every((style) => this.isBoldWeight(style.fontWeight)) ? "700" : "400",
+          fontStyle: styles.length > 0 && styles.every((style) => this.isItalicStyle(style.fontStyle)) ? "italic" : "normal"
+        };
+      }
+
+      nearestTextBackgroundColor(target, root) {
+        let element = target;
+        while (element && root.contains(element)) {
+          const value = this.visibleColorValue(getComputedStyle(element).backgroundColor);
+          if (value) return value;
+          if (element === root) break;
+          element = element.parentElement;
+        }
+        return "";
+      }
+
       syncInlineSelectionInspector() {
         const range = this.validTextSelectionRange(this.selected);
         if (!range || !this.controls.fontSize || this.controls.fontSize.disabled) return;
-        const styleTarget = this.rangeStyleElement(range, this.selected);
-        const computed = getComputedStyle(styleTarget);
-        const size = Math.round(Number.parseFloat(computed.fontSize)) || "";
-        this.controls.fontFamily.value = this.matchFontFamilyValue(computed.fontFamily);
-        this.controls.fontSize.value = String(size);
-        this.controls.color.value = this.toHex(computed.color);
-        this.controls.bg.value = this.toHex(computed.backgroundColor);
-        this.controls.opacity.value = Math.round((Number.parseFloat(computed.opacity) || 1) * 100);
-        this.updateTextStyleButtons(computed);
+        const summary = this.selectedTextStyleSummary(range, this.selected);
+        this.updateFontFamilyControls(summary.fontFamilyRaw || summary.fontFamily);
+        this.controls.fontSize.value = summary.fontSize;
+        if (summary.color) this.updateTextColorState(summary.color);
+        this.updateBackgroundPickerState(summary.backgroundColor);
+        this.controls.opacity.value = summary.opacity;
+        this.updateTextStyleButtons(summary);
       }
 
       updateTextStyleButtons(computed) {
@@ -1718,6 +2121,7 @@
       applyInlineTextStyle(element, property, value) {
         const range = this.validTextSelectionRange(element);
         if (!range) return false;
+        if (value === "") return this.clearInlineSelectionStyle(element, property);
         const styleTarget = this.inlineStyleTargetForRange(range, element);
         if (styleTarget) {
           styleTarget.style.setProperty(property, value);
@@ -1738,6 +2142,81 @@
         wrapper.appendChild(fragment);
         range.insertNode(wrapper);
         this.unwrapNestedMatchingSpans(wrapper, property, value);
+        wrapper = this.mergeAdjacentInlineSpans(wrapper, property);
+        this.select(element);
+        this.restoreRangeAround(wrapper);
+        this.normalizeInlineTextStyles(element);
+        this.textSelectionRange = this.currentSelectionRangeFor(element);
+        this.textSelectionElement = element;
+        return true;
+      }
+
+      splitSimpleInlineTextStyle(range, element, property) {
+        if (!range || range.startContainer !== range.endContainer || range.startContainer.nodeType !== Node.TEXT_NODE) return null;
+        const textNode = range.startContainer;
+        const parent = textNode.parentElement;
+        if (!parent || parent === element || !element.contains(parent)) return null;
+        if (!parent.style || !parent.style.getPropertyValue(property)) return null;
+        const text = textNode.textContent || "";
+        const before = text.slice(0, range.startOffset);
+        const middle = text.slice(range.startOffset, range.endOffset);
+        const after = text.slice(range.endOffset);
+        if (!middle) return null;
+        const reference = parent;
+        if (before) {
+          const beforeSpan = reference.cloneNode(false);
+          beforeSpan.textContent = before;
+          reference.parentNode.insertBefore(beforeSpan, reference);
+        }
+        const middleSpan = reference.cloneNode(false);
+        middleSpan.style.removeProperty(property);
+        if (!middleSpan.getAttribute("style")) middleSpan.removeAttribute("style");
+        middleSpan.textContent = middle;
+        reference.parentNode.insertBefore(middleSpan, reference);
+        if (after) {
+          const afterSpan = reference.cloneNode(false);
+          afterSpan.textContent = after;
+          reference.parentNode.insertBefore(afterSpan, reference);
+        }
+        reference.remove();
+        return middleSpan;
+      }
+
+      clearInlineSelectionStyle(element, property) {
+        const range = this.validTextSelectionRange(element);
+        if (!range) return false;
+        const splitTarget = this.splitSimpleInlineTextStyle(range, element, property);
+        if (splitTarget) {
+          this.select(element);
+          this.restoreRangeAround(splitTarget);
+          this.normalizeInlineTextStyles(element);
+          this.textSelectionRange = this.currentSelectionRangeFor(element);
+          this.textSelectionElement = element;
+          return true;
+        }
+        const styleTarget = this.inlineStyleTargetForRange(range, element);
+        if (styleTarget) {
+          styleTarget.style.removeProperty(property);
+          if (!styleTarget.getAttribute("style")) styleTarget.removeAttribute("style");
+          this.select(element);
+          this.restoreRangeAround(styleTarget);
+          this.normalizeInlineTextStyles(element);
+          this.textSelectionRange = this.currentSelectionRangeFor(element);
+          this.textSelectionElement = element;
+          return true;
+        }
+        let wrapper = document.createElement("span");
+        const fragment = range.extractContents();
+        if (!fragment.textContent || !fragment.textContent.trim()) {
+          range.insertNode(fragment);
+          return false;
+        }
+        wrapper.appendChild(fragment);
+        wrapper.querySelectorAll("[style]").forEach((node) => {
+          node.style.removeProperty(property);
+          if (!node.getAttribute("style")) node.removeAttribute("style");
+        });
+        range.insertNode(wrapper);
         wrapper = this.mergeAdjacentInlineSpans(wrapper, property);
         this.select(element);
         this.restoreRangeAround(wrapper);
@@ -1831,8 +2310,7 @@
         if (!element || !this.isTextElement(element)) return;
         this.captureTextSelection({ syncInspector: false });
         const range = this.validTextSelectionRange(element);
-        const styleTarget = range ? this.rangeStyleElement(range, element) : element;
-        const computed = getComputedStyle(styleTarget);
+        const computed = range ? this.selectedTextStyleSummary(range, element) : getComputedStyle(element);
         const value = property === "font-weight"
           ? (this.isBoldWeight(computed.fontWeight) ? "400" : "700")
           : (this.isItalicStyle(computed.fontStyle) ? "normal" : "italic");
@@ -1859,7 +2337,8 @@
           this.applyShape(element, this.controls.shape.value);
         }
         if (name === "fontFamily" && this.isTextElement(element)) {
-          const value = this.controls.fontFamily.value;
+          const value = this.currentFontFamilyValue();
+          if (this.controls.fontFamily.value === "__custom__" && !value) return;
           if (value && this.applyInlineSelectionStyle(element, "font-family", value, { live })) return;
           if (value) {
             element.style.fontFamily = value;
@@ -1882,14 +2361,23 @@
           }
         }
         if (name === "color") {
-          const value = this.controls.color.value;
+          const value = this.controls.colorButton.dataset.value || "";
           if (this.isTextElement(element) && value && this.applyInlineSelectionStyle(element, "color", value, { live })) return;
           this.setEditableTextColor(element, value);
+          this.updateTextColorState(value);
         }
         if (name === "bg") {
-          const value = this.controls.bg.value;
-          if (this.isTextElement(element) && value && this.applyInlineSelectionStyle(element, "background-color", value, { live })) return;
-          this.setEditableSurfaceColor(element, value);
+          const value = this.controls.bg.dataset.value || "";
+          if (this.isTextElement(element) && this.applyInlineSelectionStyle(element, "background-color", value, { live })) {
+            this.updateBackgroundPickerState(value);
+            return;
+          }
+          if (value) {
+            this.setEditableSurfaceColor(element, value);
+          } else {
+            this.clearEditableSurfaceColor(element);
+          }
+          this.updateBackgroundPickerState(value);
         }
         if (name === "opacity") {
           const value = this.controls.opacity.value;
@@ -2029,9 +2517,197 @@
         }
       }
 
+      clearEditableSurfaceColor(element) {
+        if (!this.isSvgElement(element)) {
+          element.style.removeProperty("background-color");
+          return;
+        }
+        const tag = this.svgTagName(element);
+        if (["line", "polyline"].includes(tag)) {
+          element.style.removeProperty("stroke");
+          return;
+        }
+        const computed = getComputedStyle(element);
+        if (this.isVisiblePaint(computed.stroke) && !this.isVisiblePaint(computed.fill)) {
+          element.style.removeProperty("stroke");
+        } else {
+          element.style.removeProperty("fill");
+        }
+      }
+
       isVisiblePaint(value) {
         const paint = String(value || "").trim().toLowerCase();
         return Boolean(paint && paint !== "none" && paint !== "transparent" && paint !== "rgba(0, 0, 0, 0)");
+      }
+
+      visibleColorValue(value) {
+        if (!this.isVisiblePaint(value)) return "";
+        return this.toHex(value);
+      }
+
+      updateFontFamilyControls(value) {
+        const normalized = this.matchFontFamilyValue(value);
+        if (normalized) {
+          this.controls.fontFamily.value = normalized;
+          this.controls.fontFamilyCustom.value = "";
+          this.controls.fontFamilyCustom.disabled = true;
+          return;
+        }
+        const raw = String(value || "").trim();
+        this.controls.fontFamily.value = raw ? "__custom__" : "";
+        this.controls.fontFamilyCustom.value = raw;
+        this.controls.fontFamilyCustom.disabled = !raw;
+      }
+
+      currentFontFamilyValue() {
+        if (this.controls.fontFamily.value === "__custom__") return this.controls.fontFamilyCustom.value.trim();
+        return this.controls.fontFamily.value;
+      }
+
+      renderTextColorPalette() {
+        const palette = this.controls.colorPresetGrid;
+        if (!palette) return;
+        palette.innerHTML = "";
+        TEXT_COLOR_PALETTE.forEach((value) => {
+          const button = document.createElement("button");
+          button.type = "button";
+          button.className = "color-preset";
+          button.dataset.colorValue = value;
+          button.title = value;
+          button.setAttribute("aria-label", `文字颜色 ${value}`);
+          button.style.setProperty("--choice-color", value);
+          button.addEventListener("click", (event) => {
+            event.preventDefault();
+            event.stopPropagation();
+            this.applyTextColor(value, { recordHistory: true });
+          });
+          palette.appendChild(button);
+        });
+      }
+
+      initColorPickers() {
+        this.colorPickers = {};
+        this.initColorPicker("text", this.controls.colorPickerHost, "#111111");
+        this.initColorPicker("background", this.controls.bgPickerHost, "#fff2b8");
+      }
+
+      initColorPicker(kind, host, defaultColor) {
+        if (!host) return;
+        host.innerHTML = "";
+        if (typeof window.Picker !== "function") {
+          const message = document.createElement("p");
+          message.className = "color-picker-missing";
+          message.textContent = "取色器资源未加载";
+          host.appendChild(message);
+          return;
+        }
+        const picker = new window.Picker({
+          parent: host,
+          popup: false,
+          alpha: false,
+          editor: true,
+          editorFormat: "hex",
+          cancelButton: false,
+          color: defaultColor
+        });
+        picker.onChange = (color) => {
+          const value = this.pickerColorValue(color);
+          if (!value) return;
+          this.captureTextSelection({ syncInspector: false });
+          if (kind === "background") {
+            this.applyBackgroundChoice(value, { closePalette: false, recordHistory: false });
+          } else {
+            this.applyTextColor(value, { closePalette: false, recordHistory: false });
+          }
+        };
+        picker.onDone = (color) => {
+          const value = this.pickerColorValue(color);
+          if (!value) return;
+          this.captureTextSelection({ syncInspector: false });
+          if (kind === "background") {
+            this.applyBackgroundChoice(value, { closePalette: false, recordHistory: true });
+          } else {
+            this.applyTextColor(value, { closePalette: false, recordHistory: true });
+          }
+        };
+        this.colorPickers[kind] = picker;
+        picker.show?.();
+      }
+
+      pickerColorValue(color) {
+        if (!color) return "";
+        return this.toHex(color.hex || color.rgbaString || color.rgbString || "");
+      }
+
+      setPickerColor(kind, value) {
+        const picker = this.colorPickers?.[kind];
+        const normalized = this.visibleColorValue(value) || this.toHex(value || "");
+        if (!picker || !normalized) return;
+        try {
+          picker.setColor(normalized, true);
+        } catch (error) {
+          // Ignore invalid picker sync values; controls still show the normalized state.
+        }
+      }
+
+      updateTextColorState(value) {
+        const normalized = value ? this.toHex(value) : "";
+        this.controls.colorButton.dataset.value = normalized;
+        if (this.controls.colorSwatch) {
+          this.controls.colorSwatch.classList.toggle("no-color", !normalized);
+          if (normalized) {
+            this.controls.colorSwatch.style.backgroundColor = normalized;
+          } else {
+            this.controls.colorSwatch.style.removeProperty("background-color");
+          }
+        }
+        if (this.controls.colorText) {
+          this.controls.colorText.textContent = normalized || "未选中";
+        }
+        this.updateTextColorPaletteState(normalized);
+        this.setPickerColor("text", normalized);
+      }
+
+      updateTextColorPaletteState(value) {
+        const normalized = this.visibleColorValue(value) || this.toHex(value || "");
+        this.controls.colorPalette?.querySelectorAll("[data-color-value]").forEach((button) => {
+          button.setAttribute("aria-checked", String((button.dataset.colorValue || "").toLowerCase() === normalized.toLowerCase()));
+        });
+      }
+
+      applyTextColor(value, options = {}) {
+        if (!this.selected || !value) return;
+        this.controls.colorButton.dataset.value = value;
+        this.applyInspectorValue("color", { recordHistory: options.recordHistory !== false });
+        this.updateTextColorState(value);
+        if (options.closePalette !== false) this.closeTextColorPalette();
+      }
+
+      async pickColorWithEyeDropper() {
+        if (typeof window.EyeDropper !== "function") {
+          this.toastMessage("当前浏览器不支持吸管取色");
+          return "";
+        }
+        try {
+          const result = await new window.EyeDropper().open();
+          return this.toHex(result?.sRGBHex || "");
+        } catch (error) {
+          return "";
+        }
+      }
+
+      async pickTextColor() {
+        if (!this.selected || this.controls.colorEyedropper.disabled) return;
+        this.captureTextSelection({ syncInspector: false });
+        const value = await this.pickColorWithEyeDropper();
+        if (value) this.applyTextColor(value, { closePalette: false, recordHistory: true });
+      }
+
+      async pickBackgroundColor() {
+        if (!this.selected || this.controls.bgEyedropper.disabled) return;
+        this.captureTextSelection({ syncInspector: false });
+        const value = await this.pickColorWithEyeDropper();
+        if (value) this.applyBackgroundChoice(value, { closePalette: false, recordHistory: true });
       }
 
       clampNumber(value, fallback, min, max) {
@@ -2044,8 +2720,15 @@
         const normalized = (value || "").toLowerCase();
         const presets = [
           { value: FONT_BODY_STACK, tokens: ["hanken grotesk", "system-ui", "-apple-system", "segoe ui"] },
+          { value: FONT_HEITI_STACK, tokens: ["pingfang sc", "microsoft yahei", "noto sans sc"] },
           { value: FONT_CJK_SERIF_STACK, tokens: ["noto serif sc", "songti sc", "simsun"] },
+          { value: FONT_SONGTI_STACK, tokens: ["songti sc", "stsong", "simsun"] },
+          { value: FONT_KAITI_STACK, tokens: ["kaiti sc", "stkaiti", "kaiti"] },
           { value: FONT_LATIN_SERIF_STACK, tokens: ["newsreader", "georgia", "times new roman"] },
+          { value: "Inter, Arial, Helvetica, sans-serif", tokens: ["inter"] },
+          { value: "Aptos, Calibri, Arial, sans-serif", tokens: ["aptos", "calibri"] },
+          { value: "Arial, Helvetica, sans-serif", tokens: ["arial, helvetica"] },
+          { value: FONT_DISPLAY_STACK, tokens: ["din alternate", "arial narrow", "impact"] },
           { value: FONT_MONO_STACK, tokens: ["dm mono", "ui-monospace", "sfmono-regular", "consolas", "menlo"] }
         ];
         const match = presets.find((preset) => preset.tokens.some((token) => normalized.includes(token)));
@@ -2067,6 +2750,108 @@
       closeShapeMenu() {
         this.controls.shapeMenu.hidden = true;
         this.controls.addShape.setAttribute("aria-expanded", "false");
+      }
+
+      renderBackgroundPalette() {
+        const palette = this.controls.bgPresetGrid;
+        if (!palette) return;
+        palette.innerHTML = "";
+        BACKGROUND_COLOR_PALETTE.forEach((choice) => {
+          const button = document.createElement("button");
+          button.type = "button";
+          button.className = `color-preset${choice.value ? "" : " no-color"}`;
+          button.setAttribute("role", "menuitemradio");
+          button.setAttribute("aria-checked", "false");
+          button.dataset.bgValue = choice.value;
+          button.title = choice.label;
+          button.setAttribute("aria-label", choice.label);
+          if (choice.value) button.style.setProperty("--choice-color", choice.value);
+          button.addEventListener("click", (event) => {
+            event.preventDefault();
+            event.stopPropagation();
+            this.applyBackgroundChoice(choice.value);
+          });
+          palette.appendChild(button);
+        });
+        this.updateBackgroundPickerState("");
+      }
+
+      toggleTextColorPalette() {
+        if (this.controls.colorButton.disabled) return;
+        const willOpen = this.controls.colorPalette.hidden;
+        if (willOpen) this.closeBackgroundPalette();
+        this.controls.colorPalette.hidden = !willOpen;
+        this.controls.colorButton.setAttribute("aria-expanded", String(willOpen));
+        if (willOpen) this.positionTextColorPalette();
+      }
+
+      closeTextColorPalette() {
+        if (!this.controls.colorPalette || this.controls.colorPalette.hidden) return;
+        this.controls.colorPalette.hidden = true;
+        this.controls.colorButton.setAttribute("aria-expanded", "false");
+      }
+
+      positionTextColorPalette() {
+        this.positionColorPalette(this.controls.colorButton, this.controls.colorPalette, "--color-palette-left", "--color-palette-top");
+      }
+
+      toggleBackgroundPalette() {
+        if (this.controls.bg.disabled) return;
+        const willOpen = this.controls.bgPalette.hidden;
+        if (willOpen) this.closeTextColorPalette();
+        this.controls.bgPalette.hidden = !willOpen;
+        this.controls.bg.setAttribute("aria-expanded", String(willOpen));
+        if (willOpen) this.positionBackgroundPalette();
+      }
+
+      closeBackgroundPalette() {
+        if (!this.controls.bgPalette || this.controls.bgPalette.hidden) return;
+        this.controls.bgPalette.hidden = true;
+        this.controls.bg.setAttribute("aria-expanded", "false");
+      }
+
+      positionBackgroundPalette() {
+        this.positionColorPalette(this.controls.bg, this.controls.bgPalette, "--bg-palette-left", "--bg-palette-top");
+      }
+
+      positionColorPalette(buttonControl, palette, leftVar, topVar) {
+        const button = buttonControl.getBoundingClientRect();
+        const width = palette.offsetWidth || 246;
+        const height = palette.offsetHeight || 238;
+        const gutter = 10;
+        const left = Math.max(gutter, Math.min(window.innerWidth - width - gutter, button.left));
+        const preferredTop = button.bottom + 8;
+        const top = Math.max(gutter, Math.min(window.innerHeight - height - gutter, preferredTop));
+        palette.style.setProperty(leftVar, `${Math.round(left)}px`);
+        palette.style.setProperty(topVar, `${Math.round(top)}px`);
+      }
+
+      applyBackgroundChoice(value, options = {}) {
+        if (!this.selected) return;
+        this.controls.bg.dataset.value = value;
+        this.applyInspectorValue("bg", { recordHistory: options.recordHistory !== false });
+        if (options.closePalette !== false) this.closeBackgroundPalette();
+      }
+
+      updateBackgroundPickerState(value) {
+        const normalized = this.visibleColorValue(value);
+        this.controls.bg.dataset.value = normalized;
+        if (this.controls.bgSwatch) {
+          this.controls.bgSwatch.classList.toggle("no-color", !normalized);
+          if (normalized) {
+            this.controls.bgSwatch.style.backgroundColor = normalized;
+          } else {
+            this.controls.bgSwatch.style.removeProperty("background-color");
+          }
+        }
+        if (this.controls.bgText) {
+          const choice = BACKGROUND_COLOR_PALETTE.find((item) => item.value.toLowerCase() === normalized.toLowerCase());
+          this.controls.bgText.textContent = choice?.label || normalized || "无背景";
+        }
+        this.controls.bgPalette?.querySelectorAll("[data-bg-value]").forEach((button) => {
+          button.setAttribute("aria-checked", String((button.dataset.bgValue || "") === normalized));
+        });
+        this.setPickerColor("background", normalized);
       }
 
       positionShapeMenu() {
@@ -3227,6 +4012,15 @@
           delete node.dataset.editorKind;
           delete node.dataset.editorSmall;
         });
+        root.querySelectorAll("[data-html-deck-editor-current]").forEach((node) => {
+          node.removeAttribute("data-html-deck-editor-current");
+        });
+        root.querySelectorAll("[data-html-deck-editor-stage='preserve']").forEach((node) => {
+          node.style.removeProperty("--html-deck-editor-stage-x");
+          node.style.removeProperty("--html-deck-editor-stage-y");
+          node.style.removeProperty("--html-deck-editor-stage-scale");
+          node.style.removeProperty("--html-deck-editor-current-slide");
+        });
       }
 
       serialize() {
@@ -3384,6 +4178,9 @@
           delete node.dataset.editorKind;
           delete node.dataset.editorSmall;
         });
+        clone.querySelectorAll("[data-html-deck-editor-current]").forEach((node) => {
+          node.removeAttribute("data-html-deck-editor-current");
+        });
         clone.querySelectorAll(".editor-motion-preview, .editor-motion-running").forEach((node) => {
           node.classList.remove("editor-motion-preview", "editor-motion-running");
           if (!node.dataset.editAnim) this.editorMotionClasses().forEach((className) => node.classList.remove(className));
@@ -3395,15 +4192,21 @@
           node.hidden = true;
         });
         clone.querySelectorAll("#editorFrame, #editorGuideV, #editorGuideH").forEach((node) => node.classList.remove("active"));
-        clone.querySelectorAll("[data-html-deck-editor-stage='preserve'] > .slide").forEach((node) => {
-          node.style.removeProperty("--html-deck-editor-slide-x");
-          node.style.removeProperty("--html-deck-editor-slide-y");
-          node.style.removeProperty("--html-deck-editor-slide-scale");
+        clone.querySelectorAll("[data-html-deck-editor-stage='preserve']").forEach((node) => {
+          node.style.removeProperty("--html-deck-editor-stage-x");
+          node.style.removeProperty("--html-deck-editor-stage-y");
+          node.style.removeProperty("--html-deck-editor-stage-scale");
+          node.style.removeProperty("--html-deck-editor-current-slide");
         });
         clone.querySelectorAll("[style]").forEach((node) => {
           node.style.removeProperty("--html-deck-editor-slide-x");
           node.style.removeProperty("--html-deck-editor-slide-y");
           node.style.removeProperty("--html-deck-editor-slide-scale");
+          node.style.removeProperty("--html-deck-editor-stage-x");
+          node.style.removeProperty("--html-deck-editor-stage-y");
+          node.style.removeProperty("--html-deck-editor-stage-scale");
+          node.style.removeProperty("--html-deck-editor-current-slide");
+          node.style.removeProperty("--html-deck-editor-edit-opacity");
           node.style.removeProperty("--deck-stage-inset-left");
           node.style.removeProperty("--deck-stage-inset-right");
           node.style.removeProperty("--deck-stage-inset-top");

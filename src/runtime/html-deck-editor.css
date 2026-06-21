@@ -53,9 +53,19 @@
       opacity: 1;
     }
 
-    body.editing [data-html-deck-editor-stage="preserve"] > .slide {
-      transform: translate(var(--html-deck-editor-slide-x, 0px), var(--html-deck-editor-slide-y, 0px)) scale(var(--html-deck-editor-slide-scale, 1));
+    body.editing [data-html-deck-editor-stage="preserve"] {
+      transform: translate(var(--html-deck-editor-stage-x, 0px), var(--html-deck-editor-stage-y, 0px)) scale(var(--html-deck-editor-stage-scale, 1)) translateX(calc(var(--html-deck-editor-current-slide, 0) * -100vw)) !important;
       transform-origin: top left;
+    }
+
+    body.editing [data-html-deck-editor-stage="preserve"] > .slide:not([data-html-deck-editor-current]) {
+      visibility: hidden;
+      pointer-events: none;
+    }
+
+    body.editing [data-html-deck-editor-stage="preserve"] > .slide[data-html-deck-editor-current] {
+      visibility: visible !important;
+      pointer-events: auto;
     }
 
     .editor-shell[data-html-deck-editor-ui] .editor-toolbar,
@@ -330,6 +340,10 @@
       gap: 8px;
     }
 
+    .editor-shell[data-html-deck-editor-ui] .font-custom-field {
+      margin-top: 8px;
+    }
+
     .editor-shell[data-html-deck-editor-ui] .text-style-controls {
       display: flex;
       gap: 8px;
@@ -373,8 +387,160 @@
       padding: 0 9px;
     }
 
-    .editor-shell[data-html-deck-editor-ui] .editor-field[type="color"] {
-      padding: 4px;
+    .editor-shell[data-html-deck-editor-ui] .color-field {
+      position: relative;
+      min-width: 0;
+    }
+
+    .editor-shell[data-html-deck-editor-ui] .color-preset-grid {
+      display: grid;
+      grid-template-columns: repeat(6, 32px);
+      gap: 6px;
+    }
+
+    .editor-shell[data-html-deck-editor-ui] .color-preset {
+      width: 100%;
+      aspect-ratio: 1;
+      min-height: 22px;
+      padding: 0;
+      border: 1px solid rgba(17, 17, 17, 0.18);
+      border-radius: 5px;
+      background: var(--choice-color, #ffffff);
+      box-shadow: inset 0 0 0 1px rgba(255, 255, 255, 0.32);
+      cursor: pointer;
+    }
+
+    .editor-shell[data-html-deck-editor-ui] .color-preset[aria-checked="true"] {
+      border-color: #111111;
+      box-shadow: 0 0 0 2px rgba(31, 43, 224, 0.18), inset 0 0 0 1px rgba(255, 255, 255, 0.42);
+    }
+
+    .editor-shell[data-html-deck-editor-ui] .background-field {
+      position: relative;
+      min-width: 0;
+    }
+
+    .editor-shell[data-html-deck-editor-ui] .color-picker-button {
+      display: flex;
+      gap: 8px;
+      align-items: center;
+      justify-content: flex-start;
+      padding: 0 9px;
+      text-align: left;
+      cursor: pointer;
+    }
+
+    .editor-shell[data-html-deck-editor-ui] .color-picker-button:disabled {
+      cursor: not-allowed;
+    }
+
+    .editor-shell[data-html-deck-editor-ui] .color-swatch {
+      position: relative;
+      display: inline-block;
+      width: 18px;
+      height: 18px;
+      flex: 0 0 18px;
+      border: 1px solid rgba(17, 17, 17, 0.22);
+      border-radius: 4px;
+      background: var(--choice-color, #ffffff);
+      overflow: hidden;
+    }
+
+    .editor-shell[data-html-deck-editor-ui] .color-swatch.no-color,
+    .editor-shell[data-html-deck-editor-ui] .color-preset.no-color {
+      background:
+        linear-gradient(135deg, transparent 45%, #b42318 47%, #b42318 53%, transparent 55%),
+        #ffffff;
+    }
+
+    .editor-shell[data-html-deck-editor-ui] .color-popover {
+      position: fixed;
+      top: var(--color-palette-top, 64px);
+      left: var(--color-palette-left, 50%);
+      z-index: 10042;
+      display: grid;
+      gap: 9px;
+      width: max-content;
+      max-width: calc(100vw - 20px);
+      padding: 9px;
+      border: 1px solid rgba(17, 17, 17, 0.18);
+      border-radius: 8px;
+      background: #ffffff;
+      box-shadow: 0 18px 44px rgba(17, 17, 17, 0.18);
+      pointer-events: auto;
+    }
+
+    .editor-shell[data-html-deck-editor-ui] .color-popover[hidden] {
+      display: none;
+    }
+
+    .editor-shell[data-html-deck-editor-ui] .bg-palette {
+      top: var(--bg-palette-top, 64px);
+      left: var(--bg-palette-left, 50%);
+    }
+
+    .editor-shell[data-html-deck-editor-ui] .color-picker-host {
+      padding-top: 8px;
+      border-top: 1px solid rgba(17, 17, 17, 0.1);
+    }
+
+    .editor-shell[data-html-deck-editor-ui] .color-picker-missing {
+      margin: 0;
+      color: rgba(17, 17, 17, 0.62);
+      font: 600 12px/1.35 var(--font-body, system-ui, -apple-system, BlinkMacSystemFont, "Segoe UI", sans-serif);
+    }
+
+    .editor-shell[data-html-deck-editor-ui] .color-picker-host .picker_wrapper {
+      width: 228px;
+      padding: 7px;
+      border-radius: 8px;
+      background: #ffffff;
+      box-shadow: none;
+      color: #111111;
+      font-family: var(--font-body, system-ui, -apple-system, BlinkMacSystemFont, "Segoe UI", sans-serif);
+    }
+
+    .editor-shell[data-html-deck-editor-ui] .color-picker-host .picker_wrapper > * {
+      margin: 5px;
+    }
+
+    .editor-shell[data-html-deck-editor-ui] .color-picker-host .picker_wrapper button,
+    .editor-shell[data-html-deck-editor-ui] .color-picker-host .picker_wrapper input {
+      border: 1px solid rgba(17, 17, 17, 0.18);
+      border-radius: 6px;
+      box-shadow: none;
+      background: #ffffff;
+      color: #111111;
+      font: 600 12px/1.2 var(--font-body, system-ui, -apple-system, BlinkMacSystemFont, "Segoe UI", sans-serif);
+    }
+
+    .editor-shell[data-html-deck-editor-ui] .color-picker-host .picker_hue,
+    .editor-shell[data-html-deck-editor-ui] .color-picker-host .picker_sl,
+    .editor-shell[data-html-deck-editor-ui] .color-picker-host .picker_sample {
+      border-radius: 6px;
+      box-shadow: inset 0 0 0 1px rgba(17, 17, 17, 0.18);
+      overflow: hidden;
+    }
+
+    .editor-shell[data-html-deck-editor-ui] .color-picker-actions {
+      display: flex;
+      justify-content: stretch;
+      padding-top: 7px;
+      border-top: 1px solid rgba(17, 17, 17, 0.1);
+    }
+
+    .editor-shell[data-html-deck-editor-ui] .color-eyedropper-button {
+      display: inline-flex;
+      align-items: center;
+      justify-content: center;
+      gap: 6px;
+      width: 100%;
+      min-width: 0;
+      height: 32px;
+      padding: 0 10px;
+      border-radius: 6px;
+      font-size: 12px;
+      line-height: 1.2;
     }
 
     .editor-shell[data-html-deck-editor-ui] .editor-textarea {
@@ -870,6 +1036,25 @@
       transition: none !important;
     }
 
+    body.editing .slide[data-html-deck-editor-current] [data-anim],
+    body.editing .slide[data-html-deck-editor-current] .row-fill,
+    body.editing .slide[data-html-deck-editor-current] .tl-node,
+    body.editing .slide[data-html-deck-editor-current] .stack-block,
+    body.editing .slide[data-html-deck-editor-current] .bar-tower,
+    body.editing .slide[data-html-deck-editor-current] .sub-card,
+    body.editing .slide[data-html-deck-editor-current] .col,
+    body.editing .slide[data-html-deck-editor-current] .vrule,
+    body.editing .slide[data-html-deck-editor-current] .kpi-cell,
+    body.editing .slide[data-html-deck-editor-current] .card-fill,
+    body.editing .slide[data-html-deck-editor-current] .card-accent,
+    body.editing .slide[data-html-deck-editor-current] .card-ink {
+      opacity: var(--html-deck-editor-edit-opacity, 1) !important;
+      filter: none !important;
+      transform: none !important;
+      animation: none !important;
+      transition: none !important;
+    }
+
     .editor-motion-preview.editor-anim-fade {
       animation: editorPreviewFade var(--edit-duration, 640ms) var(--ease-out-expo, cubic-bezier(0.16, 1, 0.3, 1)) var(--edit-delay, 0ms) both !important;
     }
@@ -1091,7 +1276,10 @@
       z-index: 850;
       border: 2px solid #ff3d8b;
       pointer-events: none;
-      box-shadow: 0 0 0 1px rgba(255, 255, 255, 0.9), 0 12px 30px rgba(17, 17, 17, 0.18);
+      box-shadow:
+        0 0 0 2px rgba(255, 255, 255, 0.96),
+        0 0 0 4px rgba(17, 17, 17, 0.42),
+        0 12px 30px rgba(17, 17, 17, 0.18);
     }
 
     .editor-shell[data-html-deck-editor-ui] .editor-frame.active {
@@ -1189,8 +1377,11 @@
 
     body.editing [data-editable],
     body.editing [data-editor-kind="text"] {
-      outline: 1px dashed rgba(31, 43, 224, 0.42);
+      outline: 1px dashed rgba(31, 43, 224, 0.92);
       outline-offset: 4px;
+      box-shadow:
+        0 0 0 2px rgba(255, 255, 255, 0.92),
+        0 0 0 4px rgba(17, 17, 17, 0.20);
       cursor: text;
       user-select: text;
       -webkit-user-select: text;
@@ -1207,8 +1398,11 @@
     body.editing [data-editor-kind="media"],
     body.editing [data-editor-kind="box"],
     body.editing .editor-layer {
-      outline: 1px dashed rgba(31, 43, 224, 0.42);
+      outline: 1px dashed rgba(31, 43, 224, 0.92);
       outline-offset: 4px;
+      box-shadow:
+        0 0 0 2px rgba(255, 255, 255, 0.92),
+        0 0 0 4px rgba(17, 17, 17, 0.20);
       cursor: pointer;
     }
 
@@ -1218,6 +1412,7 @@
 
     body.editing .editor-selected {
       outline: none !important;
+      box-shadow: none !important;
     }
 
     body.editing.dragging-file .slide.active {

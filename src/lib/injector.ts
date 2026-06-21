@@ -249,6 +249,12 @@ function slideTitle(source: Element, index: number): string {
 function ensureRuntimeLinks(doc: Document): void {
   removeOwnedRuntime(doc);
 
+  const pickerCss = doc.createElement("link");
+  pickerCss.rel = "stylesheet";
+  pickerCss.href = "runtime/vanilla-picker.css";
+  pickerCss.setAttribute(marker, RUNTIME_VERSION);
+  doc.head.appendChild(pickerCss);
+
   const css = doc.createElement("link");
   css.rel = "stylesheet";
   css.href = "runtime/html-deck-editor.css";
@@ -259,6 +265,11 @@ function ensureRuntimeLinks(doc: Document): void {
   deckStage.src = "runtime/deck-stage.js";
   deckStage.setAttribute(marker, RUNTIME_VERSION);
   doc.body.appendChild(deckStage);
+
+  const picker = doc.createElement("script");
+  picker.src = "runtime/vanilla-picker.js";
+  picker.setAttribute(marker, RUNTIME_VERSION);
+  doc.body.appendChild(picker);
 
   const editor = doc.createElement("script");
   editor.src = "runtime/html-deck-editor.js";
@@ -286,7 +297,9 @@ function removeOwnedRuntime(doc: Document): void {
     'script[src*="editor-runtime"]',
     'link[href*="editor-runtime"]',
     'script[src*="html-deck-editor"]',
-    'link[href*="html-deck-editor"]'
+    'link[href*="html-deck-editor"]',
+    'script[src*="runtime/vanilla-picker"]',
+    'link[href*="runtime/vanilla-picker"]'
   ].join(", ")).forEach((node) => {
     node.parentNode?.removeChild(node);
   });

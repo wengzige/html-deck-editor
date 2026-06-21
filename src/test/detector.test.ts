@@ -188,6 +188,9 @@ describe("runtime injection", () => {
     expect(result.blob).toBeTruthy();
     expect(result.outputName).toBe("sample-editable.zip");
     expect(result.filesAdded).toContain("runtime/html-deck-editor.js");
+    expect(result.filesAdded).toContain("runtime/vanilla-picker.js");
+    expect(result.filesAdded).toContain("runtime/vanilla-picker.css");
+    expect(result.filesAdded).toContain("runtime/vanilla-picker.LICENSE.md");
     expect(result.filesModified).toEqual(["index.html"]);
   });
 
@@ -204,7 +207,28 @@ describe("runtime injection", () => {
     const zip = await JSZip.loadAsync(result.blob!);
     expect(zip.file("deck/index.html")).toBeTruthy();
     expect(zip.file("deck/runtime/html-deck-editor.js")).toBeTruthy();
+    expect(zip.file("deck/runtime/vanilla-picker.LICENSE.md")).toBeTruthy();
     expect(zip.file("deck/assets/style.css")).toBeTruthy();
+  });
+
+  it("does not remove user-owned vanilla-picker assets outside the editor runtime path", () => {
+    const source = `
+      <head>
+        <script src="https://cdn.example.com/vanilla-picker.js"></script>
+        <link rel="stylesheet" href="/assets/vanilla-picker.css">
+      </head>
+      <main>
+        <section><h1>One</h1><p>Enough text here</p></section>
+        <section><h1>Two</h1><p>Enough text here</p></section>
+      </main>
+    `;
+    const report = detectDeck(input([file("index.html", source)]));
+    const html = rewriteHtml(source, report);
+
+    expect(html).toContain("https://cdn.example.com/vanilla-picker.js");
+    expect(html).toContain("/assets/vanilla-picker.css");
+    expect(html).toContain('src="runtime/vanilla-picker.js"');
+    expect(html).toContain('href="runtime/vanilla-picker.css"');
   });
 
   it("removes old editor chrome and runtime files when upgrading an editable deck", async () => {
