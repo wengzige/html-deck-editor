@@ -150,6 +150,37 @@ describe("runtime injection", () => {
     expect(html).toContain("window.originalNavigation = true;");
   });
 
+  it("does not remove user content that happens to use editor-like class names", () => {
+    const source = `
+      <style>
+        .editor-panel { display: grid; }
+        .editor-toolbar { color: red; }
+        .editor-frame { border: 1px solid currentColor; }
+      </style>
+      <div id="deck">
+        <section>
+          <h1>One</h1><p>Enough text here</p>
+          <div class="editor-panel" data-keep="panel">Business panel</div>
+          <button class="edit-toggle" data-keep="toggle">Open settings</button>
+        </section>
+        <section>
+          <h1>Two</h1><p>Enough text here</p>
+          <div class="editor-toolbar" data-keep="toolbar">Business toolbar</div>
+          <div class="editor-frame" data-keep="frame">Business frame</div>
+        </section>
+      </div>
+    `;
+    const report = detectDeck(input([file("index.html", source)]));
+    const html = rewriteHtml(source, report);
+
+    expect(report.status).toBe("adaptable");
+    expect(html).toContain('class="editor-panel" data-keep="panel"');
+    expect(html).toContain('class="edit-toggle" data-keep="toggle"');
+    expect(html).toContain('class="editor-toolbar" data-keep="toolbar"');
+    expect(html).toContain('class="editor-frame" data-keep="frame"');
+    expect(html).toContain(".editor-panel { display: grid; }");
+  });
+
   it("converts a simple single-file deck into a downloadable zip blob", async () => {
     const result = await convertInput(input([
       file("index.html", "<main><section><h1>One</h1><p>Enough text here</p></section><section><h1>Two</h1><p>Enough text here</p></section></main>")

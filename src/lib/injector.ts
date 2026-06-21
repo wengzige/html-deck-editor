@@ -9,16 +9,11 @@ const marker = "data-html-deck-editor-runtime";
 const legacyEditorShellSelectors = [
   "[data-html-deck-editor-ui]",
   "#editorShell",
-  ".editor-shell",
   "#shapeMenu",
-  ".shape-menu",
   "#editorFrame",
-  ".editor-frame",
   "#editorToast",
-  ".editor-toast",
   "#editorGuideV",
-  "#editorGuideH",
-  ".editor-guide"
+  "#editorGuideH"
 ];
 
 const legacyEditorFloatingSelectors = [
@@ -26,7 +21,8 @@ const legacyEditorFloatingSelectors = [
   "#editExport",
   ".edit-toggle",
   ".edit-export",
-  ".edit-hotzone"
+  ".edit-hotzone",
+  "[data-html-deck-editor-ui]"
 ];
 
 const legacyEditorRootSelectors = [
@@ -123,7 +119,7 @@ export async function convertInput(
 export function rewriteHtml(html: string, report: DetectionReport): string {
   const doc = new DOMParser().parseFromString(html, "text/html");
   ensureTitle(doc);
-  removeLegacyEditorArtifacts(doc);
+  removeLegacyEditorArtifacts(doc, { upgradeExistingEditor: report.status === "already-editable" });
 
   if (report.status === "adaptable") {
     prepareAdaptableStage(doc, report);
@@ -296,7 +292,7 @@ function removeOwnedRuntime(doc: Document): void {
   });
 }
 
-function removeLegacyEditorArtifacts(doc: Document): void {
+function removeLegacyEditorArtifacts(doc: Document, options: { upgradeExistingEditor: boolean }): void {
   doc.querySelectorAll(legacyEditorShellSelectors.join(", ")).forEach((node) => {
     if (node instanceof Element && shouldRemoveEditorShell(node)) {
       node.parentNode?.removeChild(node);
@@ -304,13 +300,17 @@ function removeLegacyEditorArtifacts(doc: Document): void {
   });
 
   doc.querySelectorAll(legacyEditorFloatingSelectors.join(", ")).forEach((node) => {
-    if (node instanceof Element && !isInsideDeckContent(node)) {
+    if (node instanceof HTMLElement && !isInsideDeckContent(node) && isLegacyEditorFloatingControl(node)) {
       node.parentNode?.removeChild(node);
     }
   });
 
   doc.querySelectorAll(legacyEditorRootSelectors.join(", ")).forEach((node) => {
-    if (node instanceof Element && !isInsideDeckContent(node)) {
+    if (
+      node instanceof HTMLElement &&
+      !isInsideDeckContent(node) &&
+      (options.upgradeExistingEditor || isLegacyEditorRoot(node))
+    ) {
       node.parentNode?.removeChild(node);
     }
   });
@@ -361,7 +361,38 @@ function isInsideDeckContent(element: Element): boolean {
 }
 
 function shouldRemoveEditorShell(element: Element): boolean {
-  return element.hasAttribute("data-html-deck-editor-ui") || !isInsideDeckContent(element);
+  return isOwnedEditorElement(element) && !isInsideDeckContent(element);
+}
+
+function isOwnedEditorElement(element: Element): boolean {
+  if (element.hasAttribute("data-html-deck-editor-ui")) return true;
+  return [
+    "editorShell",
+    "shapeMenu",
+    "editorFrame",
+    "editorToast",
+    "editorGuideV",
+    "editorGuideH",
+    "editToggle",
+    "editExport"
+  ].includes(element.id);
+}
+
+function isLegacyEditorFloatingControl(element: HTMLElement): boolean {
+  if (isOwnedEditorElement(element)) return true;
+  if (element.classList.contains("edit-hotzone")) {
+    return !element.textContent?.trim() && element.children.length === 0;
+  }
+  return isLegacyEditorControl(element);
+}
+
+function isLegacyEditorRoot(element: HTMLElement): boolean {
+  if (isOwnedEditorElement(element)) return true;
+  if (element.querySelector("[data-html-deck-editor-ui], #editToggle, #editExport, #editorFrame, #editorToast, #shapeMenu")) return true;
+  return Boolean(
+    element.querySelector("#saveBtn, #exitEditBtn, #slideRail, #selectionName, #textInput, #imageDropZone") &&
+    /editor|visual-editor/i.test(`${element.id} ${element.className}`)
+  );
 }
 
 function isLegacyEditorControl(element: HTMLElement): boolean {

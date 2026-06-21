@@ -1,9 +1,14 @@
 /* Frontend Slides Visual Deck Editor runtime. Source baseline: 1ba9bf0. */
 (function () {
+  const FONT_BODY_STACK = 'system-ui, -apple-system, BlinkMacSystemFont, "Segoe UI", sans-serif';
+  const FONT_CJK_SERIF_STACK = '"Noto Serif SC", "Songti SC", SimSun, serif';
+  const FONT_LATIN_SERIF_STACK = 'Georgia, "Times New Roman", Times, serif';
+  const FONT_MONO_STACK = '"SFMono-Regular", Consolas, "Liberation Mono", Menlo, monospace';
+
   const EDITOR_HTML = `
-<div class="edit-hotzone" aria-hidden="true"></div>
-  <button class="edit-toggle" id="editToggle" title="Edit mode (E)" aria-label="Toggle edit mode">E</button>
-  <div class="editor-shell" id="editorShell" aria-label="演示编辑器">
+<div class="edit-hotzone" data-html-deck-editor-ui aria-hidden="true"></div>
+  <button class="edit-toggle" id="editToggle" data-html-deck-editor-ui title="Edit mode (E)" aria-label="Toggle edit mode">E</button>
+  <div class="editor-shell" id="editorShell" data-html-deck-editor-ui aria-label="演示编辑器">
     <div class="editor-toolbar" role="toolbar" aria-label="编辑工具">
       <button class="editor-button" id="helpBtn" type="button">编辑器功能介绍</button>
       <button class="editor-button editor-icon-button" id="undoBtn" type="button" title="撤回 (Cmd/Ctrl+Z)" aria-label="撤回" disabled>↶</button>
@@ -108,7 +113,7 @@
       <section class="inspector-section">
         <p class="editor-title">Content</p>
         <label class="field-label" for="textInput">文字</label>
-        <p class="field-help">拖选画面里的单字或片段后改字号；文字内容在这里改。</p>
+        <p class="field-help">在画面或这里选中文字后，可以只改选中文字的样式。</p>
         <textarea class="editor-textarea" id="textInput" disabled></textarea>
         <label class="field-label" for="imageInput">图片文件</label>
         <div class="file-picker-row">
@@ -131,14 +136,18 @@
         <label class="field-label" for="fontFamilyInput">字体</label>
         <select class="editor-select" id="fontFamilyInput" disabled>
           <option value="">跟随原样式</option>
-          <option value="var(--font-body)">正文无衬线</option>
-          <option value="var(--font-display-cjk)">中文标题衬线</option>
-          <option value="var(--font-display)">英文衬线</option>
-          <option value="var(--font-mono)">等宽代码</option>
+          <option value='${FONT_BODY_STACK}'>正文无衬线</option>
+          <option value='${FONT_CJK_SERIF_STACK}'>中文标题衬线</option>
+          <option value='${FONT_LATIN_SERIF_STACK}'>英文衬线</option>
+          <option value='${FONT_MONO_STACK}'>等宽代码</option>
         </select>
         <div class="field-grid">
           <label><span class="field-label">字号</span><input class="editor-field" id="fontSizeInput" type="number" min="8" max="220" disabled></label>
           <label><span class="field-label">颜色</span><input class="editor-field" id="colorInput" type="color" disabled></label>
+        </div>
+        <div class="text-style-controls" aria-label="文字样式">
+          <button class="editor-button text-style-button" id="fontWeightBtn" type="button" title="粗体" aria-label="粗体" aria-pressed="false" disabled><strong>B</strong></button>
+          <button class="editor-button text-style-button text-style-italic" id="fontStyleBtn" type="button" title="斜体" aria-label="斜体" aria-pressed="false" disabled><span aria-hidden="true">I</span></button>
         </div>
         <div class="field-grid">
           <label><span class="field-label">背景</span><input class="editor-field" id="bgInput" type="color" disabled></label>
@@ -204,14 +213,14 @@
         </div>
       </section>
     </aside>
-    <div class="editor-guide vertical" id="editorGuideV" aria-hidden="true"></div>
-    <div class="editor-guide horizontal" id="editorGuideH" aria-hidden="true"></div>
-    <div class="editor-frame" id="editorFrame" aria-hidden="true">
+    <div class="editor-guide vertical" id="editorGuideV" data-html-deck-editor-ui aria-hidden="true"></div>
+    <div class="editor-guide horizontal" id="editorGuideH" data-html-deck-editor-ui aria-hidden="true"></div>
+    <div class="editor-frame" id="editorFrame" data-html-deck-editor-ui aria-hidden="true">
       <div class="frame-move" id="frameMove">拖动</div>
       <button class="frame-delete" id="frameDelete" type="button" title="删除选中元素 (Delete)" aria-label="删除选中元素">×</button>
       <div class="frame-resize" id="frameResize"></div>
     </div>
-    <div class="editor-toast" id="editorToast" role="status" aria-live="polite"></div>
+    <div class="editor-toast" id="editorToast" data-html-deck-editor-ui role="status" aria-live="polite"></div>
   </div>
 `;
 
@@ -413,6 +422,7 @@
         this.motionAncestorCounts = new WeakMap();
         this.textSelectionRange = null;
         this.textSelectionElement = null;
+        this.layoutRefreshTimers = [];
         this.globalListenerController = typeof AbortController !== "undefined" ? new AbortController() : null;
         this.globalListeners = [];
         this.lastSlideReplay = { index: -1, at: 0 };
@@ -463,6 +473,8 @@
           shape: document.getElementById("shapeInput"),
           fontFamily: document.getElementById("fontFamilyInput"),
           fontSize: document.getElementById("fontSizeInput"),
+          fontWeight: document.getElementById("fontWeightBtn"),
+          fontStyle: document.getElementById("fontStyleBtn"),
           color: document.getElementById("colorInput"),
           bg: document.getElementById("bgInput"),
           opacity: document.getElementById("opacityInput"),
@@ -512,7 +524,7 @@
       }
 
       attachFrame() {
-        this.stage.querySelectorAll("#editorFrame, .editor-frame, #editorGuideV, #editorGuideH, .editor-guide").forEach((node) => {
+        this.stage.querySelectorAll("[data-html-deck-editor-ui], #editorFrame, #editorGuideV, #editorGuideH").forEach((node) => {
           if (node !== this.frame && node !== this.guideV && node !== this.guideH) node.remove();
         });
         this.frame.classList.remove("active");
@@ -531,7 +543,12 @@
           element.setAttribute("aria-hidden", "true");
         }
         element.className = className;
+        element.setAttribute("data-html-deck-editor-ui", "");
         return element;
+      }
+
+      isEditorUiElement(target) {
+        return Boolean(target?.closest?.("[data-html-deck-editor-ui], #editorShell, #editorFrame, #editorGuideV, #editorGuideH, #editorToast"));
       }
 
       makeStorageKey() {
@@ -577,11 +594,11 @@
       }
 
       shouldIgnoreEditorCandidate(element) {
-        if (element.closest(".editor-shell, .editor-frame, .editor-guide")) return true;
+        if (this.isEditorUiElement(element)) return true;
         if (element.closest("[data-generated-chrome]")) return true;
         if (element.matches("script, style, template, meta, link, br, wbr, defs, clipPath, mask, pattern, linearGradient, radialGradient, stop, source, track")) return true;
         if (this.isSvgDefinitionElement(element)) return true;
-        if (element.matches(".deck-progress, .deck-count, .deck-controls, .edit-hotzone, .edit-toggle")) return true;
+        if (element.matches(".deck-progress, .deck-count, .deck-controls, .edit-hotzone[data-html-deck-editor-ui], .edit-toggle[data-html-deck-editor-ui]")) return true;
         return false;
       }
 
@@ -821,7 +838,7 @@
         let best = null;
         this.getEditableElements().forEach((candidate, index) => {
           if (candidate.closest(".slide") !== active) return;
-          if (candidate.closest(".editor-frame, .editor-guide")) return;
+          if (this.isEditorUiElement(candidate)) return;
           const rect = this.elementClientRect(candidate);
           if (rect.width <= 0 && rect.height <= 0) return;
           const slop = this.hitSlopForRect(rect);
@@ -998,8 +1015,13 @@
         this.controls.previewMotion.addEventListener("click", () => this.previewMotion());
         this.controls.previewSlideMotion.addEventListener("click", () => this.replayActiveSlideMotion());
         this.controls.restoreMotion.addEventListener("click", () => this.restoreOriginalMotion(this.selected, true));
-        this.controls.fontSize.addEventListener("pointerdown", () => this.captureTextSelection());
-        this.controls.fontSize.addEventListener("focus", () => this.captureTextSelection());
+        [this.controls.fontFamily, this.controls.fontSize, this.controls.fontWeight, this.controls.fontStyle, this.controls.color, this.controls.bg, this.controls.opacity].forEach((control) => {
+          control.addEventListener("pointerdown", () => this.captureTextSelection());
+          control.addEventListener("focus", () => this.captureTextSelection());
+        });
+        ["select", "keyup", "pointerup", "mouseup"].forEach((type) => {
+          this.controls.text.addEventListener(type, () => this.captureTextSelection());
+        });
 
         const liveInspectorControls = new Set(["text", "fontSize", "color", "bg", "opacity", "x", "y", "width", "height", "order", "delay", "duration"]);
         ["text", "shape", "fontFamily", "fontSize", "color", "bg", "opacity", "x", "y", "width", "height", "anim", "order", "delay", "duration"].forEach((name) => {
@@ -1009,7 +1031,14 @@
           }
           control.addEventListener("change", () => this.applyInspectorValue(name, { recordHistory: true }));
         });
+        this.controls.fontWeight.addEventListener("click", () => this.toggleTextStyle("font-weight"));
+        this.controls.fontStyle.addEventListener("click", () => this.toggleTextStyle("font-style"));
 
+        this.addGlobalListener(document, "wheel", (event) => this.stopEditorUiEventLeak(event), { capture: true, passive: false });
+        this.addGlobalListener(document, "touchstart", (event) => this.stopEditorUiEventLeak(event), { capture: true, passive: true });
+        this.addGlobalListener(document, "touchmove", (event) => this.stopEditorUiEventLeak(event), { capture: true, passive: true });
+        this.addGlobalListener(document, "touchend", (event) => this.stopEditorUiEventLeak(event), true);
+        this.addGlobalListener(document, "keydown", (event) => this.stopEditorUiShortcutLeak(event), true);
         this.addGlobalListener(document, "keydown", (event) => this.handleKeydown(event));
         this.addGlobalListener(document, "selectionchange", () => this.captureTextSelection());
         this.addGlobalListener(document, "slidechange", (event) => this.handleSlideChange(event));
@@ -1065,6 +1094,8 @@
         });
         this.globalListeners = [];
         this.clearTextSelection();
+        this.layoutRefreshTimers.forEach((timer) => window.clearTimeout(timer));
+        this.layoutRefreshTimers = [];
         this.stopMotionFrameTracking();
         window.clearTimeout(this.motionPreviewTimer);
         window.clearTimeout(this.hideTimeout);
@@ -1253,6 +1284,31 @@
         return target && (["INPUT", "TEXTAREA", "SELECT"].includes(target.tagName) || target.isContentEditable);
       }
 
+      stopEditorUiEventLeak(event) {
+        if (!this.isActive || !this.isEditorUiElement(event.target)) return;
+        event.stopPropagation();
+      }
+
+      stopEditorUiShortcutLeak(event) {
+        if (!this.isActive || !this.isEditorUiElement(event.target)) return;
+        const key = event.key;
+        const navigationKeys = [
+          " ",
+          "Spacebar",
+          "ArrowUp",
+          "ArrowDown",
+          "ArrowLeft",
+          "ArrowRight",
+          "PageUp",
+          "PageDown",
+          "Home",
+          "End"
+        ];
+        if (navigationKeys.includes(key) || key.length === 1 || event.metaKey || event.ctrlKey || event.altKey) {
+          event.stopPropagation();
+        }
+      }
+
       showButtons() {
         window.clearTimeout(this.hideTimeout);
         this.toggle.classList.add("show");
@@ -1313,10 +1369,12 @@
           this.applyEditorLayout();
           this.updateFrame();
         };
+        this.layoutRefreshTimers.forEach((timer) => window.clearTimeout(timer));
+        this.layoutRefreshTimers = [];
         refresh();
         requestAnimationFrame(refresh);
-        window.setTimeout(refresh, 80);
-        window.setTimeout(refresh, 220);
+        this.layoutRefreshTimers.push(window.setTimeout(refresh, 80));
+        this.layoutRefreshTimers.push(window.setTimeout(refresh, 220));
       }
 
       toggleEditMode(force) {
@@ -1355,7 +1413,7 @@
 
       handleDocumentPointerDown(event) {
         if (!this.isActive) return;
-        if (event.target.closest(".editor-shell") || event.target.closest(".editor-frame") || event.target.closest(".edit-toggle")) return;
+        if (this.isEditorUiElement(event.target)) return;
         const directTarget = this.getEditableTarget(event.target);
         if (directTarget) return;
         const nearbyTarget = this.pickNearbyEditableTarget(event);
@@ -1372,7 +1430,7 @@
       getEditableTarget(target) {
         let element = target && target.closest("[data-editable], [data-editable-media], [data-editable-box], [data-editor-kind], .editor-layer");
         if (!element || !this.stage.contains(element)) return null;
-        if (element.closest(".editor-shell") || element.closest(".editor-frame")) return null;
+        if (this.isEditorUiElement(element)) return null;
         element = this.preferExplicitEditableAncestor(element);
         return element.closest(".slide") ? element : null;
       }
@@ -1434,6 +1492,8 @@
         this.controls.shape.disabled = !shapeCapable;
         this.controls.fontFamily.disabled = !textCapable;
         this.controls.fontSize.disabled = !textCapable;
+        this.controls.fontWeight.disabled = !textCapable;
+        this.controls.fontStyle.disabled = !textCapable;
         this.controls.color.disabled = !hasSelection;
         this.controls.bg.disabled = !hasSelection;
         this.controls.opacity.disabled = !hasSelection;
@@ -1462,6 +1522,7 @@
           ["fontFamily", "fontSize", "color", "bg", "opacity", "x", "y", "width", "height", "anim", "order", "delay", "duration"].forEach((name) => {
             this.controls[name].value = "";
           });
+          this.updateTextStyleButtons(null);
           this.controls.motionStatus.textContent = "未选中元素";
           return;
         }
@@ -1476,6 +1537,7 @@
         this.controls.color.value = this.toHex(this.editableTextColor(element, computed));
         this.controls.bg.value = this.toHex(this.editableSurfaceColor(element, computed));
         this.controls.opacity.value = Math.round((Number.parseFloat(computed.opacity) || 1) * 100);
+        this.updateTextStyleButtons(textCapable ? computed : null);
         this.controls.x.value = Math.round(box.x);
         this.controls.y.value = Math.round(box.y);
         this.controls.width.value = Math.round(box.width);
@@ -1518,6 +1580,60 @@
         this.textSelectionElement = null;
       }
 
+      captureInspectorTextSelection(options = {}) {
+        const input = this.controls.text;
+        if (!input || document.activeElement !== input || input.disabled) return false;
+        if (!this.selected || !this.isTextElement(this.selected) || this.isSvgElement(this.selected)) return false;
+        const start = Math.min(input.selectionStart || 0, input.selectionEnd || 0);
+        const end = Math.max(input.selectionStart || 0, input.selectionEnd || 0);
+        if (start === end) {
+          this.clearTextSelection();
+          return true;
+        }
+        const range = this.textRangeFromOffsets(this.selected, start, end);
+        if (!range) {
+          this.clearTextSelection();
+          return true;
+        }
+        this.textSelectionRange = range;
+        this.textSelectionElement = this.selected;
+        if (options.syncInspector !== false) this.syncInlineSelectionInspector();
+        return true;
+      }
+
+      textRangeFromOffsets(element, start, end) {
+        const walker = document.createTreeWalker(element, NodeFilter.SHOW_TEXT);
+        const textNodes = [];
+        let node = walker.nextNode();
+        while (node) {
+          textNodes.push(node);
+          node = walker.nextNode();
+        }
+        if (!textNodes.length) return null;
+        const totalLength = textNodes.reduce((total, textNode) => total + textNode.textContent.length, 0);
+        const safeStart = Math.max(0, Math.min(totalLength, start));
+        const safeEnd = Math.max(0, Math.min(totalLength, end));
+        if (safeStart === safeEnd) return null;
+        const startPoint = this.textPointAtOffset(textNodes, safeStart);
+        const endPoint = this.textPointAtOffset(textNodes, safeEnd);
+        if (!startPoint || !endPoint) return null;
+        const range = document.createRange();
+        range.setStart(startPoint.node, startPoint.offset);
+        range.setEnd(endPoint.node, endPoint.offset);
+        return range;
+      }
+
+      textPointAtOffset(textNodes, offset) {
+        let remaining = offset;
+        for (const node of textNodes) {
+          const length = node.textContent.length;
+          if (remaining <= length) return { node, offset: remaining };
+          remaining -= length;
+        }
+        const last = textNodes[textNodes.length - 1];
+        return last ? { node: last, offset: last.textContent.length } : null;
+      }
+
       selectionBelongsToElement(range, element) {
         if (!range || !element) return false;
         const belongs = (node) => {
@@ -1529,18 +1645,21 @@
       }
 
       isInspectorFocused() {
-        return Boolean(document.activeElement?.closest?.(".editor-shell"));
+        return Boolean(document.activeElement?.closest?.("[data-html-deck-editor-ui].editor-shell, #editorShell"));
       }
 
       captureTextSelection(options = {}) {
         if (!this.isActive || !this.selected || !this.isTextElement(this.selected) || this.isSvgElement(this.selected)) return;
+        if (this.captureInspectorTextSelection(options)) return;
         const selection = window.getSelection?.();
         if (!selection || selection.rangeCount === 0) return;
         const range = selection.getRangeAt(0);
         if (range.collapsed) {
+          if (!this.isInspectorFocused()) this.clearTextSelection();
           return;
         }
         if (!this.selectionBelongsToElement(range, this.selected)) {
+          if (!this.isInspectorFocused()) this.clearTextSelection();
           return;
         }
         this.textSelectionRange = range.cloneRange();
@@ -1570,13 +1689,45 @@
         const range = this.validTextSelectionRange(this.selected);
         if (!range || !this.controls.fontSize || this.controls.fontSize.disabled) return;
         const styleTarget = this.rangeStyleElement(range, this.selected);
-        const size = Math.round(Number.parseFloat(getComputedStyle(styleTarget).fontSize)) || "";
+        const computed = getComputedStyle(styleTarget);
+        const size = Math.round(Number.parseFloat(computed.fontSize)) || "";
+        this.controls.fontFamily.value = this.matchFontFamilyValue(computed.fontFamily);
         this.controls.fontSize.value = String(size);
+        this.controls.color.value = this.toHex(computed.color);
+        this.controls.bg.value = this.toHex(computed.backgroundColor);
+        this.controls.opacity.value = Math.round((Number.parseFloat(computed.opacity) || 1) * 100);
+        this.updateTextStyleButtons(computed);
+      }
+
+      updateTextStyleButtons(computed) {
+        this.controls.fontWeight.setAttribute("aria-pressed", computed && this.isBoldWeight(computed.fontWeight) ? "true" : "false");
+        this.controls.fontStyle.setAttribute("aria-pressed", computed && this.isItalicStyle(computed.fontStyle) ? "true" : "false");
+      }
+
+      isBoldWeight(value) {
+        const weight = String(value || "").trim().toLowerCase();
+        if (weight === "bold" || weight === "bolder") return true;
+        return (Number.parseInt(weight, 10) || 0) >= 600;
+      }
+
+      isItalicStyle(value) {
+        const style = String(value || "").trim().toLowerCase();
+        return style === "italic" || style.startsWith("oblique");
       }
 
       applyInlineTextStyle(element, property, value) {
         const range = this.validTextSelectionRange(element);
         if (!range) return false;
+        const styleTarget = this.inlineStyleTargetForRange(range, element);
+        if (styleTarget) {
+          styleTarget.style.setProperty(property, value);
+          this.select(element);
+          this.restoreRangeAround(styleTarget);
+          this.normalizeInlineTextStyles(element);
+          this.textSelectionRange = this.currentSelectionRangeFor(element);
+          this.textSelectionElement = element;
+          return true;
+        }
         let wrapper = document.createElement("span");
         wrapper.style.setProperty(property, value);
         const fragment = range.extractContents();
@@ -1594,6 +1745,16 @@
         this.textSelectionRange = this.currentSelectionRangeFor(element);
         this.textSelectionElement = element;
         return true;
+      }
+
+      inlineStyleTargetForRange(range, element) {
+        if (!range || range.startContainer !== range.endContainer || range.startContainer.nodeType !== Node.TEXT_NODE) return null;
+        const textNode = range.startContainer;
+        const parent = textNode.parentElement;
+        if (!parent || parent === element || !element.contains(parent)) return null;
+        if (range.startOffset !== 0 || range.endOffset !== textNode.textContent.length) return null;
+        const hasOtherVisibleText = Array.from(parent.childNodes).some((node) => node !== textNode && node.textContent && node.textContent.trim());
+        return hasOtherVisibleText ? null : parent;
       }
 
       currentSelectionRangeFor(element) {
@@ -1652,6 +1813,39 @@
         });
       }
 
+      applyInlineSelectionStyle(element, property, value, options = {}) {
+        this.captureTextSelection({ syncInspector: false });
+        if (options.live && this.validTextSelectionRange(element) && !this.isSvgElement(element)) return true;
+        if (!options.live && this.validTextSelectionRange(element) && !this.isSvgElement(element)) {
+          if (this.applyInlineTextStyle(element, property, value)) {
+            this.updateFrame();
+            this.save(false, true);
+            return true;
+          }
+        }
+        return false;
+      }
+
+      toggleTextStyle(property) {
+        const element = this.selected;
+        if (!element || !this.isTextElement(element)) return;
+        this.captureTextSelection({ syncInspector: false });
+        const range = this.validTextSelectionRange(element);
+        const styleTarget = range ? this.rangeStyleElement(range, element) : element;
+        const computed = getComputedStyle(styleTarget);
+        const value = property === "font-weight"
+          ? (this.isBoldWeight(computed.fontWeight) ? "400" : "700")
+          : (this.isItalicStyle(computed.fontStyle) ? "normal" : "italic");
+        if (this.applyInlineSelectionStyle(element, property, value)) {
+          this.syncInlineSelectionInspector();
+          return;
+        }
+        element.style.setProperty(property, value);
+        this.updateFrame();
+        this.updateInspector();
+        this.save(false, true);
+      }
+
       applyInspectorValue(name, options = {}) {
         const element = this.selected;
         if (!element) return;
@@ -1666,6 +1860,7 @@
         }
         if (name === "fontFamily" && this.isTextElement(element)) {
           const value = this.controls.fontFamily.value;
+          if (value && this.applyInlineSelectionStyle(element, "font-family", value, { live })) return;
           if (value) {
             element.style.fontFamily = value;
           } else {
@@ -1673,33 +1868,39 @@
           }
         }
         if (name === "fontSize" && this.isTextElement(element)) {
-          this.captureTextSelection({ syncInspector: false });
           const value = this.controls.fontSize.value;
           if (value === "") {
             element.style.removeProperty("font-size");
           } else {
             const size = this.clampNumber(value, 16, 8, 220);
-            if (!live && this.validTextSelectionRange(element) && !this.isSvgElement(element)) {
-              if (this.applyInlineTextStyle(element, "font-size", `${size}px`)) {
-                this.controls.fontSize.value = String(size);
-                this.updateFrame();
-                this.save(false, true);
-                return;
-              }
+            if (this.applyInlineSelectionStyle(element, "font-size", `${size}px`, { live })) {
+              if (!live) this.controls.fontSize.value = String(size);
+              return;
             }
-            if (live && this.validTextSelectionRange(element) && !this.isSvgElement(element)) return;
             element.style.fontSize = `${size}px`;
             if (recordHistory) this.controls.fontSize.value = String(size);
           }
         }
-        if (name === "color") this.setEditableTextColor(element, this.controls.color.value);
-        if (name === "bg") this.setEditableSurfaceColor(element, this.controls.bg.value);
+        if (name === "color") {
+          const value = this.controls.color.value;
+          if (this.isTextElement(element) && value && this.applyInlineSelectionStyle(element, "color", value, { live })) return;
+          this.setEditableTextColor(element, value);
+        }
+        if (name === "bg") {
+          const value = this.controls.bg.value;
+          if (this.isTextElement(element) && value && this.applyInlineSelectionStyle(element, "background-color", value, { live })) return;
+          this.setEditableSurfaceColor(element, value);
+        }
         if (name === "opacity") {
           const value = this.controls.opacity.value;
           if (value === "") {
             element.style.removeProperty("opacity");
           } else {
             const opacity = this.clampNumber(value, 100, 0, 100);
+            if (this.isTextElement(element) && this.applyInlineSelectionStyle(element, "opacity", String(opacity / 100), { live })) {
+              if (!live) this.controls.opacity.value = String(opacity);
+              return;
+            }
             element.style.opacity = String(opacity / 100);
             if (recordHistory) this.controls.opacity.value = String(opacity);
           }
@@ -1842,10 +2043,10 @@
       matchFontFamilyValue(value) {
         const normalized = (value || "").toLowerCase();
         const presets = [
-          { value: "var(--font-body)", tokens: ["hanken grotesk"] },
-          { value: "var(--font-display-cjk)", tokens: ["noto serif sc"] },
-          { value: "var(--font-display)", tokens: ["newsreader"] },
-          { value: "var(--font-mono)", tokens: ["dm mono", "ui-monospace"] }
+          { value: FONT_BODY_STACK, tokens: ["hanken grotesk", "system-ui", "-apple-system", "segoe ui"] },
+          { value: FONT_CJK_SERIF_STACK, tokens: ["noto serif sc", "songti sc", "simsun"] },
+          { value: FONT_LATIN_SERIF_STACK, tokens: ["newsreader", "georgia", "times new roman"] },
+          { value: FONT_MONO_STACK, tokens: ["dm mono", "ui-monospace", "sfmono-regular", "consolas", "menlo"] }
         ];
         const match = presets.find((preset) => preset.tokens.some((token) => normalized.includes(token)));
         return match ? match.value : "";
@@ -3012,7 +3213,7 @@
       }
 
       cleanEditorArtifacts(root) {
-        root.querySelectorAll("#editorFrame, #editorToast, #editorGuideV, #editorGuideH, .editor-guide, .editor-shell").forEach((node) => node.remove());
+        root.querySelectorAll("[data-html-deck-editor-ui], #editorFrame, #editorToast, #editorGuideV, #editorGuideH, #editorShell").forEach((node) => node.remove());
         root.querySelectorAll(".editor-selected").forEach((node) => node.classList.remove("editor-selected"));
         root.querySelectorAll(".editor-motion-parent-stable").forEach((node) => node.classList.remove("editor-motion-parent-stable"));
         root.querySelectorAll(".editor-motion-preview, .editor-motion-running").forEach((node) => {
@@ -3168,7 +3369,7 @@
       }
 
       cleanCloneForExport(clone) {
-        clone.querySelectorAll("[data-generated-chrome]").forEach((node) => node.remove());
+        clone.querySelectorAll("[data-generated-chrome], [data-html-deck-editor-ui]").forEach((node) => node.remove());
         clone.querySelectorAll(".editor-selected").forEach((node) => node.classList.remove("editor-selected"));
         clone.querySelectorAll(".editor-motion-parent-stable").forEach((node) => node.classList.remove("editor-motion-parent-stable"));
         clone.querySelectorAll("[contenteditable]").forEach((node) => node.removeAttribute("contenteditable"));
@@ -3187,13 +3388,13 @@
           node.classList.remove("editor-motion-preview", "editor-motion-running");
           if (!node.dataset.editAnim) this.editorMotionClasses().forEach((className) => node.classList.remove(className));
         });
-        clone.querySelectorAll(".edit-toggle").forEach((node) => {
+        clone.querySelectorAll("#editToggle").forEach((node) => {
           node.classList.remove("active", "show");
         });
-        clone.querySelectorAll(".editor-help-modal").forEach((node) => {
+        clone.querySelectorAll("#editorHelp, #resetHelp, #editorConfirm").forEach((node) => {
           node.hidden = true;
         });
-        clone.querySelectorAll("#editorFrame, #editorGuideV, #editorGuideH, .editor-guide").forEach((node) => node.classList.remove("active"));
+        clone.querySelectorAll("#editorFrame, #editorGuideV, #editorGuideH").forEach((node) => node.classList.remove("active"));
         clone.querySelectorAll("[data-html-deck-editor-stage='preserve'] > .slide").forEach((node) => {
           node.style.removeProperty("--html-deck-editor-slide-x");
           node.style.removeProperty("--html-deck-editor-slide-y");

@@ -3,7 +3,7 @@
        PPT-LIKE EDITING CONTROLS
        Visual editing layer for text, media, layout, and motion.
        =========================================== */
-    .edit-hotzone {
+    .edit-hotzone[data-html-deck-editor-ui] {
       position: fixed;
       top: 0;
       left: 0;
@@ -12,7 +12,7 @@
       z-index: 10000;
     }
 
-    .edit-toggle {
+    .edit-toggle[data-html-deck-editor-ui] {
       position: fixed;
       top: 18px;
       width: 42px;
@@ -27,11 +27,11 @@
       z-index: 10001;
     }
 
-    .edit-toggle {
+    .edit-toggle[data-html-deck-editor-ui] {
       left: 18px;
     }
 
-    .editor-shell {
+    .editor-shell[data-html-deck-editor-ui] {
       position: fixed;
       inset: 0;
       z-index: 10010;
@@ -43,12 +43,12 @@
       transition: opacity 180ms ease, visibility 180ms ease;
     }
 
-    .editor-shell,
-    .editor-shell * {
+    .editor-shell[data-html-deck-editor-ui],
+    .editor-shell[data-html-deck-editor-ui] * {
       box-sizing: border-box;
     }
 
-    body.editing .editor-shell {
+    body.editing .editor-shell[data-html-deck-editor-ui] {
       visibility: visible;
       opacity: 1;
     }
@@ -58,9 +58,9 @@
       transform-origin: top left;
     }
 
-    .editor-toolbar,
-    .editor-slides,
-    .editor-panel {
+    .editor-shell[data-html-deck-editor-ui] .editor-toolbar,
+    .editor-shell[data-html-deck-editor-ui] .editor-slides,
+    .editor-shell[data-html-deck-editor-ui] .editor-panel {
       pointer-events: auto;
       border: 1px solid rgba(17, 17, 17, 0.12);
       border-radius: 8px;
@@ -69,7 +69,7 @@
       backdrop-filter: blur(10px);
     }
 
-    .editor-toolbar {
+    .editor-shell[data-html-deck-editor-ui] .editor-toolbar {
       position: fixed;
       top: 12px;
       left: 12px;
@@ -85,7 +85,7 @@
       scrollbar-width: thin;
     }
 
-    .editor-slides {
+    .editor-shell[data-html-deck-editor-ui] .editor-slides {
       position: fixed;
       top: 76px;
       bottom: 14px;
@@ -96,7 +96,7 @@
       scrollbar-width: thin;
     }
 
-    .editor-panel {
+    .editor-shell[data-html-deck-editor-ui] .editor-panel {
       position: fixed;
       top: 76px;
       right: 12px;
@@ -108,7 +108,7 @@
       scrollbar-width: thin;
     }
 
-    .editor-title {
+    .editor-shell[data-html-deck-editor-ui] .editor-title {
       margin: 0 0 10px;
       color: rgba(17, 17, 17, 0.58);
       font: 600 11px/1 var(--font-mono, ui-monospace, SFMono-Regular, Menlo, Monaco, Consolas, "Liberation Mono", monospace);
@@ -116,9 +116,9 @@
       text-transform: uppercase;
     }
 
-    .editor-button,
-    .toolbar-select,
-    .slide-chip {
+    .editor-shell[data-html-deck-editor-ui] .editor-button,
+    .editor-shell[data-html-deck-editor-ui] .toolbar-select,
+    .editor-shell[data-html-deck-editor-ui] .slide-chip {
       min-height: 34px;
       border: 1px solid rgba(17, 17, 17, 0.14);
       border-radius: 6px;
@@ -128,39 +128,39 @@
       letter-spacing: 0;
     }
 
-    .editor-button {
+    .editor-shell[data-html-deck-editor-ui] .editor-button {
       flex: 0 0 auto;
       padding: 0 12px;
       white-space: nowrap;
     }
 
-    .editor-button:hover:not(:disabled),
-    .toolbar-select:hover:not(:disabled),
-    .editor-select:hover:not(:disabled),
-    .editor-field:hover:not(:disabled),
-    .editor-textarea:hover:not(:disabled),
-    .slide-chip:hover {
+    .editor-shell[data-html-deck-editor-ui] .editor-button:hover:not(:disabled),
+    .editor-shell[data-html-deck-editor-ui] .toolbar-select:hover:not(:disabled),
+    .editor-shell[data-html-deck-editor-ui] .editor-select:hover:not(:disabled),
+    .editor-shell[data-html-deck-editor-ui] .editor-field:hover:not(:disabled),
+    .editor-shell[data-html-deck-editor-ui] .editor-textarea:hover:not(:disabled),
+    .editor-shell[data-html-deck-editor-ui] .slide-chip:hover {
       border-color: rgba(17, 17, 17, 0.24);
     }
 
-    .editor-button:active:not(:disabled),
-    .slide-chip:active {
+    .editor-shell[data-html-deck-editor-ui] .editor-button:active:not(:disabled),
+    .editor-shell[data-html-deck-editor-ui] .slide-chip:active {
       transform: translateY(1px);
     }
 
-    .editor-button:focus-visible,
-    .editor-select:focus-visible,
-    .editor-field:focus-visible,
-    .editor-textarea:focus-visible,
-    .slide-chip:focus-visible,
-    .reset-help-button:focus-visible,
-    .frame-delete:focus-visible,
-    .shape-choice:focus-visible {
+    .editor-shell[data-html-deck-editor-ui] .editor-button:focus-visible,
+    .editor-shell[data-html-deck-editor-ui] .editor-select:focus-visible,
+    .editor-shell[data-html-deck-editor-ui] .editor-field:focus-visible,
+    .editor-shell[data-html-deck-editor-ui] .editor-textarea:focus-visible,
+    .editor-shell[data-html-deck-editor-ui] .slide-chip:focus-visible,
+    .editor-shell[data-html-deck-editor-ui] .reset-help-button:focus-visible,
+    .editor-shell[data-html-deck-editor-ui] .frame-delete:focus-visible,
+    .editor-shell[data-html-deck-editor-ui] .shape-choice:focus-visible {
       outline: 2px solid rgba(31, 43, 224, 0.34);
       outline-offset: 2px;
     }
 
-    .editor-icon-button {
+    .editor-shell[data-html-deck-editor-ui] .editor-icon-button {
       display: inline-grid;
       place-items: center;
       width: 36px;
@@ -170,12 +170,12 @@
       line-height: 1;
     }
 
-    .shape-picker-wrap {
+    .editor-shell[data-html-deck-editor-ui] .shape-picker-wrap {
       position: relative;
       flex: 0 0 auto;
     }
 
-    .shape-menu {
+    .editor-shell[data-html-deck-editor-ui] .shape-menu {
       position: fixed;
       top: var(--shape-menu-top, 64px);
       left: var(--shape-menu-left, 50%);
@@ -193,11 +193,11 @@
       z-index: 10040;
     }
 
-    .shape-menu[hidden] {
+    .editor-shell[data-html-deck-editor-ui] .shape-menu[hidden] {
       display: none;
     }
 
-    .shape-choice {
+    .editor-shell[data-html-deck-editor-ui] .shape-choice {
       height: 32px;
       border: 1px solid rgba(17, 17, 17, 0.16);
       border-radius: 6px;
@@ -207,42 +207,42 @@
       pointer-events: auto;
     }
 
-    .shape-choice:hover {
+    .editor-shell[data-html-deck-editor-ui] .shape-choice:hover {
       border-color: rgba(17, 17, 17, 0.28);
       background: #ffffff;
     }
 
-    .toolbar-select {
+    .editor-shell[data-html-deck-editor-ui] .toolbar-select {
       flex: 0 0 auto;
       width: 128px;
       padding: 0 32px 0 10px;
       white-space: nowrap;
     }
 
-    .editor-button.primary {
+    .editor-shell[data-html-deck-editor-ui] .editor-button.primary {
       background: var(--ink, #111111);
       color: #ffffff;
       border-color: var(--ink, #111111);
     }
 
-    .editor-button.danger {
+    .editor-shell[data-html-deck-editor-ui] .editor-button.danger {
       color: #b42318;
     }
 
-    .editor-button:disabled,
-    .editor-field:disabled,
-    .editor-select:disabled,
-    .editor-textarea:disabled {
+    .editor-shell[data-html-deck-editor-ui] .editor-button:disabled,
+    .editor-shell[data-html-deck-editor-ui] .editor-field:disabled,
+    .editor-shell[data-html-deck-editor-ui] .editor-select:disabled,
+    .editor-shell[data-html-deck-editor-ui] .editor-textarea:disabled {
       opacity: 0.48;
       cursor: not-allowed;
     }
 
-    .slide-rail-list {
+    .editor-shell[data-html-deck-editor-ui] .slide-rail-list {
       display: grid;
       gap: 8px;
     }
 
-    .slide-chip {
+    .editor-shell[data-html-deck-editor-ui] .slide-chip {
       display: grid;
       grid-template-columns: 34px 1fr;
       gap: 8px;
@@ -252,12 +252,12 @@
       text-align: left;
     }
 
-    .slide-chip.active {
+    .editor-shell[data-html-deck-editor-ui] .slide-chip.active {
       border-color: var(--ink, #111111);
       background: rgba(31, 43, 224, 0.08);
     }
 
-    .slide-chip-num {
+    .editor-shell[data-html-deck-editor-ui] .slide-chip-num {
       display: grid;
       place-items: center;
       height: 34px;
@@ -267,7 +267,7 @@
       font: 500 12px/1 var(--font-mono, ui-monospace, SFMono-Regular, Menlo, Monaco, Consolas, "Liberation Mono", monospace);
     }
 
-    .slide-chip-title {
+    .editor-shell[data-html-deck-editor-ui] .slide-chip-title {
       overflow: hidden;
       align-self: center;
       font-size: 13px;
@@ -277,28 +277,28 @@
       white-space: nowrap;
     }
 
-    .inspector-section {
+    .editor-shell[data-html-deck-editor-ui] .inspector-section {
       padding: 12px 0;
       border-top: 1px solid rgba(17, 17, 17, 0.12);
     }
 
-    .inspector-section.edit-attention {
+    .editor-shell[data-html-deck-editor-ui] .inspector-section.edit-attention {
       border-radius: 8px;
       background: rgba(255, 61, 139, 0.08);
       box-shadow: inset 0 0 0 1px rgba(255, 61, 139, 0.18);
     }
 
-    .inspector-section:first-child {
+    .editor-shell[data-html-deck-editor-ui] .inspector-section:first-child {
       border-top: 0;
       padding-top: 0;
     }
 
-    .selection-name {
+    .editor-shell[data-html-deck-editor-ui] .selection-name {
       min-height: 28px;
       font: 700 15px/1.35 var(--font-body, system-ui, -apple-system, BlinkMacSystemFont, "Segoe UI", sans-serif);
     }
 
-    .field-label {
+    .editor-shell[data-html-deck-editor-ui] .field-label {
       display: block;
       margin: 10px 0 6px;
       color: rgba(17, 17, 17, 0.58);
@@ -307,13 +307,13 @@
       text-transform: uppercase;
     }
 
-    .field-help {
+    .editor-shell[data-html-deck-editor-ui] .field-help {
       margin: -2px 0 8px;
       color: rgba(17, 17, 17, 0.62);
       font: 500 12px/1.38 var(--font-body, system-ui, -apple-system, BlinkMacSystemFont, "Segoe UI", sans-serif);
     }
 
-    .motion-status {
+    .editor-shell[data-html-deck-editor-ui] .motion-status {
       min-height: 32px;
       margin: 0 0 8px;
       padding: 8px 10px;
@@ -324,15 +324,41 @@
       font: 600 12px/1.35 var(--font-body, system-ui, -apple-system, BlinkMacSystemFont, "Segoe UI", sans-serif);
     }
 
-    .field-grid {
+    .editor-shell[data-html-deck-editor-ui] .field-grid {
       display: grid;
       grid-template-columns: 1fr 1fr;
       gap: 8px;
     }
 
-    .editor-field,
-    .editor-select,
-    .editor-textarea {
+    .editor-shell[data-html-deck-editor-ui] .text-style-controls {
+      display: flex;
+      gap: 8px;
+      margin: 8px 0 0;
+    }
+
+    .editor-shell[data-html-deck-editor-ui] .text-style-button {
+      display: inline-grid;
+      place-items: center;
+      width: 34px;
+      min-width: 34px;
+      height: 34px;
+      padding: 0;
+      font-size: 14px;
+      line-height: 1;
+    }
+
+    .editor-shell[data-html-deck-editor-ui] .text-style-button[aria-pressed="true"] {
+      border-color: var(--ink, #111111);
+      background: rgba(31, 43, 224, 0.1);
+    }
+
+    .editor-shell[data-html-deck-editor-ui] .text-style-italic {
+      font-style: italic;
+    }
+
+    .editor-shell[data-html-deck-editor-ui] .editor-field,
+    .editor-shell[data-html-deck-editor-ui] .editor-select,
+    .editor-shell[data-html-deck-editor-ui] .editor-textarea {
       width: 100%;
       border: 1px solid rgba(17, 17, 17, 0.14);
       border-radius: 6px;
@@ -341,31 +367,31 @@
       font: 500 13px/1.3 var(--font-body, system-ui, -apple-system, BlinkMacSystemFont, "Segoe UI", sans-serif);
     }
 
-    .editor-field,
-    .editor-select {
+    .editor-shell[data-html-deck-editor-ui] .editor-field,
+    .editor-shell[data-html-deck-editor-ui] .editor-select {
       height: 34px;
       padding: 0 9px;
     }
 
-    .editor-field[type="color"] {
+    .editor-shell[data-html-deck-editor-ui] .editor-field[type="color"] {
       padding: 4px;
     }
 
-    .editor-textarea {
+    .editor-shell[data-html-deck-editor-ui] .editor-textarea {
       min-height: 88px;
       padding: 9px;
       resize: vertical;
       line-height: 1.45;
     }
 
-    .file-picker-row {
+    .editor-shell[data-html-deck-editor-ui] .file-picker-row {
       display: grid;
       grid-template-columns: auto 1fr;
       gap: 8px;
       align-items: center;
     }
 
-    .file-input-hidden {
+    .editor-shell[data-html-deck-editor-ui] .file-input-hidden {
       position: absolute;
       width: 1px;
       height: 1px;
@@ -373,7 +399,7 @@
       pointer-events: none;
     }
 
-    .file-name {
+    .editor-shell[data-html-deck-editor-ui] .file-name {
       display: flex;
       align-items: center;
       min-width: 0;
@@ -389,7 +415,7 @@
       white-space: nowrap;
     }
 
-    .drop-zone {
+    .editor-shell[data-html-deck-editor-ui] .drop-zone {
       display: grid;
       place-items: center;
       min-height: 78px;
@@ -403,30 +429,30 @@
       text-align: center;
     }
 
-    .drop-zone.dragging {
+    .editor-shell[data-html-deck-editor-ui] .drop-zone.dragging {
       border-color: var(--ink, #111111);
       background: rgba(31, 43, 224, 0.13);
       color: var(--ink, #111111);
     }
 
-    .inspector-actions {
+    .editor-shell[data-html-deck-editor-ui] .inspector-actions {
       display: grid;
       grid-template-columns: 1fr 1fr;
       gap: 8px;
       margin-top: 10px;
     }
 
-    .reset-action-group {
+    .editor-shell[data-html-deck-editor-ui] .reset-action-group {
       position: relative;
       min-width: 0;
     }
 
-    .reset-action-group #resetBtn {
+    .editor-shell[data-html-deck-editor-ui] .reset-action-group #resetBtn {
       width: 100%;
       padding-right: 36px;
     }
 
-    .reset-help-button {
+    .editor-shell[data-html-deck-editor-ui] .reset-help-button {
       position: absolute;
       top: 50%;
       right: 10px;
@@ -446,28 +472,28 @@
       cursor: help;
     }
 
-    .reset-help-button:hover,
-    .reset-help-button:focus-visible {
+    .editor-shell[data-html-deck-editor-ui] .reset-help-button:hover,
+    .editor-shell[data-html-deck-editor-ui] .reset-help-button:focus-visible {
       border-color: rgba(17, 17, 17, 0.48);
       background: rgba(17, 17, 17, 0.08);
       color: rgba(17, 17, 17, 0.78);
       outline: none;
     }
 
-    .editor-confirm-message {
+    .editor-shell[data-html-deck-editor-ui] .editor-confirm-message {
       margin: 0;
       color: rgba(17, 17, 17, 0.72);
       font: 500 14px/1.65 var(--font-body, system-ui, -apple-system, BlinkMacSystemFont, "Segoe UI", sans-serif);
     }
 
-    .editor-confirm-actions {
+    .editor-shell[data-html-deck-editor-ui] .editor-confirm-actions {
       display: flex;
       justify-content: flex-end;
       gap: 8px;
       margin-top: 18px;
     }
 
-    .editor-toast {
+    .editor-shell[data-html-deck-editor-ui] .editor-toast {
       position: fixed;
       left: 50%;
       bottom: 26px;
@@ -485,12 +511,12 @@
       transition: opacity 180ms ease, transform 180ms ease;
     }
 
-    .editor-toast.show {
+    .editor-shell[data-html-deck-editor-ui] .editor-toast.show {
       opacity: 1;
       transform: translate(-50%, 0);
     }
 
-    .editor-help-modal {
+    .editor-shell[data-html-deck-editor-ui] .editor-help-modal {
       position: fixed;
       inset: 0;
       z-index: 10045;
@@ -501,11 +527,11 @@
       pointer-events: auto;
     }
 
-    .editor-help-modal[hidden] {
+    .editor-shell[data-html-deck-editor-ui] .editor-help-modal[hidden] {
       display: none;
     }
 
-    .editor-help-card {
+    .editor-shell[data-html-deck-editor-ui] .editor-help-card {
       width: min(720px, calc(100vw - 32px));
       max-height: min(720px, calc(100vh - 48px));
       overflow: auto;
@@ -515,7 +541,7 @@
       box-shadow: 0 28px 80px rgba(17, 17, 17, 0.28);
     }
 
-    .editor-help-header {
+    .editor-shell[data-html-deck-editor-ui] .editor-help-header {
       display: flex;
       gap: 16px;
       align-items: center;
@@ -524,14 +550,14 @@
       border-bottom: 1px solid rgba(17, 17, 17, 0.12);
     }
 
-    .editor-help-title {
+    .editor-shell[data-html-deck-editor-ui] .editor-help-title {
       margin: 0;
       color: #111111;
       font: 760 22px/1.2 var(--font-body, system-ui, -apple-system, BlinkMacSystemFont, "Segoe UI", sans-serif);
       letter-spacing: 0;
     }
 
-    .editor-help-close {
+    .editor-shell[data-html-deck-editor-ui] .editor-help-close {
       display: inline-grid;
       place-items: center;
       width: 34px;
@@ -543,7 +569,7 @@
       font: 700 20px/1 var(--font-body, system-ui, -apple-system, BlinkMacSystemFont, "Segoe UI", sans-serif);
     }
 
-    .editor-help-body {
+    .editor-shell[data-html-deck-editor-ui] .editor-help-body {
       display: grid;
       gap: 16px;
       padding: 18px 20px 20px;
@@ -551,35 +577,35 @@
       font: 500 14px/1.55 var(--font-body, system-ui, -apple-system, BlinkMacSystemFont, "Segoe UI", sans-serif);
     }
 
-    .editor-help-section {
+    .editor-shell[data-html-deck-editor-ui] .editor-help-section {
       display: grid;
       gap: 7px;
       padding-top: 14px;
       border-top: 1px solid rgba(17, 17, 17, 0.10);
     }
 
-    .editor-help-section:first-child {
+    .editor-shell[data-html-deck-editor-ui] .editor-help-section:first-child {
       padding-top: 0;
       border-top: 0;
     }
 
-    .editor-help-section h3 {
+    .editor-shell[data-html-deck-editor-ui] .editor-help-section h3 {
       margin: 0;
       color: #111111;
       font: 750 15px/1.25 var(--font-body, system-ui, -apple-system, BlinkMacSystemFont, "Segoe UI", sans-serif);
       letter-spacing: 0;
     }
 
-    .editor-help-section p,
-    .editor-help-section ul {
+    .editor-shell[data-html-deck-editor-ui] .editor-help-section p,
+    .editor-shell[data-html-deck-editor-ui] .editor-help-section ul {
       margin: 0;
     }
 
-    .editor-help-section ul {
+    .editor-shell[data-html-deck-editor-ui] .editor-help-section ul {
       padding-left: 1.2em;
     }
 
-    .editor-help-section li + li {
+    .editor-shell[data-html-deck-editor-ui] .editor-help-section li + li {
       margin-top: 4px;
     }
 
@@ -1059,7 +1085,7 @@
       }
     }
 
-    .editor-frame {
+    .editor-shell[data-html-deck-editor-ui] .editor-frame {
       position: fixed;
       display: none;
       z-index: 850;
@@ -1068,17 +1094,17 @@
       box-shadow: 0 0 0 1px rgba(255, 255, 255, 0.9), 0 12px 30px rgba(17, 17, 17, 0.18);
     }
 
-    .editor-frame.active {
+    .editor-shell[data-html-deck-editor-ui] .editor-frame.active {
       display: block;
     }
 
-    .editor-frame[data-small-selection="true"] {
+    .editor-shell[data-html-deck-editor-ui] .editor-frame[data-small-selection="true"] {
       min-width: 28px;
       min-height: 28px;
       transform: translate(-6px, -6px);
     }
 
-    .editor-guide {
+    .editor-shell[data-html-deck-editor-ui] .editor-guide {
       position: fixed;
       display: none;
       z-index: 840;
@@ -1087,21 +1113,21 @@
       box-shadow: 0 0 0 1px rgba(255, 255, 255, 0.75);
     }
 
-    .editor-guide.active {
+    .editor-shell[data-html-deck-editor-ui] .editor-guide.active {
       display: block;
     }
 
-    .editor-guide.vertical {
+    .editor-shell[data-html-deck-editor-ui] .editor-guide.vertical {
       width: 2px;
       transform: translateX(-1px);
     }
 
-    .editor-guide.horizontal {
+    .editor-shell[data-html-deck-editor-ui] .editor-guide.horizontal {
       height: 2px;
       transform: translateY(-1px);
     }
 
-    .frame-move {
+    .editor-shell[data-html-deck-editor-ui] .frame-move {
       position: absolute;
       left: -2px;
       top: -30px;
@@ -1118,7 +1144,7 @@
       border-radius: 6px 6px 0 0;
     }
 
-    .frame-delete {
+    .editor-shell[data-html-deck-editor-ui] .frame-delete {
       position: absolute;
       top: -40px;
       right: -2px;
@@ -1136,14 +1162,14 @@
       pointer-events: auto;
     }
 
-    .frame-delete:hover,
-    .frame-delete:focus-visible {
+    .editor-shell[data-html-deck-editor-ui] .frame-delete:hover,
+    .editor-shell[data-html-deck-editor-ui] .frame-delete:focus-visible {
       background: #8f1d14;
       outline: 2px solid rgba(255, 255, 255, 0.95);
       outline-offset: 2px;
     }
 
-    .frame-resize {
+    .editor-shell[data-html-deck-editor-ui] .frame-resize {
       position: absolute;
       right: -8px;
       bottom: -8px;
@@ -1155,8 +1181,8 @@
       pointer-events: auto;
     }
 
-    .edit-toggle.show,
-    .edit-toggle.active {
+    .edit-toggle[data-html-deck-editor-ui].show,
+    .edit-toggle[data-html-deck-editor-ui].active {
       opacity: 1;
       pointer-events: auto;
     }
@@ -1199,13 +1225,13 @@
     }
 
     @media (max-width: 960px) {
-      .editor-toolbar {
+      .editor-shell[data-html-deck-editor-ui] .editor-toolbar {
         top: 8px;
         left: 8px;
         right: 8px;
       }
 
-      .editor-slides {
+      .editor-shell[data-html-deck-editor-ui] .editor-slides {
         top: 68px;
         left: 8px;
         right: 8px;
@@ -1217,17 +1243,17 @@
         overflow-y: hidden;
       }
 
-      .slide-rail-list {
+      .editor-shell[data-html-deck-editor-ui] .slide-rail-list {
         display: flex;
         gap: 8px;
       }
 
-      .slide-chip {
+      .editor-shell[data-html-deck-editor-ui] .slide-chip {
         width: 156px;
         min-width: 156px;
       }
 
-      .editor-panel {
+      .editor-shell[data-html-deck-editor-ui] .editor-panel {
         top: auto;
         left: 8px;
         right: 8px;
@@ -1240,46 +1266,46 @@
         -webkit-overflow-scrolling: touch;
       }
 
-      .inspector-section {
+      .editor-shell[data-html-deck-editor-ui] .inspector-section {
         min-width: 0;
         padding: 10px 0;
         border-top: 0;
       }
 
-      .inspector-section + .inspector-section {
+      .editor-shell[data-html-deck-editor-ui] .inspector-section + .inspector-section {
         border-top: 1px solid rgba(17, 17, 17, 0.10);
       }
 
-      .editor-textarea {
+      .editor-shell[data-html-deck-editor-ui] .editor-textarea {
         min-height: 72px;
       }
 
-      .field-grid {
+      .editor-shell[data-html-deck-editor-ui] .field-grid {
         grid-template-columns: 1fr;
       }
 
-      .inspector-actions {
+      .editor-shell[data-html-deck-editor-ui] .inspector-actions {
         grid-template-columns: 1fr;
       }
 
-      .file-picker-row {
+      .editor-shell[data-html-deck-editor-ui] .file-picker-row {
         grid-template-columns: 1fr;
       }
 
-      .file-name {
+      .editor-shell[data-html-deck-editor-ui] .file-name {
         min-height: 32px;
       }
 
-      .editor-panel .editor-title:first-child {
+      .editor-shell[data-html-deck-editor-ui] .editor-panel .editor-title:first-child {
         margin-top: 2px;
       }
 
-      .shape-menu {
+      .editor-shell[data-html-deck-editor-ui] .shape-menu {
         top: var(--shape-menu-top, 60px);
         width: calc(100vw - 24px);
       }
 
-      .shape-menu .shape-choice {
+      .editor-shell[data-html-deck-editor-ui] .shape-menu .shape-choice {
         white-space: nowrap;
       }
     }
