@@ -1,0 +1,20 @@
+{
+  "name": "html-deck-editor-core",
+  "version": "0.1.3",
+  "private": false,
+  "type": "module",
+  "description": "Core converter and editor runtime for editable HTML decks.",
+  "scripts": {
+    "test": "vitest run",
+    "typecheck": "tsc -b"
+  },
+  "dependencies": {
+    "jszip": "^3.10.1"
+  },
+  "devDependencies": {
+    "jsdom": "^26.1.0",
+    "vite": "^7.0.0",
+    "vitest": "^3.2.4",
+    "typescript": "^5.8.3"
+  }
+}

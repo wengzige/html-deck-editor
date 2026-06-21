@@ -17,5 +17,5 @@
     "noEmit": true,
     "jsx": "react-jsx"
   },
-  "include": ["src"]
+  "include": ["src/lib", "src/runtime", "src/test", "src/types", "src/vite-env.d.ts"]
 }
