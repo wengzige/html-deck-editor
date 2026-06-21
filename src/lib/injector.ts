@@ -281,12 +281,24 @@ function ensureRuntimeMount(doc: Document): void {
   const script = doc.createElement("script");
   script.setAttribute(marker, RUNTIME_VERSION);
   script.textContent = `
-    window.addEventListener("DOMContentLoaded", function () {
-      if (!document.getElementById("deckStage") && !document.querySelector("[data-html-deck-editor-stage], .deck-stage, #deck")) return;
-      if (window.HtmlDeckEditor && !window.editor) {
-        window.editor = window.HtmlDeckEditor.mount();
+    (function () {
+      function mountHtmlDeckEditor() {
+        if (!document.getElementById("deckStage") && !document.querySelector("[data-html-deck-editor-stage], .deck-stage, #deck")) return;
+        if (!window.HtmlDeckEditor || window.__htmlDeckEditorMounted) return;
+        try {
+          window.editor = window.HtmlDeckEditor.mount();
+          window.__htmlDeckEditorMounted = true;
+        } catch (error) {
+          console.error("HtmlDeckEditor failed to mount.", error);
+        }
       }
-    });
+      if (document.readyState === "loading") {
+        window.addEventListener("DOMContentLoaded", mountHtmlDeckEditor, { once: true });
+      } else {
+        mountHtmlDeckEditor();
+      }
+      window.addEventListener("load", mountHtmlDeckEditor, { once: true });
+    })();
   `;
   doc.body.appendChild(script);
 }

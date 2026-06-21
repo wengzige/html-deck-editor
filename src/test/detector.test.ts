@@ -204,6 +204,22 @@ describe("runtime injection", () => {
     expect(html).toContain('href="#save" data-keep="save"');
   });
 
+  it("mounts the editor even when the user page already defines window.editor", () => {
+    const source = `
+      <main>
+        <section><h1>One</h1><p>Enough text here</p></section>
+        <section><h1>Two</h1><p>Enough text here</p></section>
+      </main>
+      <script>window.editor = { source: "user-app" };</script>
+    `;
+    const report = detectDeck(input([file("index.html", source)]));
+    const html = rewriteHtml(source, report);
+
+    expect(html).toContain("window.__htmlDeckEditorMounted");
+    expect(html).toContain("window.editor = window.HtmlDeckEditor.mount();");
+    expect(html).not.toContain("!window.editor");
+  });
+
   it("converts a simple single-file deck into a downloadable zip blob", async () => {
     const result = await convertInput(input([
       file("index.html", "<main><section><h1>One</h1><p>Enough text here</p></section><section><h1>Two</h1><p>Enough text here</p></section></main>")
