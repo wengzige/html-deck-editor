@@ -262,6 +262,7 @@ describe("editor runtime", () => {
     expect(y).toBeGreaterThanOrEqual(76);
     expect(scale).toBeLessThan(1);
     expect(document.querySelector(".slide")?.hasAttribute("data-html-deck-editor-current")).toBe(true);
+    expect(document.querySelector(".slide")?.hasAttribute("data-html-deck-editor-page")).toBe(true);
   });
 
   it("keeps preserved horizontal slides addressable in edit mode without removing later pages", () => {

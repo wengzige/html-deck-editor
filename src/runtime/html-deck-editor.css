@@ -66,6 +66,10 @@
     body.editing [data-html-deck-editor-stage="preserve"] [data-html-deck-editor-page][data-html-deck-editor-current] {
       visibility: visible !important;
       pointer-events: auto;
+      outline-style: dashed;
+      outline-width: 2px;
+      outline-color: rgba(17, 17, 17, 0.48);
+      outline-offset: 8px;
     }
 
     .editor-shell[data-html-deck-editor-ui] .editor-toolbar,
