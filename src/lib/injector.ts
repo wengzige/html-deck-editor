@@ -35,6 +35,8 @@ const legacyEditorRootSelectors = [
   "#visualEditor"
 ];
 
+const forcedHiddenSlideClasses = ["hidden", "is-hidden", "d-none", "invisible", "opacity-0"];
+
 export type ConvertProgressEvent = {
   stage: "detect" | "rewrite" | "runtime" | "zip";
   percent: number;
@@ -140,12 +142,13 @@ function ensureTitle(doc: Document): void {
 
 function prepareAdaptableStage(doc: Document, report: DetectionReport): void {
   const existingStage = doc.querySelector("deck-stage#deckStage, #deckStage, .deck-stage, [data-html-deck-editor-stage]");
-  if (existingStage) return;
-
   const sourceSlides = selectSlideCandidates(doc, report);
   if (sourceSlides.length < 2) return;
 
+  if (existingStage && existingStageContainsSourceSlides(existingStage, sourceSlides)) return;
+
   sourceSlides.forEach((source, index) => {
+    clearForcedHiddenSlideState(source);
     source.classList.add("slide");
     if (index === 0 && !source.classList.contains("active") && !source.classList.contains("visible")) {
       source.classList.add("active", "visible");
@@ -284,6 +287,28 @@ function topLevelElements(elements: Element[]): Element[] {
 function directChildren(parent: Element | null, selector: string): Element[] {
   if (!parent) return [];
   return Array.from(parent.children).filter((child) => child.matches(selector));
+}
+
+function slideElementsInStage(stage: Element): Element[] {
+  const directSlides = directChildren(stage, ".slide");
+  return directSlides.length ? directSlides : topLevelElements(Array.from(stage.querySelectorAll(".slide")));
+}
+
+function existingStageContainsSourceSlides(stage: Element, sourceSlides: Element[]): boolean {
+  const stageSlides = slideElementsInStage(stage);
+  if (stageSlides.length < 2 || stageSlides.length !== sourceSlides.length) return false;
+  const sourceSlideSet = new Set(sourceSlides);
+  return stageSlides.every((slide) => sourceSlideSet.has(slide));
+}
+
+function clearForcedHiddenSlideState(source: Element): void {
+  source.removeAttribute("hidden");
+  if (source.getAttribute("aria-hidden") === "true") source.removeAttribute("aria-hidden");
+  forcedHiddenSlideClasses.forEach((className) => source.classList.remove(className));
+  if (!(source instanceof HTMLElement)) return;
+  if (source.style.display === "none") source.style.removeProperty("display");
+  if (source.style.visibility === "hidden") source.style.removeProperty("visibility");
+  if (Number.parseFloat(source.style.opacity || "") === 0) source.style.removeProperty("opacity");
 }
 
 function hasEnoughText(section: Element): boolean {

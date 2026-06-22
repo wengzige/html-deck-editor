@@ -194,6 +194,32 @@ describe("runtime injection", () => {
     expect(html).toContain("window.originalNavigation = true;");
   });
 
+  it("does not treat an incidental deck-stage page as the whole editor stage", () => {
+    const source = `
+      <main>
+        <section class="deck-stage"><h1>One</h1><p>Enough text here</p></section>
+        <section class="deck-stage hidden" hidden style="display: none; visibility: hidden; opacity: 0;">
+          <h1>Two</h1><p>Enough text here</p>
+        </section>
+      </main>
+    `;
+    const report = detectDeck(input([file("index.html", source)]));
+    const html = rewriteHtml(source, report);
+    const doc = new DOMParser().parseFromString(html, "text/html");
+    const stage = doc.getElementById("deckStage") as HTMLElement;
+    const directSlides = Array.from(stage.children).filter((child) => child.classList.contains("slide"));
+
+    expect(report.status).toBe("adaptable");
+    expect(stage.tagName.toLowerCase()).toBe("main");
+    expect(stage.getAttribute("data-html-deck-editor-stage")).toBe("preserve");
+    expect(directSlides).toHaveLength(2);
+    expect(directSlides[1].hasAttribute("hidden")).toBe(false);
+    expect(directSlides[1].classList.contains("hidden")).toBe(false);
+    expect((directSlides[1] as HTMLElement).style.display).toBe("");
+    expect((directSlides[1] as HTMLElement).style.visibility).toBe("");
+    expect((directSlides[1] as HTMLElement).style.opacity).toBe("");
+  });
+
   it("repairs escaped slides back into an explicit deck container", () => {
     const source = `
       <div id="deck">

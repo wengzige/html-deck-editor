@@ -44,6 +44,7 @@
     { value: "#7c3aed", label: "紫色" },
     { value: "#0f172a", label: "深蓝灰" }
   ];
+  const FORCED_HIDDEN_SLIDE_CLASSES = ["hidden", "is-hidden", "d-none", "invisible", "opacity-0"];
 
   const EDITOR_HTML = `
 <div class="edit-hotzone" data-html-deck-editor-ui aria-hidden="true"></div>
@@ -327,6 +328,18 @@
     return elements.filter((element) => !elements.some((other) => other !== element && other.contains(element)));
   }
 
+  function clearForcedHiddenSlideState(slide) {
+    if (!slide) return;
+    slide.removeAttribute("hidden");
+    if (slide.getAttribute("aria-hidden") === "true") slide.removeAttribute("aria-hidden");
+    FORCED_HIDDEN_SLIDE_CLASSES.forEach((className) => slide.classList.remove(className));
+    if (slide.style) {
+      if (slide.style.display === "none") slide.style.removeProperty("display");
+      if (slide.style.visibility === "hidden") slide.style.removeProperty("visibility");
+      if (Number.parseFloat(slide.style.opacity || "") === 0) slide.style.removeProperty("opacity");
+    }
+  }
+
   function normalizeSlideIndex(index, slides) {
     const count = slides?.length || 0;
     if (!count) return 0;
@@ -408,6 +421,7 @@
     const current = normalizeSlideIndex(index, slides);
     slides.forEach((slide, i) => {
       slide.setAttribute("data-html-deck-editor-page", "");
+      if (i === current) clearForcedHiddenSlideState(slide);
       slide.toggleAttribute("data-html-deck-editor-current", i === current);
     });
     return current;
@@ -504,6 +518,7 @@
     const slides = stageSlides(stage);
     slides.forEach((slide, index) => {
       const isFirst = index === 0;
+      if (isFirst) clearForcedHiddenSlideState(slide);
       slide.classList.toggle("active", isFirst);
       slide.classList.toggle("visible", isFirst);
       slide.toggleAttribute("data-deck-active", isFirst);

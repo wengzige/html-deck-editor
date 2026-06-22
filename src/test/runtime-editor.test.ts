@@ -309,6 +309,35 @@ describe("editor runtime", () => {
     expect(playSlide).toHaveBeenCalledWith(1);
   });
 
+  it("reveals slides that were originally hidden when navigating in the editor", () => {
+    document.body.innerHTML = `
+      <div id="deck" data-html-deck-editor-stage="preserve" data-html-deck-editor-navigation="horizontal">
+        <section class="slide active"><h1>One</h1></section>
+        <section class="slide hidden opacity-0 invisible" hidden style="display:none;visibility:hidden;opacity:0">
+          <h1>Two</h1>
+        </section>
+      </div>
+    `;
+    const sourceSlides = Array.from(document.querySelectorAll(".slide")) as HTMLElement[];
+    sourceSlides.forEach((slide, index) => {
+      Object.defineProperty(slide, "offsetLeft", { value: index * 1440, configurable: true });
+    });
+
+    installRuntime();
+    const editor = (window as any).FrontendSlidesEditor.mount();
+    editor.toggleEditMode(true);
+    editor.presentation.showSlide(1);
+
+    expect(sourceSlides[1].hasAttribute("hidden")).toBe(false);
+    expect(sourceSlides[1].classList.contains("hidden")).toBe(false);
+    expect(sourceSlides[1].classList.contains("opacity-0")).toBe(false);
+    expect(sourceSlides[1].classList.contains("invisible")).toBe(false);
+    expect(sourceSlides[1].style.display).toBe("");
+    expect(sourceSlides[1].style.visibility).toBe("");
+    expect(sourceSlides[1].style.opacity).toBe("");
+    expect(sourceSlides[1].hasAttribute("data-html-deck-editor-current")).toBe(true);
+  });
+
   it("uses actual slide offsets for preserved horizontal decks that are not one viewport wide", () => {
     document.body.innerHTML = `
       <div id="deck" data-html-deck-editor-stage="preserve" data-html-deck-editor-navigation="horizontal" style="transform:translateX(-1800px)">
