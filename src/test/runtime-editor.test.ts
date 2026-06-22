@@ -338,6 +338,46 @@ describe("editor runtime", () => {
     expect(sourceSlides[1].hasAttribute("data-html-deck-editor-current")).toBe(true);
   });
 
+  it("binds editable text after navigating to a slide that was originally hidden", () => {
+    document.body.innerHTML = `
+      <div id="deck" data-html-deck-editor-stage="preserve" data-html-deck-editor-navigation="horizontal">
+        <section class="slide active"><h1>One</h1></section>
+        <section class="slide hidden opacity-0 invisible" hidden style="display:none;visibility:hidden;opacity:0">
+          <h1 id="hiddenTitle">Hidden title</h1>
+        </section>
+      </div>
+    `;
+    const sourceSlides = Array.from(document.querySelectorAll(".slide")) as HTMLElement[];
+    sourceSlides.forEach((slide, index) => {
+      Object.defineProperty(slide, "offsetLeft", { value: index * 1440, configurable: true });
+    });
+    const hiddenTitle = document.getElementById("hiddenTitle") as HTMLElement;
+    hiddenTitle.getBoundingClientRect = () => {
+      const hiddenSlide = sourceSlides[1];
+      if (
+        hiddenSlide.hasAttribute("hidden") ||
+        hiddenSlide.classList.contains("hidden") ||
+        hiddenSlide.style.display === "none"
+      ) {
+        return rect({ left: 0, top: 0, width: 0, height: 0 });
+      }
+      return rect({ left: 100, top: 100, width: 620, height: 110 });
+    };
+
+    installRuntime();
+    const editor = (window as any).FrontendSlidesEditor.mount();
+    editor.toggleEditMode(true);
+
+    expect(hiddenTitle.dataset.editorKind).toBeUndefined();
+
+    editor.presentation.showSlide(1);
+    hiddenTitle.click();
+
+    expect(hiddenTitle.dataset.editorKind).toBe("text");
+    expect(editor.selected).toBe(hiddenTitle);
+    expect(hiddenTitle.classList.contains("editor-selected")).toBe(true);
+  });
+
   it("uses actual slide offsets for preserved horizontal decks that are not one viewport wide", () => {
     document.body.innerHTML = `
       <div id="deck" data-html-deck-editor-stage="preserve" data-html-deck-editor-navigation="horizontal" style="transform:translateX(-1800px)">

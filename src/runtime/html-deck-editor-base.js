@@ -1486,6 +1486,12 @@
         this.getEditableElements().forEach((element) => this.bindElement(element));
       }
 
+      refreshEditableElements() {
+        this.prepareEditableElements();
+        this.prepareEditableIds();
+        this.bindEditableEvents();
+      }
+
       bindElement(element) {
         if (element.dataset.editorBound) return;
         element.dataset.editorBound = "true";
@@ -1827,6 +1833,7 @@
         this.showButtons();
         if (this.isActive) {
           this.syncCurrentSlideFromHost();
+          this.refreshEditableElements();
           this.motionHold = false;
           window.clearTimeout(this.motionPreviewTimer);
           this.motionPreviewTimer = null;
@@ -3298,6 +3305,10 @@
         this.lastSlideReplay = { index, at: now };
         this.stopMotionFrameTracking();
         const slide = this.presentation.slides[index];
+        if (this.isActive) {
+          this.refreshEditableElements();
+          this.renderSlideRail();
+        }
         if (this.isActive && this.selected && slide && this.closestSlide(this.selected) !== slide) {
           this.clearSelection();
         }
