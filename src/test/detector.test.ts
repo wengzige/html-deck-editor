@@ -62,6 +62,30 @@ describe("deck detection", () => {
     expect(report.slideCount).toBe(2);
   });
 
+  it("detects WebSlides and Bespoke style presentation containers", () => {
+    const webslides = detectDeck(input([
+      file("index.html", "<article id=\"webslides\"><section><h1>One</h1><p>Enough text here</p></section><section><h1>Two</h1><p>Enough text here</p></section></article>")
+    ]));
+    const bespoke = detectDeck(input([
+      file("index.html", "<article id=\"presentation\"><section><h1>One</h1><p>Enough text here</p></section><section><h1>Two</h1><p>Enough text here</p></section></article>")
+    ]));
+
+    expect(webslides.status).toBe("adaptable");
+    expect(webslides.slideCount).toBe(2);
+    expect(bespoke.status).toBe("adaptable");
+    expect(bespoke.slideCount).toBe(2);
+  });
+
+  it("detects impress.js step decks", () => {
+    const report = detectDeck(input([
+      file("index.html", "<div id=\"impress\"><div class=\"step\" data-x=\"0\"><h1>One</h1><p>Enough text here</p></div><div class=\"step\" data-x=\"1000\"><h1>Two</h1><p>Enough text here</p></div></div>")
+    ]));
+
+    expect(report.status).toBe("adaptable");
+    expect(report.sourceKind).toBe("generic-section");
+    expect(report.slideCount).toBe(2);
+  });
+
   it("detects Reveal.js decks as adaptable", () => {
     const report = detectDeck(input([
       file("index.html", "<div class=\"reveal\"><div class=\"slides\"><section>One</section><section>Two</section></div></div>")
@@ -119,6 +143,14 @@ describe("deck detection", () => {
     const report = detectDeck(input([
       file("index.html", "<article><h1>Blog</h1><p>Just one normal page.</p></article>")
     ]));
+    expect(report.status).toBe("unsupported");
+  });
+
+  it("does not treat ordinary article lists as presentation decks", () => {
+    const report = detectDeck(input([
+      file("index.html", "<main><article><h1>Post one</h1><p>Enough text here for a normal article list.</p></article><article><h1>Post two</h1><p>Enough text here for a normal article list.</p></article></main>")
+    ]));
+
     expect(report.status).toBe("unsupported");
   });
 });
@@ -218,6 +250,30 @@ describe("runtime injection", () => {
     expect((directSlides[1] as HTMLElement).style.display).toBe("");
     expect((directSlides[1] as HTMLElement).style.visibility).toBe("");
     expect((directSlides[1] as HTMLElement).style.opacity).toBe("");
+  });
+
+  it("adapts public framework deck containers without dropping source attributes", () => {
+    const source = `
+      <div class="fallback-message">Keep fallback</div>
+      <div id="impress" data-width="1920" data-height="1080">
+        <div id="intro" class="step" data-x="0" data-y="0"><h1>One</h1><p>Enough text here</p></div>
+        <div id="detail" class="step" data-x="1000" data-y="0"><h1>Two</h1><p>Enough text here</p></div>
+      </div>
+      <script>impress().init();</script>
+    `;
+    const report = detectDeck(input([file("index.html", source)]));
+    const html = rewriteHtml(source, report);
+    const doc = new DOMParser().parseFromString(html, "text/html");
+    const stage = doc.getElementById("impress") as HTMLElement;
+    const slides = Array.from(stage.children).filter((child) => child.classList.contains("slide")) as HTMLElement[];
+
+    expect(report.status).toBe("adaptable");
+    expect(stage.getAttribute("data-html-deck-editor-stage")).toBe("preserve");
+    expect(slides).toHaveLength(2);
+    expect(slides[0].classList.contains("step")).toBe(true);
+    expect(slides[1].getAttribute("data-x")).toBe("1000");
+    expect(doc.querySelector(".fallback-message")).toBeTruthy();
+    expect(html).toContain("impress().init();");
   });
 
   it("repairs escaped slides back into an explicit deck container", () => {

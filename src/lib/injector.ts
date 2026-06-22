@@ -35,6 +35,29 @@ const legacyEditorRootSelectors = [
   "#visualEditor"
 ];
 
+const explicitDeckParentSelector = [
+  "#deck",
+  ".deck",
+  ".slides",
+  "#slides",
+  "[data-deck]",
+  "[data-slides]",
+  "#webslides",
+  "#presentation",
+  ".presentation",
+  "#impress",
+  ".impress"
+].join(", ");
+const explicitDeckSlideSelector = [
+  "section",
+  "article",
+  ".slide",
+  ".step",
+  "[data-slide]",
+  "[data-page]",
+  ".page",
+  ".screen"
+].join(", ");
 const forcedHiddenSlideClasses = ["hidden", "is-hidden", "d-none", "invisible", "opacity-0"];
 
 export type ConvertProgressEvent = {
@@ -182,10 +205,16 @@ function findReusableStage(sourceSlides: Element[]): Element | null {
     "#deck",
     ".deck",
     ".slides",
+    "#slides",
     "main",
     "[role='main']",
     "[data-deck]",
-    "[data-slides]"
+    "[data-slides]",
+    "#webslides",
+    "#presentation",
+    ".presentation",
+    "#impress",
+    ".impress"
   ].join(", ");
   if (parent.matches(selector)) return parent;
 
@@ -196,12 +225,11 @@ function findReusableStage(sourceSlides: Element[]): Element | null {
 }
 
 function findRepairableDeckStage(sourceSlides: Element[]): Element | null {
-  const explicitDeckSelector = "#deck, .deck, .slides, [data-deck], [data-slides]";
   const slideSet = new Set(sourceSlides);
   const parents = Array.from(new Set(sourceSlides.map((slide) => slide.parentElement).filter(Boolean))) as Element[];
   const firstParent = sourceSlides[0]?.parentElement;
   const candidates = parents
-    .filter((parent) => parent.matches(explicitDeckSelector))
+    .filter((parent) => parent.matches(explicitDeckParentSelector))
     .sort((a, b) => (a === firstParent ? -1 : 0) - (b === firstParent ? -1 : 0));
 
   return candidates.find((parent) => {
@@ -236,7 +264,7 @@ function markPreservedStage(stage: Element, sourceSlides: Element[]): void {
 }
 
 function shouldUseHorizontalNavigation(stage: Element, sourceSlides: Element[]): boolean {
-  if (stage.matches("#deck, .deck, [data-deck]")) return true;
+  if (stage.matches(explicitDeckParentSelector)) return true;
   const elementChildren = Array.from(stage.children);
   const slideSet = new Set(sourceSlides);
   return elementChildren.length === sourceSlides.length && elementChildren.every((child) => slideSet.has(child));
@@ -265,19 +293,22 @@ function wrapSlidesInPlace(doc: Document, sourceSlides: Element[]): void {
 function selectSlideCandidates(doc: Document, report: DetectionReport): Element[] {
   if (report.sourceKind === "reveal") return directChildren(doc.querySelector(".reveal .slides"), "section");
   if (report.sourceKind === "section-slide") return selectTopLevelSlides(doc);
-  const containerSections = Array.from(doc.body.querySelectorAll([
-    "#deck > section",
-    ".deck > section",
-    ".slides > section",
-    "[data-deck] > section",
-    "[data-slides] > section"
-  ].join(", "))).filter(hasEnoughText);
-  if (containerSections.length >= 2) return containerSections;
+  const explicitSlides = selectExplicitContainerSlides(doc);
+  if (explicitSlides.length >= 2) return explicitSlides;
   return Array.from(doc.body.querySelectorAll("main > section, body > section")).filter(hasEnoughText);
 }
 
 function selectTopLevelSlides(doc: Document): Element[] {
   return topLevelElements(Array.from(doc.body.querySelectorAll("section.slide, .slide")));
+}
+
+function selectExplicitContainerSlides(doc: Document): Element[] {
+  const parents = Array.from(doc.body.querySelectorAll(explicitDeckParentSelector));
+  for (const parent of parents) {
+    const slides = directChildren(parent, explicitDeckSlideSelector).filter(hasEnoughText);
+    if (slides.length >= 2) return slides;
+  }
+  return [];
 }
 
 function topLevelElements(elements: Element[]): Element[] {

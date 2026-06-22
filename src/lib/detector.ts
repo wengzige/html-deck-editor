@@ -2,6 +2,29 @@ import type { DetectionReport, LoadedInput, VirtualFile } from "../types/deck";
 import { bytesToText } from "./text";
 
 const HTML_MIME_HINT = /\.(html?|xhtml)$/i;
+const explicitDeckParentSelector = [
+  "#deck",
+  ".deck",
+  ".slides",
+  "#slides",
+  "[data-deck]",
+  "[data-slides]",
+  "#webslides",
+  "#presentation",
+  ".presentation",
+  "#impress",
+  ".impress"
+].join(", ");
+const explicitDeckSlideSelector = [
+  "section",
+  "article",
+  ".slide",
+  ".step",
+  "[data-slide]",
+  "[data-page]",
+  ".page",
+  ".screen"
+].join(", ");
 
 export function findIndexFile(files: VirtualFile[]): VirtualFile | null {
   const htmlFiles = files.filter((file) => HTML_MIME_HINT.test(file.path));
@@ -106,16 +129,19 @@ export function detectDeck(input: LoadedInput): DetectionReport {
 }
 
 function selectGenericSections(doc: Document): Element[] {
-  const containerSections = Array.from(doc.body.querySelectorAll([
-    "#deck > section",
-    ".deck > section",
-    ".slides > section",
-    "[data-deck] > section",
-    "[data-slides] > section"
-  ].join(", "))).filter(hasEnoughText);
-  if (containerSections.length >= 2) return containerSections;
+  const explicitSlides = selectExplicitContainerSlides(doc);
+  if (explicitSlides.length >= 2) return explicitSlides;
 
   return Array.from(doc.body.querySelectorAll("main > section, body > section")).filter(hasEnoughText);
+}
+
+function selectExplicitContainerSlides(doc: Document): Element[] {
+  const parents = Array.from(doc.body.querySelectorAll(explicitDeckParentSelector));
+  for (const parent of parents) {
+    const slides = directChildren(parent, explicitDeckSlideSelector).filter(hasEnoughText);
+    if (slides.length >= 2) return slides;
+  }
+  return [];
 }
 
 function selectTopLevelSlides(doc: Document): Element[] {
