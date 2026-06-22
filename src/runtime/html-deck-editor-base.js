@@ -842,8 +842,8 @@
         });
       }
 
-      withEditVisibleElements(callback) {
-        const selector = [
+      originalMotionSelector() {
+        return [
           "[data-anim]",
           ".row-fill",
           ".tl-node",
@@ -857,6 +857,10 @@
           ".card-accent",
           ".card-ink"
         ].join(", ");
+      }
+
+      withEditVisibleElements(callback) {
+        const selector = this.originalMotionSelector();
         const changed = [];
         this.stage.querySelectorAll(selector).forEach((element) => {
           changed.push({ element, opacity: element.style.getPropertyValue("--html-deck-editor-edit-opacity") });
@@ -1793,21 +1797,17 @@
         if (!this.isActive) return;
         const slide = this.presentation.slides[index];
         if (!slide) return;
-        const selector = [
-          "[data-anim]",
-          ".row-fill",
-          ".tl-node",
-          ".stack-block",
-          ".bar-tower",
-          ".sub-card",
-          ".col",
-          ".vrule",
-          ".kpi-cell",
-          ".card-fill",
-          ".card-accent",
-          ".card-ink"
-        ].join(", ");
-        slide.querySelectorAll(selector).forEach((node) => {
+        this.stage.querySelectorAll("[data-html-deck-editor-motion-hold]").forEach((node) => {
+          node.removeAttribute("data-html-deck-editor-motion-hold");
+          node.style.removeProperty("--html-deck-editor-edit-opacity");
+        });
+        const editableTextElements = this.getEditableElements().filter((element) => (
+          this.closestSlide(element) === slide && this.isTextElement(element)
+        ));
+        slide.querySelectorAll(this.originalMotionSelector()).forEach((node) => {
+          const shouldHold = editableTextElements.some((element) => node === element || node.contains(element));
+          if (!shouldHold) return;
+          node.setAttribute("data-html-deck-editor-motion-hold", "");
           node.style.setProperty("--html-deck-editor-edit-opacity", "1");
         });
       }
@@ -1834,6 +1834,7 @@
         if (this.isActive) {
           this.syncCurrentSlideFromHost();
           this.refreshEditableElements();
+          this.revealActiveSlideForEditing(this.presentation.currentSlide);
           this.motionHold = false;
           window.clearTimeout(this.motionPreviewTimer);
           this.motionPreviewTimer = null;
@@ -3307,6 +3308,7 @@
         const slide = this.presentation.slides[index];
         if (this.isActive) {
           this.refreshEditableElements();
+          this.revealActiveSlideForEditing(index);
           this.renderSlideRail();
         }
         if (this.isActive && this.selected && slide && this.closestSlide(this.selected) !== slide) {
@@ -4142,6 +4144,10 @@
         });
         root.querySelectorAll("[contenteditable]").forEach((node) => node.removeAttribute("contenteditable"));
         root.querySelectorAll("[data-editor-bound]").forEach((node) => delete node.dataset.editorBound);
+        root.querySelectorAll("[data-html-deck-editor-motion-hold]").forEach((node) => {
+          node.removeAttribute("data-html-deck-editor-motion-hold");
+          node.style.removeProperty("--html-deck-editor-edit-opacity");
+        });
         root.querySelectorAll("[data-editor-auto], [data-editor-kind], [data-editor-small]").forEach((node) => {
           delete node.dataset.editorAuto;
           delete node.dataset.editorKind;
@@ -4309,6 +4315,10 @@
           delete node.dataset.editId;
           delete node.dataset.inlineImage;
           delete node.dataset.originalMotionClasses;
+        });
+        clone.querySelectorAll("[data-html-deck-editor-motion-hold]").forEach((node) => {
+          node.removeAttribute("data-html-deck-editor-motion-hold");
+          node.style.removeProperty("--html-deck-editor-edit-opacity");
         });
         clone.querySelectorAll("[data-editor-auto], [data-editor-kind], [data-editor-small]").forEach((node) => {
           delete node.dataset.editorAuto;

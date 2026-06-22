@@ -192,6 +192,36 @@ describe("editor runtime", () => {
     expect(wrapper.dataset.editorKind).toBeUndefined();
   });
 
+  it("keeps decorative background motion running while holding text animation wrappers for editing", () => {
+    document.body.innerHTML = `
+      <div id="deckStage" class="deck-stage">
+        <section class="slide active">
+          <div id="background" class="reveal" data-anim="background" data-editable-box style="background:#111;animation:drift 8s linear infinite"></div>
+          <div id="wrapper" data-anim="line" style="opacity:0">
+            <h2 id="headline" style="font-size:82px">Animated title</h2>
+          </div>
+        </section>
+      </div>
+    `;
+    const background = document.getElementById("background") as HTMLElement;
+    const wrapper = document.getElementById("wrapper") as HTMLElement;
+    const headline = document.getElementById("headline") as HTMLElement;
+    background.getBoundingClientRect = () => rect({ left: 0, top: 0, width: 1440, height: 900 });
+    wrapper.getBoundingClientRect = () => rect({ left: 100, top: 100, width: 900, height: 120 });
+    headline.getBoundingClientRect = () => rect({ left: 100, top: 112, width: 720, height: 92 });
+
+    installRuntime();
+    const editor = (window as any).FrontendSlidesEditor.mount();
+    editor.toggleEditMode(true);
+
+    expect(background.dataset.editorKind).toBe("box");
+    expect(headline.dataset.editorKind).toBe("text");
+    expect(background.hasAttribute("data-html-deck-editor-motion-hold")).toBe(false);
+    expect(background.style.getPropertyValue("--html-deck-editor-edit-opacity")).toBe("");
+    expect(wrapper.hasAttribute("data-html-deck-editor-motion-hold")).toBe(true);
+    expect(wrapper.style.getPropertyValue("--html-deck-editor-edit-opacity")).toBe("1");
+  });
+
   it("recognizes compact eyebrow labels as editable text without marking their layout wrapper", () => {
     document.body.innerHTML = `
       <div id="deckStage" class="deck-stage">

@@ -1031,27 +1031,7 @@
       transform: translate(var(--edit-x, 0px), var(--edit-y, 0px)) scale(var(--edit-scale-x, var(--edit-scale, 1)), var(--edit-scale-y, var(--edit-scale, 1))) var(--edit-base-transform, matrix(1, 0, 0, 1, 0, 0)) !important;
     }
 
-    body.editing .reveal,
-    body.editing .reveal-left,
-    body.editing .reveal-scale {
-      opacity: 1 !important;
-      filter: none !important;
-      animation: none !important;
-      transition: none !important;
-    }
-
-    body.editing .slide[data-html-deck-editor-current] [data-anim],
-    body.editing .slide[data-html-deck-editor-current] .row-fill,
-    body.editing .slide[data-html-deck-editor-current] .tl-node,
-    body.editing .slide[data-html-deck-editor-current] .stack-block,
-    body.editing .slide[data-html-deck-editor-current] .bar-tower,
-    body.editing .slide[data-html-deck-editor-current] .sub-card,
-    body.editing .slide[data-html-deck-editor-current] .col,
-    body.editing .slide[data-html-deck-editor-current] .vrule,
-    body.editing .slide[data-html-deck-editor-current] .kpi-cell,
-    body.editing .slide[data-html-deck-editor-current] .card-fill,
-    body.editing .slide[data-html-deck-editor-current] .card-accent,
-    body.editing .slide[data-html-deck-editor-current] .card-ink {
+    body.editing .slide[data-html-deck-editor-current] [data-html-deck-editor-motion-hold] {
       opacity: var(--html-deck-editor-edit-opacity, 1) !important;
       filter: none !important;
       transform: none !important;
