@@ -29,6 +29,159 @@ describe("deck detection", () => {
     expect(report.slideCount).toBe(2);
   });
 
+  it("preserves authored deck-stage controllers instead of upgrading them to the web component", () => {
+    const source = `
+      <style>
+        deck-stage#deckStage { position: absolute; width: 1920px; height: 1080px; transform-origin: 0 0; }
+        #deckStage > .slide { position: absolute; inset: 0; visibility: hidden; }
+        #deckStage > .slide.active, #deckStage > .slide.visible { visibility: visible; }
+      </style>
+      <deck-stage id="deckStage" width="1920" height="1080">
+        <section class="slide active visible"><h1>One</h1></section>
+        <section class="slide"><h1>Two</h1></section>
+      </deck-stage>
+      <script>
+        const stage = document.getElementById("deckStage");
+        function fit() { stage.style.transform = "translate(0px, 0px) scale(0.5)"; }
+        window.addEventListener("resize", fit);
+      </script>
+    `;
+    const report = detectDeck(input([file("index.html", source)]));
+    const html = rewriteHtml(source, report);
+
+    expect(report.status).toBe("ready");
+    expect(html).toContain('data-html-deck-editor-stage="preserve"');
+    expect(html).toContain('function fit()');
+    expect(html).toContain('runtime/html-deck-editor.js');
+    expect(html).not.toContain('src="runtime/deck-stage.js"');
+  });
+
+  it("keeps deck-stage runtime for plain fixed-stage decks without authored controllers", () => {
+    const source = `
+      <deck-stage id="deckStage" width="1920" height="1080">
+        <section class="slide active"><h1>One</h1></section>
+        <section class="slide"><h1>Two</h1></section>
+      </deck-stage>
+    `;
+    const report = detectDeck(input([file("index.html", source)]));
+    const html = rewriteHtml(source, report);
+
+    expect(report.status).toBe("ready");
+    expect(html).not.toContain('data-html-deck-editor-stage="preserve"');
+    expect(html).toContain('src="runtime/deck-stage.js"');
+    expect(html).toContain('src="runtime/html-deck-editor.js"');
+  });
+
+  it("repairs already-editable authored deck-stage controllers without reinjecting deck-stage", () => {
+    const source = `
+      <deck-stage id="deckStage" width="1920" height="1080">
+        <section class="slide active visible"><h1>One</h1></section>
+        <section class="slide"><h1>Two</h1></section>
+      </deck-stage>
+      <script>
+        const stage = document.getElementById("deckStage");
+        const slides = Array.from(stage.querySelectorAll(":scope > section.slide"));
+        function show(index) {
+          slides.forEach((item, itemIndex) => {
+            item.classList.toggle("active", itemIndex === index);
+            item.classList.toggle("visible", itemIndex === index);
+          });
+          stage.style.transform = "translate(0px, 0px) scale(0.5)";
+        }
+      </script>
+      <script data-html-deck-editor-runtime="0.1.4">window.HtmlDeckEditor.mount();</script>
+      <script src="runtime/deck-stage.js" data-html-deck-editor-runtime="0.1.4"></script>
+    `;
+    const report = detectDeck(input([file("index.html", source)]));
+    const html = rewriteHtml(source, report);
+
+    expect(report.status).toBe("already-editable");
+    expect(html).toContain('data-html-deck-editor-stage="preserve"');
+    expect(html).toContain('function show(index)');
+    expect(html).not.toContain('src="runtime/deck-stage.js"');
+  });
+
+  it("keeps prompt-constrained #deck slides on the preserved adaptable path", () => {
+    const source = `
+      <div id="deck" data-deck data-design-width="1920" data-design-height="1080">
+        <section class="slide active visible" data-title="封面">
+          <h1>Prompt friendly deck</h1>
+          <p>Enough editable text for the first slide.</p>
+        </section>
+        <section class="slide" data-title="第二页">
+          <h2>Second page</h2>
+          <p>Enough editable text for the second slide.</p>
+        </section>
+        <section class="slide" data-title="第三页">
+          <h2>Third page</h2>
+          <p>Enough editable text for the third slide.</p>
+        </section>
+      </div>
+    `;
+    const report = detectDeck(input([file("index.html", source)]));
+    const html = rewriteHtml(source, report);
+    const doc = new DOMParser().parseFromString(html, "text/html");
+    const deck = doc.querySelector("#deck");
+
+    expect(report.status).toBe("adaptable");
+    expect(report.slideCount).toBe(3);
+    expect(deck?.getAttribute("data-html-deck-editor-stage")).toBe("preserve");
+    expect(deck?.getAttribute("data-html-deck-editor-navigation")).toBe("horizontal");
+    expect(doc.querySelectorAll("#deck > .slide")).toHaveLength(3);
+    expect(doc.querySelectorAll("body > section.slide, body > .slide")).toHaveLength(0);
+    expect(doc.querySelectorAll("#deck .slide .slide")).toHaveLength(0);
+    expect(html).toContain('src="runtime/html-deck-editor.js"');
+  });
+
+  it("keeps frontend-slides skill decks on the web-component runtime path", () => {
+    const source = `
+      <html>
+        <head>
+          <link rel="stylesheet" href="visual-editor/editor-runtime.css">
+        </head>
+        <body>
+          <deck-stage id="deckStage" width="1920" height="1080">
+            <section class="slide active" data-label="Cover">
+              <h1>Frontend Slides output</h1>
+              <p>Enough editable text for the first page.</p>
+            </section>
+            <section class="slide" data-label="Details">
+              <h2>Details</h2>
+              <p>Enough editable text for the second page.</p>
+            </section>
+          </deck-stage>
+          <script src="deck-stage.js"></script>
+          <script src="visual-editor/editor-runtime.js"></script>
+          <script>
+            class DeckStagePresentationAdapter {
+              constructor(stage) {
+                this.stage = stage;
+              }
+              setEditorInsets(insets) {
+                if (this.stage && typeof this.stage.setEditorInsets === "function") {
+                  this.stage.setEditorInsets(insets);
+                }
+              }
+            }
+            window.presentation = new DeckStagePresentationAdapter(document.getElementById("deckStage"));
+            window.editor = window.FrontendSlidesEditor.mount({ presentation: window.presentation });
+          </script>
+        </body>
+      </html>
+    `;
+    const report = detectDeck(input([file("index.html", source)]));
+    const html = rewriteHtml(source, report);
+
+    expect(report.status).toBe("already-editable");
+    expect(report.slideCount).toBe(2);
+    expect(html).not.toContain('data-html-deck-editor-stage="preserve"');
+    expect(html).toContain('src="deck-stage.js"');
+    expect(html).toContain('src="runtime/deck-stage.js"');
+    expect(html).toContain('src="runtime/html-deck-editor.js"');
+    expect(html).not.toContain("visual-editor/editor-runtime");
+    expect(html).not.toContain("FrontendSlidesEditor.mount({ presentation: window.presentation })");
+  });
+
   it("ignores nested slide-like content inside fixed-stage pages", () => {
     const report = detectDeck(input([
       file("index.html", "<deck-stage id=\"deckStage\"><section class=\"slide active\"><div class=\"slide\">Nested card</div></section><section class=\"slide\"></section></deck-stage>")

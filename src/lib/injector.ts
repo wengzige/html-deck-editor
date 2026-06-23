@@ -146,7 +146,9 @@ export function rewriteHtml(html: string, report: DetectionReport): string {
   ensureTitle(doc);
   removeLegacyEditorArtifacts(doc, { upgradeExistingEditor: report.status === "already-editable" });
 
-  if (report.status === "adaptable") {
+  if ((report.status === "ready" || report.status === "already-editable") && hasAuthoredDeckStageController(doc)) {
+    prepareReadyStage(doc);
+  } else if (report.status === "adaptable") {
     prepareAdaptableStage(doc, report);
   }
 
@@ -161,6 +163,27 @@ function ensureTitle(doc: Document): void {
     title.textContent = "Editable HTML Deck";
     doc.head.appendChild(title);
   }
+}
+
+function prepareReadyStage(doc: Document): void {
+  const stage = doc.querySelector("deck-stage#deckStage, #deckStage, .deck-stage, [data-html-deck-editor-stage]");
+  if (!stage || slideElementsInStage(stage).length < 2) return;
+  stage.setAttribute("data-html-deck-editor-stage", "preserve");
+  if (!stage.id) stage.id = "deckStage";
+  if (!stage.getAttribute("aria-label")) stage.setAttribute("aria-label", "Presentation");
+}
+
+function hasAuthoredDeckStageController(doc: Document): boolean {
+  if (!doc.querySelector("deck-stage#deckStage")) return false;
+  return Array.from(doc.querySelectorAll("script:not([src])")).some((script) => {
+    const source = script.textContent || "";
+    const targetsDeckStage = /getElementById\(["']deckStage["']\)|querySelector\(["']#deckStage["']\)/.test(source);
+    const controlsDeckStage =
+      /style\.transform/.test(source) ||
+      /classList\.toggle\(["'](?:active|visible)["']/.test(source) ||
+      /querySelectorAll\([^)]*section\.slide/.test(source);
+    return targetsDeckStage && controlsDeckStage;
+  });
 }
 
 function prepareAdaptableStage(doc: Document, report: DetectionReport): void {
@@ -368,10 +391,12 @@ function ensureRuntimeLinks(doc: Document): void {
   css.setAttribute(marker, RUNTIME_VERSION);
   doc.head.appendChild(css);
 
-  const deckStage = doc.createElement("script");
-  deckStage.src = "runtime/deck-stage.js";
-  deckStage.setAttribute(marker, RUNTIME_VERSION);
-  doc.body.appendChild(deckStage);
+  if (!doc.querySelector("deck-stage[data-html-deck-editor-stage='preserve']")) {
+    const deckStage = doc.createElement("script");
+    deckStage.src = "runtime/deck-stage.js";
+    deckStage.setAttribute(marker, RUNTIME_VERSION);
+    doc.body.appendChild(deckStage);
+  }
 
   const picker = doc.createElement("script");
   picker.src = "runtime/vanilla-picker.js";

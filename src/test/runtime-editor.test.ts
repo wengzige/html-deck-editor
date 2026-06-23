@@ -295,6 +295,36 @@ describe("editor runtime", () => {
     expect(document.querySelector(".slide")?.hasAttribute("data-html-deck-editor-page")).toBe(true);
   });
 
+  it("lays out preserved native deck-stage tags without requiring the web component API", () => {
+    document.body.innerHTML = `
+      <deck-stage id="deckStage" width="1920" height="1080" data-html-deck-editor-stage="preserve">
+        <section class="slide active visible"><h1>One</h1></section>
+        <section class="slide"><h1>Two</h1></section>
+      </deck-stage>
+    `;
+
+    Element.prototype.getBoundingClientRect = function getBoundingClientRect() {
+      const element = this as HTMLElement;
+      if (element.classList.contains("editor-toolbar")) return rect({ left: 12, top: 12, width: 1416, height: 52 });
+      if (element.classList.contains("editor-slides")) return rect({ left: 12, top: 76, width: 242, height: 810 });
+      if (element.classList.contains("editor-panel")) return rect({ left: 1086, top: 76, width: 342, height: 810 });
+      if (element.id === "deckStage") return rect({ left: 0, top: 0, width: 1920, height: 1080 });
+      if (element.classList.contains("slide")) return rect({ left: 0, top: 0, width: 1920, height: 1080 });
+      return rect({ left: 0, top: 0, width: 100, height: 40 });
+    };
+
+    installRuntime();
+    const editor = (window as any).FrontendSlidesEditor.mount();
+    editor.toggleEditMode(true);
+
+    const stage = document.getElementById("deckStage") as HTMLElement;
+    const scale = Number.parseFloat(stage.style.getPropertyValue("--html-deck-editor-stage-scale"));
+
+    expect(typeof (stage as any).fit).toBe("undefined");
+    expect(scale).toBeGreaterThan(0);
+    expect(scale).toBeLessThan(1);
+  });
+
   it("keeps preserved horizontal slides addressable in edit mode without removing later pages", () => {
     document.body.innerHTML = `
       <div id="deck" data-html-deck-editor-stage="preserve" data-html-deck-editor-navigation="horizontal" style="transform:translateX(-200vw)">

@@ -713,7 +713,7 @@
     const originalScaleStage = typeof presentation.scaleStage === "function" ? presentation.scaleStage.bind(presentation) : null;
     presentation.scaleStage = () => {
       originalScaleStage?.();
-      if (isDeckStageElement(stage)) {
+      if (isDeckStageElement(stage) && typeof stage.fit === "function") {
         stage.fit?.();
         return;
       }
