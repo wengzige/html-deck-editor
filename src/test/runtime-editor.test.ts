@@ -408,6 +408,69 @@ describe("editor runtime", () => {
     expect(hiddenTitle.classList.contains("editor-selected")).toBe(true);
   });
 
+  it("reveals CSS-animated text that starts transparent in imported decks", () => {
+    document.body.innerHTML = `
+      <style>
+        .slide-title {
+          opacity: 0;
+          animation: fadeUp 0.7s 0.3s both;
+        }
+        @keyframes fadeUp {
+          from { opacity: 0; transform: translateY(20px); }
+          to { opacity: 1; transform: translateY(0); }
+        }
+      </style>
+      <div id="slidesWrapper" data-html-deck-editor-stage="preserve" data-html-deck-editor-navigation="horizontal">
+        <div class="slide active"><h1 id="title" class="slide-title">Animated title</h1></div>
+        <div class="slide"><h1>Second slide</h1></div>
+      </div>
+    `;
+    const title = document.getElementById("title") as HTMLElement;
+    title.getBoundingClientRect = () => rect({ left: 120, top: 140, width: 720, height: 96 });
+
+    installRuntime();
+    const editor = (window as any).FrontendSlidesEditor.mount();
+    editor.toggleEditMode(true);
+
+    expect(title.dataset.editorKind).toBe("text");
+    expect(title.hasAttribute("data-html-deck-editor-motion-hold")).toBe(true);
+    expect(title.style.getPropertyValue("--html-deck-editor-edit-opacity")).toBe("1");
+  });
+
+  it("reveals CSS-animated ancestors that hide editable slide text", () => {
+    document.body.innerHTML = `
+      <style>
+        .card {
+          opacity: 0;
+          animation: fadeUp 0.7s 0.3s both;
+        }
+        @keyframes fadeUp {
+          from { opacity: 0; transform: translateY(20px); }
+          to { opacity: 1; transform: translateY(0); }
+        }
+      </style>
+      <div id="slidesWrapper" data-html-deck-editor-stage="preserve" data-html-deck-editor-navigation="horizontal">
+        <div class="slide active">
+          <div id="card" class="card" style="transform: translateX(-50%);"><h2 id="title">Card title</h2></div>
+        </div>
+        <div class="slide"><h1>Second slide</h1></div>
+      </div>
+    `;
+    const card = document.getElementById("card") as HTMLElement;
+    const title = document.getElementById("title") as HTMLElement;
+    card.getBoundingClientRect = () => rect({ left: 100, top: 100, width: 520, height: 180 });
+    title.getBoundingClientRect = () => rect({ left: 128, top: 128, width: 360, height: 58 });
+
+    installRuntime();
+    const editor = (window as any).FrontendSlidesEditor.mount();
+    editor.toggleEditMode(true);
+
+    expect(title.dataset.editorKind).toBe("text");
+    expect(card.hasAttribute("data-html-deck-editor-motion-hold")).toBe(true);
+    expect(card.style.getPropertyValue("--html-deck-editor-edit-opacity")).toBe("1");
+    expect(getComputedStyle(card).transform).toContain("translateX");
+  });
+
   it("uses actual slide offsets for preserved horizontal decks that are not one viewport wide", () => {
     document.body.innerHTML = `
       <div id="deck" data-html-deck-editor-stage="preserve" data-html-deck-editor-navigation="horizontal" style="transform:translateX(-1800px)">
@@ -442,6 +505,130 @@ describe("editor runtime", () => {
     editor.presentation.showSlide(1);
     expect(deck.style.transform).toBe("translateX(-900px)");
     expect(deck.style.getPropertyValue("--html-deck-editor-slide-offset-x")).toBe("900px");
+  });
+
+  it("does not horizontally offset overlay-style imported slides in edit mode", () => {
+    document.body.innerHTML = `
+      <style>
+        #slidesWrapper { position: relative; width: 100vw; height: 100vh; }
+        #slidesWrapper > .slide {
+          position: absolute;
+          inset: 0;
+          opacity: 0;
+          pointer-events: none;
+        }
+        #slidesWrapper > .slide.active {
+          opacity: 1;
+          pointer-events: auto;
+        }
+      </style>
+      <div id="slidesWrapper" data-html-deck-editor-stage="preserve" data-html-deck-editor-navigation="horizontal">
+        <div class="slide active"><h1>One</h1></div>
+        <div class="slide"><h1>Two</h1></div>
+        <div class="slide"><h1>Three</h1></div>
+      </div>
+    `;
+    const sourceSlides = Array.from(document.querySelectorAll("#slidesWrapper > .slide")) as HTMLElement[];
+    sourceSlides.forEach((slide) => {
+      Object.defineProperty(slide, "offsetLeft", { value: 0, configurable: true });
+      Object.defineProperty(slide, "offsetTop", { value: 0, configurable: true });
+    });
+
+    installRuntime();
+    const editor = (window as any).FrontendSlidesEditor.mount();
+    editor.toggleEditMode(true);
+    editor.presentation.showSlide(1);
+
+    const stage = document.getElementById("slidesWrapper") as HTMLElement;
+    expect(sourceSlides[1].hasAttribute("data-html-deck-editor-current")).toBe(true);
+    expect(stage.style.transform).toBe("");
+    expect(stage.style.getPropertyValue("--html-deck-editor-slide-offset-x")).toBe("0px");
+    expect(sourceSlides[1].classList.contains("active")).toBe(true);
+  });
+
+  it("keeps moved CSS-animated imported boxes visible after layout edits", () => {
+    document.body.innerHTML = `
+      <style>
+        .vocab-item {
+          opacity: 0;
+          animation: fadeUp 0.7s 0.3s both;
+        }
+        @keyframes fadeUp {
+          from { opacity: 0; transform: translateY(20px); }
+          to { opacity: 1; transform: translateY(0); }
+        }
+      </style>
+      <div id="slidesWrapper" data-html-deck-editor-stage="preserve">
+        <div class="slide active" data-html-deck-editor-current>
+          <div id="box" class="vocab-item" data-editable-box>
+            <span>→ "均匀分开"</span>
+            <strong>水平等间距分布</strong>
+          </div>
+        </div>
+      </div>
+    `;
+    const slide = document.querySelector(".slide") as HTMLElement;
+    const box = document.getElementById("box") as HTMLElement;
+    slide.getBoundingClientRect = () => rect({ left: 0, top: 0, width: 1440, height: 900 });
+    box.getBoundingClientRect = () => rect({ left: 180, top: 220, width: 480, height: 160 });
+
+    installRuntime();
+    const editor = (window as any).FrontendSlidesEditor.mount();
+    editor.toggleEditMode(true);
+    editor.select(box);
+
+    const x = document.getElementById("xInput") as HTMLInputElement;
+    x.value = "240";
+    x.dispatchEvent(new Event("change", { bubbles: true }));
+
+    expect(box.classList.contains("edit-moved")).toBe(true);
+    expect(box.hasAttribute("data-html-deck-editor-motion-hold")).toBe(true);
+    expect(box.style.getPropertyValue("--html-deck-editor-edit-opacity")).toBe("1");
+
+    editor.toggleEditMode(false);
+
+    expect(document.body.classList.contains("editing")).toBe(false);
+    expect(box.classList.contains("html-deck-editor-edit-visible")).toBe(true);
+    expect(box.style.getPropertyValue("--html-deck-editor-edit-opacity")).toBe("1");
+    expect(getComputedStyle(box).opacity).toBe("1");
+  });
+
+  it("keeps preserved host navigation in sync after exiting edit mode", () => {
+    document.body.innerHTML = `
+      <button id="prevBtn" type="button">Prev</button>
+      <button id="nextBtn" type="button">Next</button>
+      <div class="nav-dot active"></div>
+      <div class="nav-dot"></div>
+      <div class="nav-dot"></div>
+      <div id="slidesWrapper" data-html-deck-editor-stage="preserve">
+        <div class="slide active"><h1>One</h1></div>
+        <div class="slide"><h1>Two</h1></div>
+        <div class="slide"><h1>Three</h1></div>
+      </div>
+    `;
+    const slides = Array.from(document.querySelectorAll(".slide")) as HTMLElement[];
+    let staleHostCurrent = 0;
+    document.getElementById("nextBtn")?.addEventListener("click", () => {
+      slides[staleHostCurrent].classList.remove("active");
+      staleHostCurrent += 1;
+      slides[staleHostCurrent]?.classList.add("active");
+    });
+
+    installRuntime();
+    const editor = (window as any).FrontendSlidesEditor.mount();
+    editor.toggleEditMode(true);
+    editor.presentation.showSlide(1);
+    editor.toggleEditMode(false);
+
+    expect((window as any).__currentSlideIndex).toBe(1);
+    expect((document.getElementById("slidesWrapper") as HTMLElement).dataset.htmlDeckEditorCurrentSlide).toBe("1");
+
+    document.getElementById("nextBtn")?.click();
+
+    expect(staleHostCurrent).toBe(0);
+    expect(slides.map((slide) => slide.classList.contains("active"))).toEqual([false, false, true]);
+    expect((window as any).__currentSlideIndex).toBe(2);
+    expect(Array.from(document.querySelectorAll(".nav-dot")).map((dot) => dot.classList.contains("active"))).toEqual([false, false, true]);
   });
 
   it("uses only direct stage slides for preserved deck navigation", () => {

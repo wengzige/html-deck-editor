@@ -846,6 +846,11 @@
       transform-origin: top left;
     }
 
+    .edit-moved.html-deck-editor-edit-visible:not(.editor-motion-preview):not(.editor-motion-running) {
+      opacity: var(--html-deck-editor-edit-opacity, 1) !important;
+      filter: none !important;
+    }
+
     .slide.visible .edit-moved.reveal:not(.editor-motion-preview):not(.editor-motion-running),
     .slide.visible .edit-moved.reveal-left:not(.editor-motion-preview):not(.editor-motion-running),
     .slide.visible .edit-moved.reveal-scale:not(.editor-motion-preview):not(.editor-motion-running),
@@ -1034,7 +1039,6 @@
     body.editing .slide[data-html-deck-editor-current] [data-html-deck-editor-motion-hold] {
       opacity: var(--html-deck-editor-edit-opacity, 1) !important;
       filter: none !important;
-      transform: none !important;
       animation: none !important;
       transition: none !important;
     }

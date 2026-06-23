@@ -402,6 +402,8 @@
   }
 
   function computeHostCurrentSlide(slides, stage) {
+    const stageIndex = Number(stage?.dataset?.htmlDeckEditorCurrentSlide);
+    if (Number.isFinite(stageIndex)) return normalizeSlideIndex(stageIndex, slides);
     const hostIndex = Number(window.__currentSlideIndex);
     if (Number.isFinite(hostIndex)) return normalizeSlideIndex(hostIndex, slides);
     const transformIndex = currentSlideFromStageTransform(stage, slides);
@@ -431,10 +433,119 @@
     window.__currentSlideIndex = index;
     if (stage) {
       const slides = stageSlides(stage);
-      const isHorizontal = stage.getAttribute?.("data-html-deck-editor-navigation") === "horizontal";
+      const isHorizontal = usesHorizontalSlideOffset(stage, slides);
+      stage.dataset.htmlDeckEditorCurrentSlide = String(index);
       stage.style.setProperty("--html-deck-editor-current-slide", String(index));
       stage.style.setProperty("--html-deck-editor-slide-offset-x", `${isHorizontal ? slideOffsetX(stage, slides, index) : 0}px`);
     }
+  }
+
+  function showPreservedSlide(stage, index, options = {}) {
+    const slides = stageSlides(stage);
+    const current = normalizeSlideIndex(index, slides);
+    slides.forEach((slide, i) => {
+      const isCurrent = i === current;
+      if (isCurrent) clearForcedHiddenSlideState(slide);
+      slide.classList.remove("exit");
+      slide.classList.toggle("active", isCurrent);
+      slide.classList.toggle("visible", isCurrent);
+      slide.toggleAttribute("data-deck-active", isCurrent);
+      slide.toggleAttribute("data-html-deck-editor-current", isCurrent);
+      slide.setAttribute("data-html-deck-editor-page", "");
+    });
+    syncHostCurrentSlide(stage, current);
+    syncPreservedHostControls(current, slides.length);
+    if (options.dispatch !== false) {
+      document.dispatchEvent(new CustomEvent("slidechange", { detail: { index: current } }));
+    }
+    return current;
+  }
+
+  function syncPreservedHostControls(index, total) {
+    const currentText = String(index + 1).padStart(2, "0");
+    const totalText = String(total).padStart(2, "0");
+    document.querySelectorAll(".nav-dot").forEach((dot, i) => {
+      dot.classList.toggle("active", i === index);
+    });
+    ["navCounter", "slideNum"].forEach((id) => {
+      const node = document.getElementById(id);
+      if (node) node.textContent = `${currentText} / ${totalText}`;
+    });
+    const progress = document.getElementById("progress");
+    if (progress) progress.style.width = `${((index + 1) / Math.max(1, total)) * 100}%`;
+  }
+
+  function installPreservedDeckNavigationBridge(stage, presentation) {
+    if (!stage || stage.getAttribute("data-html-deck-editor-stage") !== "preserve") return;
+    if (stage.dataset.htmlDeckEditorNavBridge === "true") return;
+    stage.dataset.htmlDeckEditorNavBridge = "true";
+    const play = (index, options = {}) => {
+      presentation.slides = stageSlides(stage);
+      presentation.currentSlide = showPreservedSlide(stage, index, options);
+      presentation.scaleStage?.();
+      return presentation.currentSlide;
+    };
+    if (typeof window.__playSlide !== "function") {
+      window.__playSlide = (index) => play(index);
+      window.__playSlide.__htmlDeckEditorBridge = true;
+    }
+    document.addEventListener("click", (event) => {
+      if (!stage.isConnected) return;
+      if (document.body.classList.contains("editing")) return;
+      const target = event.target?.closest?.("#prevBtn, #nextBtn, .nav-dot, [data-slide-index], [data-slide]");
+      if (!target || target.closest?.("[data-html-deck-editor-ui], #editorShell")) return;
+      const slides = stageSlides(stage);
+      if (!slides.length) return;
+      const hostIndex = computeHostCurrentSlide(slides, stage);
+      const current = hostIndex >= 0 ? hostIndex : computeCurrentSlide(slides, stage);
+      let next = NaN;
+      if (target.id === "prevBtn") next = current - 1;
+      if (target.id === "nextBtn") next = current + 1;
+      if (target.classList.contains("nav-dot")) next = Array.from(document.querySelectorAll(".nav-dot")).indexOf(target);
+      if (!Number.isFinite(next)) {
+        const raw = target.getAttribute("data-slide-index") || target.getAttribute("data-slide");
+        next = Number.parseInt(raw, 10);
+      }
+      if (!Number.isFinite(next) || next < 0 || next >= slides.length) return;
+      event.preventDefault();
+      event.stopImmediatePropagation();
+      play(next);
+    }, true);
+    document.addEventListener("keydown", (event) => {
+      if (!stage.isConnected) return;
+      if (document.body.classList.contains("editing")) return;
+      if (event.defaultPrevented || ["INPUT", "TEXTAREA", "SELECT"].includes(event.target?.tagName) || event.target?.isContentEditable) return;
+      const slides = stageSlides(stage);
+      if (!slides.length) return;
+      const hostIndex = computeHostCurrentSlide(slides, stage);
+      const current = hostIndex >= 0 ? hostIndex : computeCurrentSlide(slides, stage);
+      const key = event.key;
+      const delta = key === "ArrowRight" || key === "ArrowDown" || key === " " || key === "Spacebar"
+        ? 1
+        : key === "ArrowLeft" || key === "ArrowUp"
+          ? -1
+          : 0;
+      if (!delta) return;
+      const next = current + delta;
+      if (next < 0 || next >= slides.length) return;
+      event.preventDefault();
+      event.stopImmediatePropagation();
+      play(next);
+    }, true);
+  }
+
+  function usesHorizontalSlideOffset(stage, slides = stageSlides(stage)) {
+    if (stage?.getAttribute?.("data-html-deck-editor-navigation") !== "horizontal") return false;
+    if (!slides || slides.length < 2) return true;
+    const firstLeft = Number(slides[0].offsetLeft) || 0;
+    const firstTop = Number(slides[0].offsetTop) || 0;
+    const overlaySlides = slides.every((slide) => {
+      const style = getComputedStyle(slide);
+      const isOverlayPositioned = style.position === "absolute" || style.position === "fixed";
+      const sameOrigin = (Number(slide.offsetLeft) || 0) === firstLeft && (Number(slide.offsetTop) || 0) === firstTop;
+      return isOverlayPositioned && sameOrigin;
+    });
+    return !overlaySlides;
   }
 
   function zeroInsets() {
@@ -569,6 +680,7 @@
     presentation.currentSlide = markEditorCurrentSlide(presentation.slides, presentation.currentSlide);
     syncHostCurrentSlide(stage, presentation.currentSlide);
     presentation.editorInsets = normalizeInsets(presentation.editorInsets);
+    installPreservedDeckNavigationBridge(stage, presentation);
 
     const originalShowSlide = typeof presentation.showSlide === "function" ? presentation.showSlide.bind(presentation) : null;
     presentation.showSlide = function showSlide(index) {
@@ -580,19 +692,14 @@
         const hostIndex = computeHostCurrentSlide(this.slides, stage);
         this.currentSlide = markEditorCurrentSlide(this.slides, hostIndex >= 0 ? hostIndex : requestedSlide);
       } else {
-        this.currentSlide = markEditorCurrentSlide(this.slides, requestedSlide);
-        this.slides.forEach((slide, i) => {
-          slide.classList.toggle("active", i === this.currentSlide);
-          slide.classList.toggle("visible", i === this.currentSlide);
-          slide.toggleAttribute("data-deck-active", i === this.currentSlide);
-        });
-        if (stage.getAttribute("data-html-deck-editor-navigation") === "horizontal") {
+        this.currentSlide = showPreservedSlide(stage, requestedSlide, { dispatch: false });
+        if (usesHorizontalSlideOffset(stage, this.slides)) {
           stage.style.transform = `translateX(${-slideOffsetX(stage, this.slides, this.currentSlide)}px)`;
           stage.style.setProperty("--html-deck-editor-current-slide", String(this.currentSlide));
         }
       }
       syncHostCurrentSlide(stage, this.currentSlide);
-      if (typeof window.__playSlide === "function") {
+      if (typeof window.__playSlide === "function" && !window.__playSlide.__htmlDeckEditorBridge) {
         try {
           window.__playSlide(this.currentSlide);
         } catch (error) {
@@ -857,6 +964,33 @@
           ".card-accent",
           ".card-ink"
         ].join(", ");
+      }
+
+      shouldHoldMotionNode(element) {
+        if (!element?.matches) return false;
+        if (element.matches(this.originalMotionSelector())) return true;
+        const style = getComputedStyle(element);
+        const hasCssAnimation = (style.animationName || "")
+          .split(",")
+          .some((name) => name.trim() && name.trim() !== "none");
+        const opacity = Number.parseFloat(style.opacity || "1");
+        return hasCssAnimation || opacity <= 0.01 || element.style?.opacity === "0";
+      }
+
+      motionHoldTargetsFor(element, slide) {
+        const targets = [];
+        let node = element;
+        while (node && node !== slide) {
+          if (this.shouldHoldMotionNode(node)) targets.push(node);
+          node = node.parentElement;
+        }
+        return targets;
+      }
+
+      holdMotionNodeForEditing(node) {
+        node.classList.add("html-deck-editor-edit-visible");
+        node.setAttribute("data-html-deck-editor-motion-hold", "");
+        node.style.setProperty("--html-deck-editor-edit-opacity", "1");
       }
 
       withEditVisibleElements(callback) {
@@ -1801,14 +1935,15 @@
           node.removeAttribute("data-html-deck-editor-motion-hold");
           node.style.removeProperty("--html-deck-editor-edit-opacity");
         });
-        const editableTextElements = this.getEditableElements().filter((element) => (
-          this.closestSlide(element) === slide && this.isTextElement(element)
+        const editableElements = this.getEditableElements().filter((element) => (
+          this.closestSlide(element) === slide && (this.isTextElement(element) || element.classList.contains("edit-moved"))
         ));
-        slide.querySelectorAll(this.originalMotionSelector()).forEach((node) => {
-          const shouldHold = editableTextElements.some((element) => node === element || node.contains(element));
-          if (!shouldHold) return;
-          node.setAttribute("data-html-deck-editor-motion-hold", "");
-          node.style.setProperty("--html-deck-editor-edit-opacity", "1");
+        const motionTargets = new Set();
+        editableElements.forEach((element) => {
+          this.motionHoldTargetsFor(element, slide).forEach((node) => motionTargets.add(node));
+        });
+        motionTargets.forEach((node) => {
+          this.holdMotionNodeForEditing(node);
         });
       }
 
@@ -3199,6 +3334,7 @@
 
       setStagePosition(element, x, y, width, height) {
         if (!element.classList.contains("editor-layer")) {
+          const shouldKeepVisible = this.shouldHoldMotionNode(element);
           this.rememberBaseTransform(element);
           const safe = this.clampStageBox({ x, y, width, height });
           const box = this.getStableStageBox(element);
@@ -3219,6 +3355,10 @@
             element.classList.add("edit-moved");
             element.style.setProperty("--edit-scale-x", `${Math.max(0.05, currentScaleX * scaleX).toFixed(3)}`);
             element.style.setProperty("--edit-scale-y", `${Math.max(0.05, currentScaleY * scaleY).toFixed(3)}`);
+          }
+          if (shouldKeepVisible && element.classList.contains("edit-moved")) {
+            this.holdMotionNodeForEditing(element);
+            element.style.setProperty("opacity", "1", "important");
           }
           this.storeStageBox(element, safe);
           this.rememberMotionStableBox(element, safe);
@@ -4138,6 +4278,7 @@
         root.querySelectorAll("[data-html-deck-editor-ui], #editorFrame, #editorToast, #editorGuideV, #editorGuideH, #editorShell").forEach((node) => node.remove());
         root.querySelectorAll(".editor-selected").forEach((node) => node.classList.remove("editor-selected"));
         root.querySelectorAll(".editor-motion-parent-stable").forEach((node) => node.classList.remove("editor-motion-parent-stable"));
+        root.querySelectorAll(".html-deck-editor-edit-visible").forEach((node) => node.classList.remove("html-deck-editor-edit-visible"));
         root.querySelectorAll(".editor-motion-preview, .editor-motion-running").forEach((node) => {
           node.classList.remove("editor-motion-preview", "editor-motion-running");
           if (!node.dataset.editAnim) this.editorMotionClasses().forEach((className) => node.classList.remove(className));
@@ -4158,6 +4299,7 @@
           node.removeAttribute("data-html-deck-editor-page");
         });
         root.querySelectorAll("[data-html-deck-editor-stage='preserve']").forEach((node) => {
+          delete node.dataset.htmlDeckEditorCurrentSlide;
           node.style.removeProperty("--html-deck-editor-stage-x");
           node.style.removeProperty("--html-deck-editor-stage-y");
           node.style.removeProperty("--html-deck-editor-stage-scale");
@@ -4320,6 +4462,7 @@
           node.removeAttribute("data-html-deck-editor-motion-hold");
           node.style.removeProperty("--html-deck-editor-edit-opacity");
         });
+        clone.querySelectorAll(".html-deck-editor-edit-visible").forEach((node) => node.classList.remove("html-deck-editor-edit-visible"));
         clone.querySelectorAll("[data-editor-auto], [data-editor-kind], [data-editor-small]").forEach((node) => {
           delete node.dataset.editorAuto;
           delete node.dataset.editorKind;
@@ -4342,6 +4485,7 @@
         clone.querySelectorAll("#editorFrame, #editorGuideV, #editorGuideH").forEach((node) => node.classList.remove("active"));
         clone.querySelectorAll("[data-html-deck-editor-stage='preserve']").forEach((node) => {
           resetPreservedStageForExport(node);
+          delete node.dataset.htmlDeckEditorCurrentSlide;
           node.style.removeProperty("--html-deck-editor-stage-x");
           node.style.removeProperty("--html-deck-editor-stage-y");
           node.style.removeProperty("--html-deck-editor-stage-scale");
