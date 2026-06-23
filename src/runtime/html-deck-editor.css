@@ -851,26 +851,26 @@
       filter: none !important;
     }
 
-    .slide.visible .edit-moved.reveal:not(.editor-motion-preview):not(.editor-motion-running),
-    .slide.visible .edit-moved.reveal-left:not(.editor-motion-preview):not(.editor-motion-running),
-    .slide.visible .edit-moved.reveal-scale:not(.editor-motion-preview):not(.editor-motion-running),
-    .slide.visible .edit-moved.editor-anim-rise:not(.editor-motion-preview):not(.editor-motion-running),
-    .slide.visible .edit-moved.editor-anim-drop:not(.editor-motion-preview):not(.editor-motion-running),
-    .slide.visible .edit-moved.editor-anim-left:not(.editor-motion-preview):not(.editor-motion-running),
-    .slide.visible .edit-moved.editor-anim-right:not(.editor-motion-preview):not(.editor-motion-running),
-    .slide.visible .edit-moved.editor-anim-scale:not(.editor-motion-preview):not(.editor-motion-running),
-    .slide.visible .edit-moved.editor-anim-zoom:not(.editor-motion-preview):not(.editor-motion-running),
-    .slide.visible .edit-moved.editor-anim-pop:not(.editor-motion-preview):not(.editor-motion-running),
-    .slide.visible .edit-moved.editor-anim-rotate:not(.editor-motion-preview):not(.editor-motion-running),
-    .slide.visible .edit-moved.editor-anim-blur:not(.editor-motion-preview):not(.editor-motion-running),
-    .slide.visible .edit-moved.editor-anim-flip:not(.editor-motion-preview):not(.editor-motion-running),
-    .slide.visible .edit-moved.editor-anim-fade:not(.editor-motion-preview):not(.editor-motion-running) {
+    .slide:is(.visible, .active, [data-deck-active], [data-html-deck-editor-current]) .edit-moved.reveal:not(.editor-motion-preview):not(.editor-motion-running),
+    .slide:is(.visible, .active, [data-deck-active], [data-html-deck-editor-current]) .edit-moved.reveal-left:not(.editor-motion-preview):not(.editor-motion-running),
+    .slide:is(.visible, .active, [data-deck-active], [data-html-deck-editor-current]) .edit-moved.reveal-scale:not(.editor-motion-preview):not(.editor-motion-running),
+    .slide:is(.visible, .active, [data-deck-active], [data-html-deck-editor-current]) .edit-moved.editor-anim-rise:not(.editor-motion-preview):not(.editor-motion-running),
+    .slide:is(.visible, .active, [data-deck-active], [data-html-deck-editor-current]) .edit-moved.editor-anim-drop:not(.editor-motion-preview):not(.editor-motion-running),
+    .slide:is(.visible, .active, [data-deck-active], [data-html-deck-editor-current]) .edit-moved.editor-anim-left:not(.editor-motion-preview):not(.editor-motion-running),
+    .slide:is(.visible, .active, [data-deck-active], [data-html-deck-editor-current]) .edit-moved.editor-anim-right:not(.editor-motion-preview):not(.editor-motion-running),
+    .slide:is(.visible, .active, [data-deck-active], [data-html-deck-editor-current]) .edit-moved.editor-anim-scale:not(.editor-motion-preview):not(.editor-motion-running),
+    .slide:is(.visible, .active, [data-deck-active], [data-html-deck-editor-current]) .edit-moved.editor-anim-zoom:not(.editor-motion-preview):not(.editor-motion-running),
+    .slide:is(.visible, .active, [data-deck-active], [data-html-deck-editor-current]) .edit-moved.editor-anim-pop:not(.editor-motion-preview):not(.editor-motion-running),
+    .slide:is(.visible, .active, [data-deck-active], [data-html-deck-editor-current]) .edit-moved.editor-anim-rotate:not(.editor-motion-preview):not(.editor-motion-running),
+    .slide:is(.visible, .active, [data-deck-active], [data-html-deck-editor-current]) .edit-moved.editor-anim-blur:not(.editor-motion-preview):not(.editor-motion-running),
+    .slide:is(.visible, .active, [data-deck-active], [data-html-deck-editor-current]) .edit-moved.editor-anim-flip:not(.editor-motion-preview):not(.editor-motion-running),
+    .slide:is(.visible, .active, [data-deck-active], [data-html-deck-editor-current]) .edit-moved.editor-anim-fade:not(.editor-motion-preview):not(.editor-motion-running) {
       opacity: 1;
       filter: none !important;
       transform: translate(var(--edit-x, 0px), var(--edit-y, 0px)) scale(var(--edit-scale-x, var(--edit-scale, 1)), var(--edit-scale-y, var(--edit-scale, 1))) var(--edit-base-transform, matrix(1, 0, 0, 1, 0, 0)) !important;
     }
 
-    .slide.visible .editor-motion-parent-stable,
+    .slide:is(.visible, .active, [data-deck-active], [data-html-deck-editor-current]) .editor-motion-parent-stable,
     .editor-motion-parent-stable.reveal,
     .editor-motion-parent-stable.reveal-left,
     .editor-motion-parent-stable.reveal-scale {
@@ -1002,17 +1002,17 @@
       transform: translate(var(--edit-x, 0px), var(--edit-y, 0px)) scale(var(--edit-scale-x, var(--edit-scale, 1)), var(--edit-scale-y, var(--edit-scale, 1))) var(--edit-base-transform, matrix(1, 0, 0, 1, 0, 0)) !important;
     }
 
-    .slide.visible .editor-anim-fade,
-    .slide.visible .editor-anim-rise,
-    .slide.visible .editor-anim-drop,
-    .slide.visible .editor-anim-left,
-    .slide.visible .editor-anim-right,
-    .slide.visible .editor-anim-scale,
-    .slide.visible .editor-anim-zoom,
-    .slide.visible .editor-anim-pop,
-    .slide.visible .editor-anim-rotate,
-    .slide.visible .editor-anim-blur,
-    .slide.visible .editor-anim-flip {
+    .slide:is(.visible, .active, [data-deck-active], [data-html-deck-editor-current]) .editor-anim-fade,
+    .slide:is(.visible, .active, [data-deck-active], [data-html-deck-editor-current]) .editor-anim-rise,
+    .slide:is(.visible, .active, [data-deck-active], [data-html-deck-editor-current]) .editor-anim-drop,
+    .slide:is(.visible, .active, [data-deck-active], [data-html-deck-editor-current]) .editor-anim-left,
+    .slide:is(.visible, .active, [data-deck-active], [data-html-deck-editor-current]) .editor-anim-right,
+    .slide:is(.visible, .active, [data-deck-active], [data-html-deck-editor-current]) .editor-anim-scale,
+    .slide:is(.visible, .active, [data-deck-active], [data-html-deck-editor-current]) .editor-anim-zoom,
+    .slide:is(.visible, .active, [data-deck-active], [data-html-deck-editor-current]) .editor-anim-pop,
+    .slide:is(.visible, .active, [data-deck-active], [data-html-deck-editor-current]) .editor-anim-rotate,
+    .slide:is(.visible, .active, [data-deck-active], [data-html-deck-editor-current]) .editor-anim-blur,
+    .slide:is(.visible, .active, [data-deck-active], [data-html-deck-editor-current]) .editor-anim-flip {
       opacity: 1;
       filter: none;
       transform: translate(var(--edit-x, 0px), var(--edit-y, 0px)) scale(var(--edit-scale-x, var(--edit-scale, 1)), var(--edit-scale-y, var(--edit-scale, 1))) var(--edit-base-transform, matrix(1, 0, 0, 1, 0, 0));

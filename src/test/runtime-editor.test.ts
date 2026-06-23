@@ -623,6 +623,37 @@ describe("editor runtime", () => {
     expect(getComputedStyle(box).opacity).toBe("1");
   });
 
+  it("keeps editor motion visible on active-only imported slides", () => {
+    document.body.innerHTML = `
+      <div id="slidesWrapper" data-html-deck-editor-stage="preserve">
+        <div class="slide active" data-html-deck-editor-current>
+          <div id="box" data-editable-box style="background:#fff">Motion box</div>
+        </div>
+      </div>
+    `;
+    const slide = document.querySelector(".slide") as HTMLElement;
+    const box = document.getElementById("box") as HTMLElement;
+    slide.getBoundingClientRect = () => rect({ left: 0, top: 0, width: 1440, height: 900 });
+    box.getBoundingClientRect = () => rect({ left: 180, top: 220, width: 480, height: 160 });
+
+    installRuntime();
+    const editor = (window as any).FrontendSlidesEditor.mount();
+    editor.toggleEditMode(true);
+    editor.select(box);
+
+    const anim = document.getElementById("animSelect") as HTMLSelectElement;
+    anim.value = "rise";
+    anim.dispatchEvent(new Event("change", { bubbles: true }));
+
+    document.body.classList.remove("editing", "editor-on");
+    box.classList.remove("editor-motion-preview", "editor-motion-running");
+    slide.classList.remove("visible");
+    slide.classList.add("active");
+
+    expect(box.dataset.editAnim).toBe("rise");
+    expect(box.classList.contains("editor-anim-rise")).toBe(true);
+  });
+
   it("keeps preserved host navigation in sync after exiting edit mode", () => {
     document.body.innerHTML = `
       <button id="prevBtn" type="button">Prev</button>
