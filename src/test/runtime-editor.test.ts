@@ -895,6 +895,34 @@ describe("editor runtime", () => {
     expect(keySpy).not.toHaveBeenCalled();
   });
 
+  it("keeps delete keys inside the inspector textarea editable", () => {
+    document.body.innerHTML = `
+      <div id="deckStage" class="deck-stage">
+        <section class="slide active"><h1 id="title">HTML 能否取代 PPT?</h1></section>
+      </div>
+    `;
+
+    installRuntime();
+    const editor = (window as any).FrontendSlidesEditor.mount();
+    editor.toggleEditMode(true);
+    editor.select(document.getElementById("title") as HTMLElement);
+
+    const keySpy = vi.fn();
+    window.addEventListener("keydown", keySpy);
+
+    const text = document.getElementById("textInput") as HTMLTextAreaElement;
+    text.focus();
+    const backspace = new KeyboardEvent("keydown", { bubbles: true, cancelable: true, key: "Backspace" });
+    const del = new KeyboardEvent("keydown", { bubbles: true, cancelable: true, key: "Delete" });
+
+    text.dispatchEvent(backspace);
+    text.dispatchEvent(del);
+
+    expect(backspace.defaultPrevented).toBe(false);
+    expect(del.defaultPrevented).toBe(false);
+    expect(keySpy).not.toHaveBeenCalled();
+  });
+
   it("blocks host deck shortcuts from reaching window while edit mode is active", () => {
     document.body.innerHTML = `
       <div id="deckStage" class="deck-stage">
@@ -1208,6 +1236,37 @@ describe("editor runtime", () => {
     expect(span.style.color).toBe("rgb(0, 0, 255)");
     expect(title.style.color).toBe("");
     expect(title.textContent).toBe("甲乙丙丁");
+  });
+
+  it("preserves styled child wrappers when editing inspector text", () => {
+    document.body.innerHTML = `
+      <div id="deckStage" class="deck-stage">
+        <section class="slide active">
+          <div id="headline" data-editable style="font-size:96px">
+            <span class="plain">HTML 能否</span>
+            <span class="highlight" style="display:inline-block;background-color:rgb(255, 211, 49);box-shadow:12px 12px 0 #111">取代 PPT?</span>
+          </div>
+        </section>
+      </div>
+    `;
+    const headline = document.getElementById("headline") as HTMLElement;
+    headline.getBoundingClientRect = () => rect({ left: 100, top: 100, width: 900, height: 220 });
+
+    installRuntime();
+    const editor = (window as any).FrontendSlidesEditor.mount();
+    editor.toggleEditMode(true);
+    editor.select(headline);
+
+    const text = document.getElementById("textInput") as HTMLTextAreaElement;
+    text.value = "HTML 能不能\n取代 PPT?";
+    text.dispatchEvent(new Event("input", { bubbles: true }));
+
+    const highlight = headline.querySelector(".highlight") as HTMLElement;
+    expect(highlight).toBeTruthy();
+    expect(highlight.textContent).toBe("取代 PPT?");
+    expect(highlight.style.backgroundColor).toBe("rgb(255, 211, 49)");
+    expect(highlight.style.boxShadow).toBe("12px 12px 0 #111");
+    expect(headline.querySelector(".plain")?.textContent?.trim()).toBe("HTML 能不能");
   });
 
   it("maps inspector text selection across existing inline HTML", () => {

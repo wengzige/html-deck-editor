@@ -1856,7 +1856,7 @@
           "Home",
           "End"
         ];
-        if (navigationKeys.includes(key) || key.length === 1 || event.metaKey || event.ctrlKey || event.altKey) {
+        if (navigationKeys.includes(key) || key === "Backspace" || key === "Delete" || key.length === 1 || event.metaKey || event.ctrlKey || event.altKey) {
           event.stopPropagation();
         }
       }
@@ -2732,9 +2732,65 @@
         if (!element) return;
         if (this.isSvgElement(element)) {
           element.textContent = value;
-        } else {
-          element.innerText = value;
+          return;
         }
+        if (this.setStructuredEditableText(element, value)) return;
+        element.innerText = value;
+      }
+
+      setStructuredEditableText(element, value) {
+        const textNodes = this.editableTextNodes(element);
+        if (!textNodes.length) return false;
+        const next = String(value ?? "").replace(/\r\n?/g, "\n");
+        if (textNodes.length === 1) {
+          textNodes[0].textContent = next;
+          return true;
+        }
+        const lines = next.split("\n");
+        if (lines.length === textNodes.length) {
+          textNodes.forEach((node, index) => {
+            node.textContent = lines[index];
+          });
+          return true;
+        }
+        const oldLengths = textNodes.map((node) => (node.textContent || "").length);
+        const oldTotal = oldLengths.reduce((total, length) => total + length, 0);
+        if (!oldTotal) {
+          textNodes[0].textContent = next;
+          textNodes.slice(1).forEach((node) => {
+            node.textContent = "";
+          });
+          return true;
+        }
+        let oldCursor = 0;
+        let nextCursor = 0;
+        textNodes.forEach((node, index) => {
+          oldCursor += oldLengths[index];
+          const nextBoundary = index === textNodes.length - 1
+            ? next.length
+            : Math.round((oldCursor / oldTotal) * next.length);
+          node.textContent = next.slice(nextCursor, nextBoundary);
+          nextCursor = nextBoundary;
+        });
+        return true;
+      }
+
+      editableTextNodes(element) {
+        const walker = document.createTreeWalker(element, NodeFilter.SHOW_TEXT, {
+          acceptNode: (node) => {
+            if (!node.textContent || !node.textContent.trim()) return NodeFilter.FILTER_REJECT;
+            const parent = node.parentElement;
+            if (!parent || parent.closest("[data-html-deck-editor-ui], script, style, template")) return NodeFilter.FILTER_REJECT;
+            return NodeFilter.FILTER_ACCEPT;
+          }
+        });
+        const nodes = [];
+        let node = walker.nextNode();
+        while (node) {
+          nodes.push(node);
+          node = walker.nextNode();
+        }
+        return nodes;
       }
 
       editableTextColor(element, computed = getComputedStyle(element)) {
