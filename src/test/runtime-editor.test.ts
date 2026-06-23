@@ -1269,6 +1269,80 @@ describe("editor runtime", () => {
     expect(headline.querySelector(".plain")?.textContent?.trim()).toBe("HTML 能不能");
   });
 
+  it("undoes live inspector text edits before the input change event commits", () => {
+    document.body.innerHTML = `
+      <div id="deckStage" class="deck-stage">
+        <section class="slide active">
+          <h1 id="title" style="font-size:96px">原始标题</h1>
+        </section>
+      </div>
+    `;
+    const title = document.getElementById("title") as HTMLElement;
+    title.getBoundingClientRect = () => rect({ left: 100, top: 100, width: 640, height: 120 });
+
+    installRuntime();
+    const editor = (window as any).FrontendSlidesEditor.mount();
+    editor.toggleEditMode(true);
+    editor.select(title);
+
+    const text = document.getElementById("textInput") as HTMLTextAreaElement;
+    const undo = document.getElementById("undoBtn") as HTMLButtonElement;
+    const redo = document.getElementById("redoBtn") as HTMLButtonElement;
+
+    expect(undo.disabled).toBe(true);
+
+    text.value = "实时修改";
+    text.dispatchEvent(new Event("input", { bubbles: true }));
+
+    expect((document.getElementById("title") as HTMLElement).textContent).toBe("实时修改");
+    expect(undo.disabled).toBe(false);
+
+    undo.click();
+    expect((document.getElementById("title") as HTMLElement).textContent).toBe("原始标题");
+    expect(redo.disabled).toBe(false);
+
+    redo.click();
+    expect((document.getElementById("title") as HTMLElement).textContent).toBe("实时修改");
+  });
+
+  it("drops stale redo history after a live edit from an undone state", () => {
+    document.body.innerHTML = `
+      <div id="deckStage" class="deck-stage">
+        <section class="slide active">
+          <h1 id="title" style="font-size:96px">原始标题</h1>
+        </section>
+      </div>
+    `;
+    const title = document.getElementById("title") as HTMLElement;
+    title.getBoundingClientRect = () => rect({ left: 100, top: 100, width: 640, height: 120 });
+
+    installRuntime();
+    const editor = (window as any).FrontendSlidesEditor.mount();
+    editor.toggleEditMode(true);
+    editor.select(title);
+
+    const text = document.getElementById("textInput") as HTMLTextAreaElement;
+    const redo = document.getElementById("redoBtn") as HTMLButtonElement;
+
+    text.value = "第一次修改";
+    text.dispatchEvent(new Event("change", { bubbles: true }));
+    editor.undo();
+    expect((document.getElementById("title") as HTMLElement).textContent).toBe("原始标题");
+
+    const restoredTitle = document.getElementById("title") as HTMLElement;
+    editor.select(restoredTitle);
+    text.value = "第二次修改";
+    text.dispatchEvent(new Event("input", { bubbles: true }));
+
+    expect(redo.disabled).toBe(true);
+
+    editor.redo();
+    expect((document.getElementById("title") as HTMLElement).textContent).toBe("第二次修改");
+
+    editor.undo();
+    expect((document.getElementById("title") as HTMLElement).textContent).toBe("原始标题");
+  });
+
   it("maps inspector text selection across existing inline HTML", () => {
     document.body.innerHTML = `
       <div id="deckStage" class="deck-stage">

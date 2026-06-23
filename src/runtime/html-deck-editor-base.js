@@ -750,6 +750,7 @@
         this.undoStack = [];
         this.historyIndex = -1;
         this.isRestoringHistory = false;
+        this.hasPendingHistoryChange = false;
         this.historyLimit = 40;
         this.lastInsert = { x: 720, y: 300 };
         this.snapThreshold = 12;
@@ -2562,7 +2563,9 @@
         if (!options.live && this.validTextSelectionRange(element) && !this.isSvgElement(element)) {
           if (this.applyInlineTextStyle(element, property, value)) {
             this.updateFrame();
-            this.save(false, true);
+            const recordHistory = options.recordHistory !== false;
+            this.save(false, recordHistory);
+            if (!recordHistory) this.markPendingHistoryChange();
             return true;
           }
         }
@@ -2603,7 +2606,7 @@
         if (name === "fontFamily" && this.isTextElement(element)) {
           const value = this.currentFontFamilyValue();
           if (this.controls.fontFamily.value === "__custom__" && !value) return;
-          if (value && this.applyInlineSelectionStyle(element, "font-family", value, { live })) return;
+          if (value && this.applyInlineSelectionStyle(element, "font-family", value, { live, recordHistory })) return;
           if (value) {
             element.style.fontFamily = value;
           } else {
@@ -2616,7 +2619,7 @@
             element.style.removeProperty("font-size");
           } else {
             const size = this.clampNumber(value, 16, 8, 220);
-            if (this.applyInlineSelectionStyle(element, "font-size", `${size}px`, { live })) {
+            if (this.applyInlineSelectionStyle(element, "font-size", `${size}px`, { live, recordHistory })) {
               if (!live) this.controls.fontSize.value = String(size);
               return;
             }
@@ -2626,13 +2629,13 @@
         }
         if (name === "color") {
           const value = this.controls.colorButton.dataset.value || "";
-          if (this.isTextElement(element) && value && this.applyInlineSelectionStyle(element, "color", value, { live })) return;
+          if (this.isTextElement(element) && value && this.applyInlineSelectionStyle(element, "color", value, { live, recordHistory })) return;
           this.setEditableTextColor(element, value);
           this.updateTextColorState(value);
         }
         if (name === "bg") {
           const value = this.controls.bg.dataset.value || "";
-          if (this.isTextElement(element) && this.applyInlineSelectionStyle(element, "background-color", value, { live })) {
+          if (this.isTextElement(element) && this.applyInlineSelectionStyle(element, "background-color", value, { live, recordHistory })) {
             this.updateBackgroundPickerState(value);
             return;
           }
@@ -2649,7 +2652,7 @@
             element.style.removeProperty("opacity");
           } else {
             const opacity = this.clampNumber(value, 100, 0, 100);
-            if (this.isTextElement(element) && this.applyInlineSelectionStyle(element, "opacity", String(opacity / 100), { live })) {
+            if (this.isTextElement(element) && this.applyInlineSelectionStyle(element, "opacity", String(opacity / 100), { live, recordHistory })) {
               if (!live) this.controls.opacity.value = String(opacity);
               return;
             }
@@ -2704,6 +2707,7 @@
         this.updateFrame();
         if (refreshInspector) this.updateInspector();
         this.save(false, recordHistory);
+        if (!recordHistory) this.markPendingHistoryChange();
       }
 
       getSelectionLabel(element) {
@@ -4393,7 +4397,10 @@
       save(showToast = true, recordHistory = true) {
         const data = this.serialize();
         localStorage.setItem(this.storageKey, JSON.stringify(data));
-        if (recordHistory) this.pushHistory(data);
+        if (recordHistory) {
+          this.hasPendingHistoryChange = false;
+          this.pushHistory(data);
+        }
         if (showToast) this.toastMessage("已自动保存，可点“保存”写入 HTML");
       }
 
@@ -4451,7 +4458,20 @@
         this.updateHistoryButtons();
       }
 
+      markPendingHistoryChange() {
+        if (this.isRestoringHistory) return;
+        this.hasPendingHistoryChange = true;
+        this.updateHistoryButtons();
+      }
+
+      commitPendingHistoryChange() {
+        if (!this.hasPendingHistoryChange) return;
+        this.hasPendingHistoryChange = false;
+        this.pushHistory();
+      }
+
       undo() {
+        this.commitPendingHistoryChange();
         if (this.historyIndex <= 0) return;
         this.historyIndex -= 1;
         const snapshot = this.undoStack[this.historyIndex];
@@ -4467,6 +4487,7 @@
       }
 
       redo() {
+        this.commitPendingHistoryChange();
         if (this.historyIndex >= this.undoStack.length - 1) return;
         this.historyIndex += 1;
         const snapshot = this.undoStack[this.historyIndex];
@@ -4482,11 +4503,12 @@
       }
 
       updateHistoryButtons() {
-        this.controls.undo.disabled = this.historyIndex <= 0;
-        this.controls.redo.disabled = this.historyIndex >= this.undoStack.length - 1;
+        this.controls.undo.disabled = !this.hasPendingHistoryChange && this.historyIndex <= 0;
+        this.controls.redo.disabled = this.hasPendingHistoryChange || this.historyIndex >= this.undoStack.length - 1;
       }
 
       restoreSnapshot(data) {
+        this.hasPendingHistoryChange = false;
         this.stage.innerHTML = data.stage;
         this.cleanEditorArtifacts(this.stage);
         this.attachFrame();
