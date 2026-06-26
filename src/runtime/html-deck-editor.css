@@ -239,6 +239,12 @@
       border-color: var(--ink, #111111);
     }
 
+    .editor-shell[data-html-deck-editor-ui] #commentModeBtn[aria-pressed="true"] {
+      border-color: rgba(31, 43, 224, 0.45);
+      background: rgba(31, 43, 224, 0.08);
+      color: #1f2be0;
+    }
+
     .editor-shell[data-html-deck-editor-ui] .editor-button.danger {
       color: #b42318;
     }
@@ -603,6 +609,62 @@
       border-color: var(--ink, #111111);
       background: rgba(31, 43, 224, 0.13);
       color: var(--ink, #111111);
+    }
+
+    .editor-shell[data-html-deck-editor-ui] .comment-target {
+      min-height: 34px;
+      padding: 9px 10px;
+      border: 1px solid rgba(17, 17, 17, 0.12);
+      border-radius: 6px;
+      background: rgba(17, 17, 17, 0.04);
+      color: rgba(17, 17, 17, 0.72);
+      font: 600 13px/1.25 var(--font-body, system-ui, -apple-system, BlinkMacSystemFont, "Segoe UI", sans-serif);
+    }
+
+    .editor-shell[data-html-deck-editor-ui] .comment-input {
+      min-height: 84px;
+    }
+
+    .editor-shell[data-html-deck-editor-ui] .comment-list {
+      display: grid;
+      gap: 8px;
+      margin-top: 10px;
+    }
+
+    .editor-shell[data-html-deck-editor-ui] .comment-empty {
+      margin: 0;
+      color: rgba(17, 17, 17, 0.48);
+      font: 500 12px/1.35 var(--font-body, system-ui, -apple-system, BlinkMacSystemFont, "Segoe UI", sans-serif);
+    }
+
+    .editor-shell[data-html-deck-editor-ui] .comment-card {
+      display: grid;
+      gap: 4px;
+      width: 100%;
+      padding: 9px 10px;
+      border: 1px solid rgba(17, 17, 17, 0.12);
+      border-radius: 6px;
+      background: #ffffff;
+      color: #111111;
+      text-align: left;
+    }
+
+    .editor-shell[data-html-deck-editor-ui] .comment-card:hover,
+    .editor-shell[data-html-deck-editor-ui] .comment-card:focus-visible {
+      border-color: rgba(31, 43, 224, 0.34);
+      outline: none;
+    }
+
+    .editor-shell[data-html-deck-editor-ui] .comment-card-label {
+      color: rgba(17, 17, 17, 0.58);
+      font: 600 11px/1.2 var(--font-mono, ui-monospace, SFMono-Regular, Menlo, Monaco, Consolas, "Liberation Mono", monospace);
+    }
+
+    .editor-shell[data-html-deck-editor-ui] .comment-card-text {
+      overflow: hidden;
+      color: rgba(17, 17, 17, 0.82);
+      font: 500 12px/1.35 var(--font-body, system-ui, -apple-system, BlinkMacSystemFont, "Segoe UI", sans-serif);
+      text-overflow: ellipsis;
     }
 
     .editor-shell[data-html-deck-editor-ui] .inspector-actions {
@@ -1408,6 +1470,21 @@
     body.editing .editor-selected {
       outline: none !important;
       box-shadow: none !important;
+    }
+
+    body.editing.commenting [data-editable],
+    body.editing.commenting [data-editable-media],
+    body.editing.commenting [data-editable-box],
+    body.editing.commenting [data-editor-kind],
+    body.editing.commenting .editor-layer {
+      cursor: copy;
+    }
+
+    body.editing [data-ai-commented]:not(.editor-selected) {
+      outline-color: rgba(255, 61, 139, 0.92);
+      box-shadow:
+        0 0 0 2px rgba(255, 255, 255, 0.92),
+        0 0 0 4px rgba(255, 61, 139, 0.22);
     }
 
     body.editing.dragging-file .slide.active {

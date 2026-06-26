@@ -59,6 +59,8 @@
       <div class="shape-picker-wrap">
         <button class="editor-button" id="addShapeBtn" type="button" aria-haspopup="menu" aria-expanded="false">添加形状</button>
       </div>
+      <button class="editor-button" id="commentModeBtn" type="button" aria-pressed="false">批注模式</button>
+      <button class="editor-button" id="aiExportBtn" type="button">导出给 AI</button>
       <button class="editor-button primary" id="saveBtn" type="button">保存</button>
       <button class="editor-button danger" id="exitEditBtn" type="button">退出编辑</button>
     </div>
@@ -150,6 +152,17 @@
         <p class="editor-title">Selection</p>
         <div class="selection-name" id="selectionName">未选中元素</div>
         <div class="drop-zone" id="imageDropZone">拖图片到这里，或拖到画面里<br>可替换选中图片，也可新增图片</div>
+      </section>
+      <section class="inspector-section comment-section">
+        <p class="editor-title">AI 批注</p>
+        <div class="comment-target" id="commentTargetStatus">未选中元素</div>
+        <label class="field-label" for="commentInput">批注</label>
+        <textarea class="editor-textarea comment-input" id="commentInput" placeholder="写给 AI 的修改意见" disabled></textarea>
+        <div class="inspector-actions">
+          <button class="editor-button" id="saveCommentBtn" type="button" disabled>保存批注</button>
+          <button class="editor-button" id="clearCommentBtn" type="button" disabled>清除批注</button>
+        </div>
+        <div class="comment-list" id="commentList"></div>
       </section>
       <section class="inspector-section">
         <p class="editor-title">Content</p>
@@ -770,6 +783,9 @@
         this.colorPickers = {};
         this.deleteConfirmKey = `${this.storageKey}:delete-confirm-seen`;
         this.fileHandle = null;
+        this.comments = {};
+        this.commentMode = false;
+        this.commentInputAnchor = "";
         this.toggle = document.getElementById("editToggle");
         this.hotzone = document.querySelector(".edit-hotzone");
         this.shell = document.getElementById("editorShell");
@@ -802,9 +818,16 @@
           addImage: document.getElementById("addImageBtn"),
           addShape: document.getElementById("addShapeBtn"),
           shapeMenu: document.getElementById("shapeMenu"),
+          commentMode: document.getElementById("commentModeBtn"),
+          aiExport: document.getElementById("aiExportBtn"),
           save: document.getElementById("saveBtn"),
           exit: document.getElementById("exitEditBtn"),
           selectionName: document.getElementById("selectionName"),
+          commentTarget: document.getElementById("commentTargetStatus"),
+          commentInput: document.getElementById("commentInput"),
+          saveComment: document.getElementById("saveCommentBtn"),
+          clearComment: document.getElementById("clearCommentBtn"),
+          commentList: document.getElementById("commentList"),
           dropZone: document.getElementById("imageDropZone"),
           imagePick: document.getElementById("imagePickBtn"),
           imageName: document.getElementById("imageFileName"),
@@ -857,6 +880,8 @@
         this.renderBackgroundPalette();
         this.initColorPickers();
         this.restore();
+        this.syncCommentMarkers();
+        this.renderComments();
         this.pushHistory();
         this.renderSlideRail();
         this.bindControls();
@@ -1471,6 +1496,10 @@
             this.closeShapeMenu();
           });
         });
+        this.controls.commentMode.addEventListener("click", () => this.toggleCommentMode());
+        this.controls.aiExport.addEventListener("click", () => this.exportForAi());
+        this.controls.saveComment.addEventListener("click", () => this.saveCommentForSelected());
+        this.controls.clearComment.addEventListener("click", () => this.clearCommentForSelected());
         this.controls.save.addEventListener("click", () => this.exportHtml());
         this.controls.exit.addEventListener("click", () => this.toggleEditMode(false));
         this.controls.reset.addEventListener("click", () => this.confirmResetDraft());
@@ -1636,7 +1665,13 @@
         element.dataset.editorBound = "true";
         element.addEventListener("pointerdown", (event) => {
           if (!this.isActive) return;
-          const target = this.getEditableTarget(event.target);
+          const target = this.getEditableTarget(event.target) || element;
+          if (this.commentMode) {
+            event.preventDefault();
+            event.stopPropagation();
+            this.selectForComment(target);
+            return;
+          }
           if (this.isTextElement(target)) {
             this.select(target);
             this.clearTextSelection();
@@ -1653,6 +1688,11 @@
           if (!this.isActive) return;
           const target = this.getEditableTarget(event.target) || element;
           event.stopPropagation();
+          if (this.commentMode) {
+            event.preventDefault();
+            this.selectForComment(target);
+            return;
+          }
           this.select(target);
           if (this.isTextElement(target)) {
             this.captureTextSelection();
@@ -1664,6 +1704,11 @@
           if (!this.isActive) return;
           const target = this.getEditableTarget(event.target) || element;
           event.stopPropagation();
+          if (this.commentMode) {
+            event.preventDefault();
+            this.selectForComment(target);
+            return;
+          }
           this.select(target);
           if (this.isTextElement(target)) {
             this.focusTextLayer(target);
@@ -1987,6 +2032,7 @@
         this.refreshEditorLayoutSoon();
         this.updateFrame();
         if (!this.isActive) {
+          this.toggleCommentMode(false);
           this.hideGuides();
           this.save(false);
           this.clearSelection();
@@ -2003,6 +2049,12 @@
         if (this.isEditorUiElement(event.target)) return;
         const directTarget = this.getEditableTarget(event.target);
         if (directTarget) {
+          if (this.commentMode) {
+            event.preventDefault();
+            event.stopPropagation();
+            this.selectForComment(directTarget);
+            return;
+          }
           this.select(directTarget);
           return;
         }
@@ -2010,6 +2062,10 @@
         if (nearbyTarget) {
           event.preventDefault();
           event.stopPropagation();
+          if (this.commentMode) {
+            this.selectForComment(nearbyTarget);
+            return;
+          }
           this.select(nearbyTarget);
           if (this.isDraggableEditable(nearbyTarget)) this.startPointerAction(event, "move");
           return;
@@ -2066,6 +2122,7 @@
         if (this.selected === element) {
           this.reconcileStoredStagePosition(element, { mode: "sync" });
           this.updateFrame();
+          this.updateCommentPanel();
           return;
         }
         this.clearSelection(false);
@@ -2124,6 +2181,7 @@
         this.controls.imagePick.disabled = false;
         this.controls.imagePick.textContent = canUseImage ? "替换图片" : "选择图片";
         this.controls.imageName.textContent = canUseImage ? "将替换选中图片" : "未选择图片";
+        this.updateCommentPanel();
 
         if (!hasSelection) {
           this.controls.text.value = "";
@@ -2164,6 +2222,232 @@
         this.controls.restoreMotion.disabled = !this.hasStoredOriginalMotion(element);
         this.controls.motionStatus.textContent = this.getMotionStatus(element);
         this.controls.image.value = "";
+      }
+
+      toggleCommentMode(force) {
+        const next = typeof force === "boolean" ? force : !this.commentMode;
+        this.commentMode = next;
+        document.body.classList.toggle("commenting", next);
+        this.controls.commentMode.classList.toggle("active", next);
+        this.controls.commentMode.setAttribute("aria-pressed", next ? "true" : "false");
+        if (next && this.selected) this.focusCommentInput();
+      }
+
+      selectForComment(element) {
+        if (!element) return;
+        this.select(element);
+        this.ensureAiAnchor(element);
+        this.updateCommentPanel();
+        this.focusCommentInput();
+      }
+
+      focusCommentInput() {
+        if (!this.selected || !this.controls.commentInput || this.controls.commentInput.disabled) return;
+        const section = this.controls.commentInput.closest(".inspector-section");
+        if (section) section.scrollIntoView({ block: "nearest" });
+        this.controls.commentInput.focus({ preventScroll: true });
+      }
+
+      updateCommentPanel() {
+        const element = this.selected;
+        const hasSelection = Boolean(element);
+        const anchor = hasSelection ? (element.dataset.aiAnchor || "") : "";
+        const elementKey = hasSelection ? (anchor || element.dataset.editId || "") : "";
+        const comment = anchor ? this.comments[anchor] : null;
+        const slideNumber = hasSelection ? this.slideNumberForElement(element) : null;
+        this.controls.commentTarget.textContent = hasSelection
+          ? `${slideNumber ? `Slide ${String(slideNumber).padStart(2, "0")} · ` : ""}${this.getSelectionLabel(element)}`
+          : "未选中元素";
+        this.controls.commentInput.disabled = !hasSelection;
+        this.controls.saveComment.disabled = !hasSelection;
+        this.controls.clearComment.disabled = !comment;
+        this.controls.saveComment.textContent = comment ? "更新批注" : "保存批注";
+        if (!hasSelection) {
+          if (document.activeElement !== this.controls.commentInput) this.controls.commentInput.value = "";
+          this.commentInputAnchor = "";
+          return;
+        }
+        if (this.commentInputAnchor !== elementKey || document.activeElement !== this.controls.commentInput) {
+          this.controls.commentInput.value = comment?.text || "";
+          this.commentInputAnchor = elementKey;
+        }
+      }
+
+      ensureAiAnchor(element) {
+        if (!element) return "";
+        const current = element.dataset.aiAnchor;
+        if (current && this.findElementByAiAnchor(current) === element) return current;
+        const used = new Set(this.getEditableElements().filter((candidate) => candidate !== element).map((candidate) => candidate.dataset.aiAnchor).filter(Boolean));
+        const slideNumber = this.slideNumberForElement(element) || 0;
+        const slide = this.closestSlide(element);
+        const peers = this.getEditableElements().filter((candidate) => this.closestSlide(candidate) === slide);
+        const order = Math.max(1, peers.indexOf(element) + 1);
+        const kind = this.aiAnchorKind(element);
+        const base = `ai-s${String(slideNumber).padStart(2, "0")}-${kind}-${String(order).padStart(2, "0")}`;
+        let anchor = base;
+        let suffix = 2;
+        while (used.has(anchor)) {
+          anchor = `${base}-${suffix}`;
+          suffix += 1;
+        }
+        element.dataset.aiAnchor = anchor;
+        return anchor;
+      }
+
+      aiAnchorKind(element) {
+        if (this.isImageElement(element)) return "image";
+        if (element.classList.contains("shape-layer")) return "shape";
+        if (this.isTextElement(element)) return "text";
+        return "block";
+      }
+
+      findElementByAiAnchor(anchor) {
+        if (!anchor) return null;
+        return this.getEditableElements().find((element) => element.dataset.aiAnchor === anchor) || null;
+      }
+
+      slideNumberForElement(element) {
+        const slide = this.closestSlide(element);
+        const index = slide ? this.presentation.slides.indexOf(slide) : -1;
+        return index >= 0 ? index + 1 : null;
+      }
+
+      saveCommentForSelected() {
+        if (!this.selected) return;
+        const text = (this.controls.commentInput.value || "").trim();
+        const anchor = this.ensureAiAnchor(this.selected);
+        if (!text) {
+          this.clearCommentForSelected();
+          return;
+        }
+        this.comments[anchor] = {
+          anchor,
+          text,
+          label: this.getSelectionLabel(this.selected),
+          slide: this.slideNumberForElement(this.selected),
+          snippet: this.commentSnippet(this.selected),
+          updatedAt: new Date().toISOString()
+        };
+        this.selected.setAttribute("data-ai-commented", "true");
+        this.commentInputAnchor = anchor;
+        this.renderComments();
+        this.updateCommentPanel();
+        this.save(false, true);
+        this.toastMessage("批注已保存");
+      }
+
+      clearCommentForSelected() {
+        if (!this.selected) return;
+        const anchor = this.selected.dataset.aiAnchor;
+        if (anchor) delete this.comments[anchor];
+        this.selected.removeAttribute("data-ai-commented");
+        this.controls.commentInput.value = "";
+        this.renderComments();
+        this.updateCommentPanel();
+        this.save(false, true);
+        this.toastMessage("批注已清除");
+      }
+
+      removeCommentsForElement(element) {
+        const anchor = element?.dataset.aiAnchor;
+        if (!anchor) return;
+        delete this.comments[anchor];
+        this.renderComments();
+      }
+
+      commentSnippet(element) {
+        if (!element) return "";
+        const image = element.tagName === "IMG" ? element : element.querySelector?.("img");
+        if (image) {
+          const imageText = image.getAttribute("alt") || image.getAttribute("src") || "";
+          return this.truncateText(imageText, 96);
+        }
+        const text = this.isTextElement(element) ? this.getEditableText(element) : element.textContent;
+        return this.truncateText(text || "", 96);
+      }
+
+      truncateText(text, length) {
+        const normalized = String(text || "").replace(/\s+/g, " ").trim();
+        if (normalized.length <= length) return normalized;
+        return `${normalized.slice(0, Math.max(0, length - 1))}…`;
+      }
+
+      syncCommentMarkers() {
+        this.stage.querySelectorAll("[data-ai-commented]").forEach((element) => element.removeAttribute("data-ai-commented"));
+        Object.keys(this.comments).forEach((anchor) => {
+          const element = this.findElementByAiAnchor(anchor);
+          if (element) element.setAttribute("data-ai-commented", "true");
+        });
+      }
+
+      renderComments() {
+        if (!this.controls.commentList) return;
+        this.controls.commentList.innerHTML = "";
+        const comments = this.sortedComments();
+        if (!comments.length) {
+          const empty = document.createElement("p");
+          empty.className = "comment-empty";
+          empty.textContent = "暂无批注";
+          this.controls.commentList.appendChild(empty);
+          return;
+        }
+        comments.forEach((comment) => {
+          const element = this.findElementByAiAnchor(comment.anchor);
+          const card = document.createElement("button");
+          card.type = "button";
+          card.className = "comment-card";
+          const label = document.createElement("span");
+          label.className = "comment-card-label";
+          const slideNumber = element ? this.slideNumberForElement(element) : comment.slide;
+          label.textContent = `${slideNumber ? `Slide ${String(slideNumber).padStart(2, "0")} · ` : ""}${element ? this.getSelectionLabel(element) : comment.label || comment.anchor}`;
+          const text = document.createElement("span");
+          text.className = "comment-card-text";
+          text.textContent = this.truncateText(comment.text, 88);
+          card.append(label, text);
+          card.addEventListener("click", () => this.revealCommentTarget(comment.anchor));
+          this.controls.commentList.appendChild(card);
+        });
+      }
+
+      revealCommentTarget(anchor) {
+        const element = this.findElementByAiAnchor(anchor);
+        if (!element) {
+          this.toastMessage("批注目标已不在当前页面");
+          return;
+        }
+        const slide = this.closestSlide(element);
+        const index = slide ? this.presentation.slides.indexOf(slide) : -1;
+        if (index >= 0 && index !== this.presentation.currentSlide) {
+          this.presentation.showSlide(index);
+          this.renderSlideRail();
+        }
+        this.select(element);
+        this.toggleCommentMode(true);
+        this.focusCommentInput();
+      }
+
+      sortedComments() {
+        return Object.values(this.comments)
+          .filter((comment) => comment && comment.anchor && comment.text)
+          .sort((a, b) => (Number(a.slide) || 9999) - (Number(b.slide) || 9999) || String(a.anchor).localeCompare(String(b.anchor)));
+      }
+
+      normalizeComments(raw) {
+        const values = Array.isArray(raw) ? raw : Object.values(raw || {});
+        return values.reduce((comments, item) => {
+          const anchor = String(item?.anchor || "").trim();
+          const text = String(item?.text || "").trim();
+          if (!anchor || !text) return comments;
+          comments[anchor] = {
+            anchor,
+            text,
+            label: String(item?.label || ""),
+            slide: Number.isFinite(Number(item?.slide)) ? Number(item.slide) : null,
+            snippet: String(item?.snippet || ""),
+            updatedAt: String(item?.updatedAt || "")
+          };
+          return comments;
+        }, {});
       }
 
       focusTextEditor() {
@@ -4329,6 +4613,7 @@
       deleteSelected() {
         if (!this.canDeleteElement(this.selected)) return;
         const element = this.selected;
+        this.removeCommentsForElement(element);
         element.remove();
         this.clearSelection();
         this.save();
@@ -4344,6 +4629,7 @@
           if (!node.dataset.editAnim) this.editorMotionClasses().forEach((className) => node.classList.remove(className));
         });
         root.querySelectorAll("[contenteditable]").forEach((node) => node.removeAttribute("contenteditable"));
+        root.querySelectorAll("[data-ai-commented]").forEach((node) => node.removeAttribute("data-ai-commented"));
         root.querySelectorAll("[data-editor-bound]").forEach((node) => delete node.dataset.editorBound);
         root.querySelectorAll("[data-html-deck-editor-motion-hold]").forEach((node) => {
           node.removeAttribute("data-html-deck-editor-motion-hold");
@@ -4391,7 +4677,7 @@
         });
         const stageClone = this.stage.cloneNode(true);
         this.cleanEditorArtifacts(stageClone);
-        return { stage: stageClone.innerHTML, items };
+        return { stage: stageClone.innerHTML, items, comments: this.normalizeComments(this.comments) };
       }
 
       save(showToast = true, recordHistory = true) {
@@ -4509,6 +4795,7 @@
 
       restoreSnapshot(data) {
         this.hasPendingHistoryChange = false;
+        this.comments = this.normalizeComments(data.comments);
         this.stage.innerHTML = data.stage;
         this.cleanEditorArtifacts(this.stage);
         this.attachFrame();
@@ -4522,14 +4809,19 @@
         const page = Number.parseInt(window.location.hash.replace("#", ""), 10);
         this.presentation.showSlide(Number.isFinite(page) ? page - 1 : this.presentation.currentSlide);
         this.renderSlideRail();
+        this.syncCommentMarkers();
+        this.renderComments();
         this.updateInspector();
       }
 
-      cleanCloneForExport(clone) {
+      cleanCloneForExport(clone, options = {}) {
+        const preserveAiAnchors = options.preserveAiAnchors === true;
         clone.querySelectorAll("[data-generated-chrome], [data-html-deck-editor-ui]").forEach((node) => node.remove());
         clone.querySelectorAll(".editor-selected").forEach((node) => node.classList.remove("editor-selected"));
         clone.querySelectorAll(".editor-motion-parent-stable").forEach((node) => node.classList.remove("editor-motion-parent-stable"));
         clone.querySelectorAll("[contenteditable]").forEach((node) => node.removeAttribute("contenteditable"));
+        clone.querySelectorAll("[data-ai-commented]").forEach((node) => node.removeAttribute("data-ai-commented"));
+        if (!preserveAiAnchors) clone.querySelectorAll("[data-ai-anchor]").forEach((node) => node.removeAttribute("data-ai-anchor"));
         clone.querySelectorAll("[data-editor-bound], [data-edit-id], [data-inline-image], [data-original-motion-classes]").forEach((node) => {
           delete node.dataset.editorBound;
           delete node.dataset.editId;
@@ -4590,13 +4882,72 @@
           node.textContent = "";
         });
         const body = clone.querySelector("body");
-        if (body) body.classList.remove("editing", "editor-on", "dragging-file");
+        if (body) body.classList.remove("editing", "editor-on", "dragging-file", "commenting");
       }
 
       buildExportHtml() {
         const clone = document.documentElement.cloneNode(true);
         this.cleanCloneForExport(clone);
         return "<!doctype html>\n" + clone.outerHTML;
+      }
+
+      buildAiHandoffHtml() {
+        const clone = document.documentElement.cloneNode(true);
+        this.cleanCloneForExport(clone, { preserveAiAnchors: true });
+        return "<!doctype html>\n" + clone.outerHTML;
+      }
+
+      buildAiHandoffPayload() {
+        return {
+          html: this.buildAiHandoffHtml(),
+          instructions: [
+            "根据用户批注修改当前 HTML。",
+            "保持 deck-stage 结构；每一页 slide 仍应是 deck-stage 的直接子元素。",
+            "保留可编辑 HTML，不要把整页或整块内容改成截图。",
+            "尽量保留 data-ai-anchor；若删除被批注元素，请在回复中说明。"
+          ],
+          comments: this.sortedComments().map((comment) => {
+            const element = this.findElementByAiAnchor(comment.anchor);
+            return {
+              anchor: comment.anchor,
+              slide: element ? this.slideNumberForElement(element) : comment.slide,
+              target: element ? this.getSelectionLabel(element) : comment.label,
+              snippet: element ? this.commentSnippet(element) : comment.snippet,
+              text: comment.text
+            };
+          })
+        };
+      }
+
+      buildAiHandoffMarkdown() {
+        const payload = this.buildAiHandoffPayload();
+        const instructions = payload.instructions.map((item, index) => `${index + 1}. ${item}`).join("\n");
+        const comments = payload.comments.length
+          ? payload.comments.map((comment, index) => this.formatAiComment(comment, index)).join("\n\n")
+          : "暂无批注。";
+        return `# for-ai\n\n## 修改要求\n${instructions}\n\n## 用户批注\n${comments}\n\n## 当前 HTML\n\n\`\`\`\`html\n${payload.html}\n\`\`\`\`\n`;
+      }
+
+      formatAiComment(comment, index) {
+        const slide = comment.slide ? `Slide ${String(comment.slide).padStart(2, "0")}` : "未知页";
+        const lines = [
+          `${index + 1}. anchor: \`${comment.anchor}\``,
+          `   slide: ${slide}`,
+          `   target: ${comment.target || "未知元素"}`,
+          `   note: ${this.escapeMarkdown(comment.text)}`
+        ];
+        if (comment.snippet) lines.push(`   snippet: ${this.escapeMarkdown(comment.snippet)}`);
+        return lines.join("\n");
+      }
+
+      escapeMarkdown(text) {
+        return String(text || "").replace(/\s+/g, " ").trim().replace(/`/g, "\\`");
+      }
+
+      exportForAi() {
+        this.save(false, false);
+        this.downloadText(this.buildAiHandoffMarkdown(), "for-ai.md", "text/markdown;charset=utf-8");
+        this.toastMessage("已下载 for-ai.md");
       }
 
       async exportHtml() {
@@ -4640,10 +4991,14 @@
       }
 
       downloadHtml(html) {
-        const blob = new Blob([html], { type: "text/html;charset=utf-8" });
+        this.downloadText(html, "index.html", "text/html;charset=utf-8");
+      }
+
+      downloadText(text, filename, type) {
+        const blob = new Blob([text], { type });
         const link = document.createElement("a");
         link.href = URL.createObjectURL(blob);
-        link.download = "index.html";
+        link.download = filename;
         link.click();
         URL.revokeObjectURL(link.href);
       }

@@ -1697,4 +1697,40 @@ describe("editor runtime", () => {
     expect(getComputedStyle(title).transform).not.toBe("none");
   });
 
+  it("exports AI handoff markdown with comments without leaking anchors into normal HTML", () => {
+    document.body.innerHTML = `
+      <div id="deckStage" class="deck-stage">
+        <section class="slide active">
+          <h1 id="title" style="font-size:96px">Original title</h1>
+        </section>
+        <section class="slide"><h1>Second slide</h1></section>
+      </div>
+    `;
+    const title = document.getElementById("title") as HTMLElement;
+    title.getBoundingClientRect = () => rect({ left: 100, top: 120, width: 720, height: 120 });
+
+    installRuntime();
+    const editor = (window as any).FrontendSlidesEditor.mount();
+    editor.toggleEditMode(true);
+    editor.select(title);
+
+    const input = document.getElementById("commentInput") as HTMLTextAreaElement;
+    input.value = "把标题改得更具体，并保持可编辑文本。";
+    (document.getElementById("saveCommentBtn") as HTMLButtonElement).click();
+
+    const anchor = title.dataset.aiAnchor;
+    expect(anchor).toMatch(/^ai-s01-text-/);
+    expect(title.getAttribute("data-ai-commented")).toBe("true");
+
+    const markdown = editor.buildAiHandoffMarkdown();
+    expect(markdown).toContain("保持 deck-stage 结构");
+    expect(markdown).toContain(anchor);
+    expect(markdown).toContain("把标题改得更具体");
+    expect(markdown).toContain("Original title");
+
+    const html = editor.buildExportHtml();
+    expect(html).not.toContain("data-ai-anchor");
+    expect(html).not.toContain("data-ai-commented");
+  });
+
 });

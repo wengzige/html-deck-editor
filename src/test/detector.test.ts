@@ -600,6 +600,26 @@ describe("runtime injection", () => {
     expect(zip.file("deck/assets/style.css")).toBeTruthy();
   });
 
+  it("reports AI friendliness warnings for fragile slide inputs", () => {
+    const report = detectDeck(input([
+      file("index.html", `
+        <deck-stage id="deckStage">
+          <section class="slide active"><img src="assets/missing.png" alt="flattened slide"></section>
+          <section class="slide"><div class="slide"><h2>Nested slide</h2></div></section>
+        </deck-stage>
+        <script>
+          document.getElementById("deckStage").innerHTML = '<section class="slide">Dynamic</section>';
+        </script>
+      `)
+    ]));
+
+    expect(report.status).toBe("ready");
+    expect(report.warnings.some((warning) => warning.includes("嵌套结构"))).toBe(true);
+    expect(report.warnings.some((warning) => warning.includes("单张图片"))).toBe(true);
+    expect(report.warnings.some((warning) => warning.includes("动态生成 slide"))).toBe(true);
+    expect(report.warnings.some((warning) => warning.includes("assets/missing.png"))).toBe(true);
+  });
+
   it("does not remove user-owned vanilla-picker assets outside the editor runtime path", () => {
     const source = `
       <head>
