@@ -59,9 +59,9 @@
       <div class="shape-picker-wrap">
         <button class="editor-button" id="addShapeBtn" type="button" aria-haspopup="menu" aria-expanded="false">添加形状</button>
       </div>
-      <button class="editor-button" id="commentModeBtn" type="button" aria-pressed="false">批注模式</button>
-      <button class="editor-button" id="aiExportBtn" type="button">导出给 AI</button>
-      <button class="editor-button primary" id="saveBtn" type="button">保存</button>
+      <button class="editor-button" id="commentModeBtn" type="button" aria-pressed="false" title="点选元素并写给 AI 的修改意见">批注</button>
+      <button class="editor-button" id="aiExportBtn" type="button" title="下载给 AI 的批注文件，不会保存 HTML">导出 for-ai.md</button>
+      <button class="editor-button primary" id="saveBtn" type="button" title="覆盖或下载当前 HTML 文件">保存 HTML</button>
       <button class="editor-button danger" id="exitEditBtn" type="button">退出编辑</button>
     </div>
     <div class="editor-help-modal" id="editorHelp" role="dialog" aria-modal="true" aria-labelledby="editorHelpTitle" hidden>
@@ -92,7 +92,8 @@
             <ul>
               <li>Motion 区可以设置入场方式、出现顺序、延迟和时长，并支持预览当前元素或重播本页。</li>
               <li>选中元素后可拖动、缩放，点选框右上角 × 或按 Delete/Backspace 删除；撤回用 ↶ 或 Cmd/Ctrl+Z，重做用 ↷ 或 Cmd/Ctrl+Shift+Z。</li>
-              <li>保存会优先覆盖你授权的 index.html；浏览器不支持覆盖写入时，会退回为下载当前 HTML。</li>
+              <li>保存 HTML 会优先覆盖你授权的 index.html；浏览器不支持覆盖写入时，会退回为下载当前 HTML。</li>
+              <li>批注会保存在本地草稿里；导出 for-ai.md 会带给 AI，保存 HTML 不会写入批注标记。</li>
             </ul>
           </section>
         </div>
@@ -115,7 +116,7 @@
           </section>
           <section class="editor-help-section">
             <h3>和保存的关系</h3>
-            <p>“保存”会把当前画面写入你授权的 HTML 文件；如果浏览器不支持覆盖写入，就下载新的 index.html。“重置编辑”只是清掉当前浏览器的自动草稿。刷新后页面会重新读取 HTML 文件本身，不再叠加草稿；如果这个文件之前已经被覆盖保存过，刷新后看到的仍然是已保存后的内容。如果刷新前又点保存，保存的仍然是当前屏幕上的内容。</p>
+            <p>“保存 HTML”会把当前画面写入你授权的 HTML 文件；如果浏览器不支持覆盖写入，就下载新的 index.html。“重置编辑”只是清掉当前浏览器的自动草稿。刷新后页面会重新读取 HTML 文件本身，不再叠加草稿；如果这个文件之前已经被覆盖保存过，刷新后看到的仍然是已保存后的内容。如果刷新前又点保存 HTML，保存的仍然是当前屏幕上的内容。</p>
           </section>
         </div>
       </div>
@@ -156,6 +157,7 @@
       <section class="inspector-section comment-section">
         <p class="editor-title">AI 批注</p>
         <div class="comment-target" id="commentTargetStatus">未选中元素</div>
+        <p class="field-help comment-help">批注存到本地草稿；导出 for-ai.md 会带给 AI，保存 HTML 不会写入批注。</p>
         <label class="field-label" for="commentInput">批注</label>
         <textarea class="editor-textarea comment-input" id="commentInput" placeholder="写给 AI 的修改意见" disabled></textarea>
         <div class="inspector-actions">
@@ -1716,7 +1718,7 @@
         });
         element.addEventListener("input", () => {
           if (!this.isActive) return;
-          this.save(false);
+          this.saveDraft(false);
           this.updateInspector();
           this.updateFrame();
         });
@@ -1820,7 +1822,7 @@
           const dy = event.key === "ArrowUp" ? -step : event.key === "ArrowDown" ? step : 0;
           this.setStagePosition(this.selected, box.x + dx, box.y + dy, box.width, box.height);
           this.updateInspector();
-          this.save(false, true);
+          this.saveDraft(false, true);
         }
         if (this.isHostDeckShortcut(event)) {
           event.preventDefault();
@@ -2034,7 +2036,7 @@
         if (!this.isActive) {
           this.toggleCommentMode(false);
           this.hideGuides();
-          this.save(false);
+          this.saveDraft(false);
           this.clearSelection();
           this.motionHold = false;
           window.clearTimeout(this.motionPreviewTimer);
@@ -2312,13 +2314,12 @@
         return index >= 0 ? index + 1 : null;
       }
 
-      saveCommentForSelected() {
-        if (!this.selected) return;
+      saveCommentForSelected(options = {}) {
+        if (!this.selected) return false;
         const text = (this.controls.commentInput.value || "").trim();
         const anchor = this.ensureAiAnchor(this.selected);
         if (!text) {
-          this.clearCommentForSelected();
-          return;
+          return this.clearCommentForSelected(options);
         }
         this.comments[anchor] = {
           anchor,
@@ -2332,20 +2333,22 @@
         this.commentInputAnchor = anchor;
         this.renderComments();
         this.updateCommentPanel();
-        this.save(false, true);
-        this.toastMessage("批注已保存");
+        this.saveDraft(false, options.recordHistory !== false);
+        if (!options.silent) this.toastMessage("批注已保存到本地草稿");
+        return true;
       }
 
-      clearCommentForSelected() {
-        if (!this.selected) return;
+      clearCommentForSelected(options = {}) {
+        if (!this.selected) return false;
         const anchor = this.selected.dataset.aiAnchor;
         if (anchor) delete this.comments[anchor];
         this.selected.removeAttribute("data-ai-commented");
         this.controls.commentInput.value = "";
         this.renderComments();
         this.updateCommentPanel();
-        this.save(false, true);
-        this.toastMessage("批注已清除");
+        this.saveDraft(false, options.recordHistory !== false);
+        if (!options.silent) this.toastMessage("批注已从本地草稿清除");
+        return true;
       }
 
       removeCommentsForElement(element) {
@@ -2848,7 +2851,7 @@
           if (this.applyInlineTextStyle(element, property, value)) {
             this.updateFrame();
             const recordHistory = options.recordHistory !== false;
-            this.save(false, recordHistory);
+            this.saveDraft(false, recordHistory);
             if (!recordHistory) this.markPendingHistoryChange();
             return true;
           }
@@ -2872,7 +2875,7 @@
         element.style.setProperty(property, value);
         this.updateFrame();
         this.updateInspector();
-        this.save(false, true);
+        this.saveDraft(false, true);
       }
 
       applyInspectorValue(name, options = {}) {
@@ -2963,7 +2966,7 @@
           this.rememberMotionStableBox(element, this.reconcileStoredStagePosition(element, { mode: "sync" }) || this.getStableStageBox(element));
           this.applyAnimation(element, this.controls.anim.value, true);
           this.syncMotionControls(element);
-          this.save(false, recordHistory);
+          this.saveDraft(false, recordHistory);
           return;
         }
         if (name === "order") {
@@ -2990,7 +2993,7 @@
         }
         this.updateFrame();
         if (refreshInspector) this.updateInspector();
-        this.save(false, recordHistory);
+        this.saveDraft(false, recordHistory);
         if (!recordHistory) this.markPendingHistoryChange();
       }
 
@@ -4037,7 +4040,7 @@
           this.updateFrame();
           this.updateInspector();
         }
-        this.save(false, true);
+        this.saveDraft(false, true);
       }
 
       addText() {
@@ -4057,7 +4060,7 @@
         this.activeSlide().appendChild(layer);
         this.bindElement(layer);
         this.select(layer);
-        this.save();
+        this.saveDraft();
       }
 
       addShape(shape = "rect") {
@@ -4076,7 +4079,7 @@
         this.activeSlide().appendChild(layer);
         this.bindElement(layer);
         this.select(layer);
-        this.save();
+        this.saveDraft();
       }
 
       addImage(dataUrl, x = this.lastInsert.x, y = this.lastInsert.y) {
@@ -4099,7 +4102,7 @@
         this.bindElement(wrapper);
         this.select(wrapper);
         this.lastInsert = point;
-        this.save();
+        this.saveDraft();
       }
 
       applyShape(element, value) {
@@ -4226,7 +4229,7 @@
           element.style.backgroundRepeat = "no-repeat";
           element.dataset.inlineImage = "true";
         }
-        this.save();
+        this.saveDraft();
         this.updateInspector();
         this.toastMessage("图片已替换");
       }
@@ -4420,7 +4423,7 @@
         element.style.removeProperty("--edit-duration");
         this.updateInspector();
         if (shouldSave) {
-          this.save();
+          this.saveDraft();
           this.previewMotion(element);
         }
       }
@@ -4572,7 +4575,7 @@
         const current = Number.parseInt(window.getComputedStyle(this.selected).zIndex, 10);
         const next = Number.isFinite(current) ? current + delta : 20 + delta;
         this.selected.style.zIndex = String(Math.max(1, next));
-        this.save();
+        this.saveDraft();
       }
 
       canDeleteElement(element) {
@@ -4593,7 +4596,7 @@
         }
         this.openConfirm({
           title: "确认删除",
-          message: "删除后会从当前页面移除这个选中元素，并写入自动草稿。后续删除不再弹窗；你仍然可以立刻用撤回恢复。",
+          message: "删除后会从当前页面移除这个选中元素，并写入本地草稿。后续删除不再弹窗；你仍然可以立刻用撤回恢复。",
           okText: "删除",
           action: () => {
             this.markDeleteConfirmSeen();
@@ -4616,7 +4619,7 @@
         this.removeCommentsForElement(element);
         element.remove();
         this.clearSelection();
-        this.save();
+        this.saveDraft();
       }
 
       cleanEditorArtifacts(root) {
@@ -4680,14 +4683,14 @@
         return { stage: stageClone.innerHTML, items, comments: this.normalizeComments(this.comments) };
       }
 
-      save(showToast = true, recordHistory = true) {
+      saveDraft(showToast = true, recordHistory = true) {
         const data = this.serialize();
         localStorage.setItem(this.storageKey, JSON.stringify(data));
         if (recordHistory) {
           this.hasPendingHistoryChange = false;
           this.pushHistory(data);
         }
-        if (showToast) this.toastMessage("已自动保存，可点“保存”写入 HTML");
+        if (showToast) this.toastMessage("已保存到本地草稿；点“保存 HTML”才会写入文件");
       }
 
       restore() {
@@ -4944,14 +4947,26 @@
         return String(text || "").replace(/\s+/g, " ").trim().replace(/`/g, "\\`");
       }
 
+      syncPendingCommentForAiExport() {
+        if (!this.selected || !this.controls.commentInput || this.controls.commentInput.disabled) return false;
+        const text = (this.controls.commentInput.value || "").trim();
+        const anchor = this.selected.dataset.aiAnchor || "";
+        const savedText = anchor ? (this.comments[anchor]?.text || "") : "";
+        if (text === savedText) return false;
+        if (text) return this.saveCommentForSelected({ silent: true, recordHistory: false });
+        if (anchor && savedText) return this.clearCommentForSelected({ silent: true, recordHistory: false });
+        return false;
+      }
+
       exportForAi() {
-        this.save(false, false);
+        const syncedComment = this.syncPendingCommentForAiExport();
+        this.saveDraft(false, false);
         this.downloadText(this.buildAiHandoffMarkdown(), "for-ai.md", "text/markdown;charset=utf-8");
-        this.toastMessage("已下载 for-ai.md");
+        this.toastMessage(syncedComment ? "已保存当前批注并下载 for-ai.md，HTML 未改动" : "已下载 for-ai.md，HTML 未改动");
       }
 
       async exportHtml() {
-        this.save(false, false);
+        this.saveDraft(false, false);
         const html = this.buildExportHtml();
         if (this.canWriteFile()) {
           try {

@@ -1697,7 +1697,7 @@ describe("editor runtime", () => {
     expect(getComputedStyle(title).transform).not.toBe("none");
   });
 
-  it("exports AI handoff markdown with comments without leaking anchors into normal HTML", () => {
+  it("exports AI handoff markdown with pending comments without leaking anchors into normal HTML", () => {
     document.body.innerHTML = `
       <div id="deckStage" class="deck-stage">
         <section class="slide active">
@@ -1716,7 +1716,7 @@ describe("editor runtime", () => {
 
     const input = document.getElementById("commentInput") as HTMLTextAreaElement;
     input.value = "把标题改得更具体，并保持可编辑文本。";
-    (document.getElementById("saveCommentBtn") as HTMLButtonElement).click();
+    expect(editor.syncPendingCommentForAiExport()).toBe(true);
 
     const anchor = title.dataset.aiAnchor;
     expect(anchor).toMatch(/^ai-s01-text-/);
