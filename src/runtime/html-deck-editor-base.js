@@ -157,9 +157,9 @@
       <section class="inspector-section comment-section">
         <p class="editor-title">AI 批注</p>
         <div class="comment-target" id="commentTargetStatus">未选中元素</div>
-        <p class="field-help comment-help">批注存到本地草稿；导出 for-ai.md 会带给 AI，保存 HTML 不会写入批注。</p>
         <label class="field-label" for="commentInput">批注</label>
         <textarea class="editor-textarea comment-input" id="commentInput" placeholder="写给 AI 的修改意见" disabled></textarea>
+        <p class="field-help comment-help">仅用于 for-ai.md；保存 HTML 会自动去掉批注标记。</p>
         <div class="inspector-actions">
           <button class="editor-button" id="saveCommentBtn" type="button" disabled>保存批注</button>
           <button class="editor-button" id="clearCommentBtn" type="button" disabled>清除批注</button>
@@ -2257,9 +2257,10 @@
         const elementKey = hasSelection ? (anchor || element.dataset.editId || "") : "";
         const comment = anchor ? this.comments[anchor] : null;
         const slideNumber = hasSelection ? this.slideNumberForElement(element) : null;
+        const targetLabel = hasSelection ? this.getSelectionLabel(element).replace("：", " ") : "";
         this.controls.commentTarget.textContent = hasSelection
-          ? `${slideNumber ? `Slide ${String(slideNumber).padStart(2, "0")} · ` : ""}${this.getSelectionLabel(element)}`
-          : "未选中元素";
+          ? `目标：${slideNumber ? `Slide ${String(slideNumber).padStart(2, "0")} · ` : ""}${targetLabel}`
+          : "目标：未选中元素";
         this.controls.commentInput.disabled = !hasSelection;
         this.controls.saveComment.disabled = !hasSelection;
         this.controls.clearComment.disabled = !comment;
