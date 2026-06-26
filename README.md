@@ -1,8 +1,8 @@
-# HTML Deck Editor
+# Anchor Deck
 
 把 AI 生成的 HTML 汇报页，变成可以继续手动编辑的 HTML 演示稿。
 
-HTML Deck Editor 是一个本地优先的转换工具：上传 HTML、ZIP 或包含 `index.html` 的文件夹，它会识别演示稿结构，加入浏览器编辑器运行时，然后下载新的可编辑 ZIP。
+Anchor Deck 是一个本地优先的 HTML 演示稿转换工具：上传 HTML、ZIP 或包含 `index.html` 的文件夹，它会识别演示稿结构，加入浏览器编辑器运行时，然后下载新的可编辑 ZIP。
 
 在线使用：
 
@@ -12,7 +12,7 @@ HTML Deck Editor 是一个本地优先的转换工具：上传 HTML、ZIP 或包
 
 ## 开源范围
 
-本仓库公开的是 HTML Deck Editor 的核心转换器、文件检测、打包逻辑，以及注入到演示稿中的浏览器编辑器 runtime。线上网站的页面外壳源码目前不随 `main` 分支开源；GitHub Pages 只发布构建后的静态产物。
+本仓库公开的是 Anchor Deck 的核心转换器、文件检测、打包逻辑，以及注入到演示稿中的浏览器编辑器 runtime。线上网站的页面外壳源码目前不随 `main` 分支开源；GitHub Pages 只发布构建后的静态产物。
 
 ## 为什么用它
 
@@ -27,14 +27,14 @@ AI agent 很适合快速生成汇报类 HTML，例如项目汇报、产品方案
 
 ## 用 AI 生成 HTML 演示稿
 
-你可以先用 ChatGPT、Claude、Codex，或 [`zarazhangrui/frontend-slides`](https://github.com/zarazhangrui/frontend-slides) 这类 HTML slides skill 生成静态演示稿，再上传到 HTML Deck Editor 继续编辑。
+你可以先用 ChatGPT、Claude、Codex，或 [`zarazhangrui/frontend-slides`](https://github.com/zarazhangrui/frontend-slides) 这类 HTML slides skill 生成静态演示稿，再上传到 Anchor Deck 继续编辑。
 
 工具会尽量兼容常见的 `section`、Reveal.js、固定舞台等演示结构，也会处理一些旧编辑器或复杂 HTML 的升级问题。下面的强约束提示词建议直接复制给 AI，用它生成的 HTML 更容易被稳定识别、转换和继续编辑。
 
 给 AI 的推荐强约束提示词：
 
 ```text
-请生成一份适合后续用 HTML Deck Editor 编辑的静态 HTML 演示稿，主题是「这里填写主题」。
+请生成一份适合后续用 Anchor Deck 编辑的静态 HTML 演示稿，主题是「这里填写主题」。
 
 必须满足以下结构约束：
 - 输出一个完整的 index.html，可以直接在浏览器打开。
