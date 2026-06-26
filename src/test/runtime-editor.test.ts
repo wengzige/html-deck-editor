@@ -1760,4 +1760,43 @@ describe("editor runtime", () => {
     expect(modal.hidden).toBe(true);
   });
 
+  it("uses an icon-only format brush and removes the top comment mode button", () => {
+    document.body.innerHTML = `
+      <div id="deckStage" class="deck-stage">
+        <section class="slide active">
+          <h1 id="source" style="font-size:88px;color:#ff0000;background:#d9f99d;font-weight:800">Source</h1>
+          <h2 id="target" style="font-size:42px;color:#111111">Target</h2>
+        </section>
+      </div>
+    `;
+    const source = document.getElementById("source") as HTMLElement;
+    const target = document.getElementById("target") as HTMLElement;
+    source.getBoundingClientRect = () => rect({ left: 100, top: 120, width: 720, height: 120 });
+    target.getBoundingClientRect = () => rect({ left: 100, top: 280, width: 560, height: 90 });
+
+    installRuntime();
+    const editor = (window as any).FrontendSlidesEditor.mount();
+    editor.toggleEditMode(true);
+
+    expect(document.getElementById("commentModeBtn")).toBeNull();
+    const brush = document.getElementById("formatBrushBtn") as HTMLButtonElement;
+    expect(brush).toBeTruthy();
+    expect(brush.textContent?.trim()).toBe("");
+    expect(brush.querySelector("svg")).toBeTruthy();
+    expect(brush.disabled).toBe(true);
+
+    editor.select(source);
+    expect(brush.disabled).toBe(false);
+    brush.click();
+    expect(brush.getAttribute("aria-pressed")).toBe("true");
+
+    target.dispatchEvent(new Event("pointerdown", { bubbles: true, cancelable: true }));
+
+    expect(target.style.fontSize).toBe("88px");
+    expect(target.style.color).toBe("rgb(255, 0, 0)");
+    expect(target.style.backgroundColor).toBe("rgb(217, 249, 157)");
+    expect(target.style.fontWeight).toBe("800");
+    expect(brush.getAttribute("aria-pressed")).toBe("false");
+  });
+
 });

@@ -54,12 +54,18 @@
       <button class="editor-button" id="helpBtn" type="button">编辑器功能介绍</button>
       <button class="editor-button editor-icon-button" id="undoBtn" type="button" title="撤回 (Cmd/Ctrl+Z)" aria-label="撤回" disabled>↶</button>
       <button class="editor-button editor-icon-button" id="redoBtn" type="button" title="重做 (Cmd/Ctrl+Shift+Z)" aria-label="重做" disabled>↷</button>
+      <button class="editor-button editor-icon-button format-brush-button" id="formatBrushBtn" type="button" title="格式刷" aria-label="格式刷" aria-pressed="false" disabled>
+        <svg viewBox="0 0 24 24" aria-hidden="true" focusable="false">
+          <path d="M14.5 4.8 19.2 9.5l-8.4 8.4H6.1v-4.7l8.4-8.4Z"></path>
+          <path d="M13.2 6.1 17.9 10.8"></path>
+          <path d="M5.6 18.4c-1.5 0-2.6.9-2.6 2.1 1.6.5 3.5.2 4.7-1"></path>
+        </svg>
+      </button>
       <button class="editor-button" id="addTextBtn" type="button">添加文字框</button>
       <button class="editor-button" id="addImageBtn" type="button">添加图片</button>
       <div class="shape-picker-wrap">
         <button class="editor-button" id="addShapeBtn" type="button" aria-haspopup="menu" aria-expanded="false">添加形状</button>
       </div>
-      <button class="editor-button" id="commentModeBtn" type="button" aria-pressed="false" title="点选元素并写给 AI 的修改意见">批注</button>
       <div class="toolbar-action-group ai-export-group">
         <button class="editor-button" id="aiExportBtn" type="button" title="下载给 AI 的批注文件，不会保存 HTML">导出 for-ai.md</button>
         <button class="toolbar-help-button" id="aiExportHelpBtn" type="button" title="for-ai.md 使用说明" aria-label="for-ai.md 使用说明">?</button>
@@ -124,7 +130,7 @@
           <section class="editor-help-section">
             <h3>怎么用</h3>
             <ul>
-              <li>先点“批注”，选中画面里的文字、图片或块，写清楚想让 AI 怎么改。</li>
+              <li>先选中画面里的文字、图片或块，在右侧 AI 批注里写清楚想让 AI 怎么改。</li>
               <li>点“导出 for-ai.md”，把下载的文件内容发给你使用的 AI。</li>
               <li>让 AI 按批注返回完整 HTML 或明确的修改建议；后续接入用户自己的 API 后，这一步可以自动化。</li>
               <li>“保存 HTML”只保存当前页面，不会把批注或 anchor 写进正式 HTML。</li>
@@ -822,6 +828,7 @@
         this.comments = {};
         this.commentMode = false;
         this.commentInputAnchor = "";
+        this.formatBrush = null;
         this.toggle = document.getElementById("editToggle");
         this.hotzone = document.querySelector(".edit-hotzone");
         this.shell = document.getElementById("editorShell");
@@ -853,11 +860,11 @@
           confirmOk: document.getElementById("editorConfirmOkBtn"),
           undo: document.getElementById("undoBtn"),
           redo: document.getElementById("redoBtn"),
+          formatBrush: document.getElementById("formatBrushBtn"),
           addText: document.getElementById("addTextBtn"),
           addImage: document.getElementById("addImageBtn"),
           addShape: document.getElementById("addShapeBtn"),
           shapeMenu: document.getElementById("shapeMenu"),
-          commentMode: document.getElementById("commentModeBtn"),
           aiExport: document.getElementById("aiExportBtn"),
           save: document.getElementById("saveBtn"),
           exit: document.getElementById("exitEditBtn"),
@@ -1528,6 +1535,7 @@
 
         this.controls.undo.addEventListener("click", () => this.undo());
         this.controls.redo.addEventListener("click", () => this.redo());
+        this.controls.formatBrush.addEventListener("click", () => this.toggleFormatBrush());
         this.controls.addText.addEventListener("click", () => this.addText());
         this.controls.addImage.addEventListener("click", () => {
           this.openImagePicker();
@@ -1540,7 +1548,6 @@
             this.closeShapeMenu();
           });
         });
-        this.controls.commentMode.addEventListener("click", () => this.toggleCommentMode());
         this.controls.aiExport.addEventListener("click", () => this.exportForAi());
         this.controls.saveComment.addEventListener("click", () => this.saveCommentForSelected());
         this.controls.clearComment.addEventListener("click", () => this.clearCommentForSelected());
@@ -1710,6 +1717,12 @@
         element.addEventListener("pointerdown", (event) => {
           if (!this.isActive) return;
           const target = this.getEditableTarget(event.target) || element;
+          if (this.formatBrush) {
+            event.preventDefault();
+            event.stopPropagation();
+            this.applyFormatBrush(target);
+            return;
+          }
           if (this.commentMode) {
             event.preventDefault();
             event.stopPropagation();
@@ -1732,6 +1745,11 @@
           if (!this.isActive) return;
           const target = this.getEditableTarget(event.target) || element;
           event.stopPropagation();
+          if (this.formatBrush) {
+            event.preventDefault();
+            this.applyFormatBrush(target);
+            return;
+          }
           if (this.commentMode) {
             event.preventDefault();
             this.selectForComment(target);
@@ -1748,6 +1766,11 @@
           if (!this.isActive) return;
           const target = this.getEditableTarget(event.target) || element;
           event.stopPropagation();
+          if (this.formatBrush) {
+            event.preventDefault();
+            this.applyFormatBrush(target);
+            return;
+          }
           if (this.commentMode) {
             event.preventDefault();
             this.selectForComment(target);
@@ -1819,6 +1842,12 @@
           event.preventDefault();
           event.stopPropagation();
           this.closeShapeMenu();
+          return;
+        }
+        if (event.key === "Escape" && this.formatBrush) {
+          event.preventDefault();
+          event.stopPropagation();
+          this.cancelFormatBrush();
           return;
         }
         if ((event.metaKey || event.ctrlKey) && event.key.toLowerCase() === "z" && this.isActive && event.shiftKey && !formTarget) {
@@ -2090,6 +2119,7 @@
         this.refreshEditorLayoutSoon();
         this.updateFrame();
         if (!this.isActive) {
+          this.cancelFormatBrush(false);
           this.toggleCommentMode(false);
           this.hideGuides();
           this.saveDraft(false);
@@ -2107,6 +2137,12 @@
         if (this.isEditorUiElement(event.target)) return;
         const directTarget = this.getEditableTarget(event.target);
         if (directTarget) {
+          if (this.formatBrush) {
+            event.preventDefault();
+            event.stopPropagation();
+            this.applyFormatBrush(directTarget);
+            return;
+          }
           if (this.commentMode) {
             event.preventDefault();
             event.stopPropagation();
@@ -2120,6 +2156,10 @@
         if (nearbyTarget) {
           event.preventDefault();
           event.stopPropagation();
+          if (this.formatBrush) {
+            this.applyFormatBrush(nearbyTarget);
+            return;
+          }
           if (this.commentMode) {
             this.selectForComment(nearbyTarget);
             return;
@@ -2235,6 +2275,7 @@
         this.controls.previewMotion.disabled = !hasSelection;
         this.controls.restoreMotion.disabled = !hasSelection || !this.hasStoredOriginalMotion(element);
         this.controls.delete.disabled = !canDelete;
+        this.controls.formatBrush.disabled = !hasSelection && !this.formatBrush;
         this.controls.image.disabled = false;
         this.controls.imagePick.disabled = false;
         this.controls.imagePick.textContent = canUseImage ? "替换图片" : "选择图片";
@@ -2282,12 +2323,96 @@
         this.controls.image.value = "";
       }
 
+      toggleFormatBrush() {
+        if (this.formatBrush) {
+          this.cancelFormatBrush();
+          return;
+        }
+        if (!this.selected) {
+          this.toastMessage("先选中要复制样式的元素");
+          return;
+        }
+        this.formatBrush = this.captureFormatBrush(this.selected);
+        this.setFormatBrushButtonState(true);
+        this.toastMessage("已复制样式，点击目标元素应用");
+      }
+
+      cancelFormatBrush(showToast = true) {
+        if (!this.formatBrush) return;
+        this.formatBrush = null;
+        this.setFormatBrushButtonState(false);
+        if (showToast) this.toastMessage("已取消格式刷");
+      }
+
+      setFormatBrushButtonState(active) {
+        document.body.classList.toggle("format-brushing", active);
+        this.controls.formatBrush.classList.toggle("active", active);
+        this.controls.formatBrush.setAttribute("aria-pressed", active ? "true" : "false");
+        this.controls.formatBrush.disabled = !active && !this.selected;
+      }
+
+      captureFormatBrush(element) {
+        const computed = window.getComputedStyle(element);
+        return {
+          text: this.isTextElement(element) ? {
+            color: this.editableTextColor(element, computed),
+            fontFamily: computed.fontFamily,
+            fontSize: computed.fontSize,
+            fontStyle: computed.fontStyle,
+            fontWeight: computed.fontWeight,
+            letterSpacing: computed.letterSpacing,
+            lineHeight: computed.lineHeight,
+            textAlign: computed.textAlign
+          } : null,
+          surface: {
+            backgroundColor: this.editableSurfaceColor(element, computed),
+            borderColor: computed.borderColor,
+            borderRadius: computed.borderRadius,
+            borderStyle: computed.borderStyle,
+            borderWidth: computed.borderWidth,
+            boxShadow: computed.boxShadow,
+            opacity: computed.opacity
+          },
+          shape: element.classList.contains("shape-layer") ? (element.dataset.shape || "rect") : ""
+        };
+      }
+
+      applyFormatBrush(element) {
+        if (!element || !this.formatBrush) return;
+        const brush = this.formatBrush;
+        this.select(element);
+        if (brush.text && this.isTextElement(element)) {
+          Object.entries(brush.text).forEach(([property, value]) => {
+            if (value) element.style.setProperty(this.camelToKebab(property), value);
+          });
+        }
+        const surface = brush.surface || {};
+        if (this.isVisiblePaint(surface.backgroundColor)) {
+          this.setEditableSurfaceColor(element, surface.backgroundColor);
+        } else {
+          this.clearEditableSurfaceColor(element);
+        }
+        ["borderColor", "borderRadius", "borderStyle", "borderWidth", "boxShadow", "opacity"].forEach((property) => {
+          const value = surface[property];
+          if (value) element.style.setProperty(this.camelToKebab(property), value);
+        });
+        if (brush.shape && element.classList.contains("shape-layer")) this.applyShape(element, brush.shape);
+        this.formatBrush = null;
+        this.setFormatBrushButtonState(false);
+        this.updateFrame();
+        this.updateInspector();
+        this.saveDraft(false, true);
+        this.toastMessage("已应用格式");
+      }
+
+      camelToKebab(value) {
+        return String(value).replace(/[A-Z]/g, (match) => `-${match.toLowerCase()}`);
+      }
+
       toggleCommentMode(force) {
         const next = typeof force === "boolean" ? force : !this.commentMode;
         this.commentMode = next;
         document.body.classList.toggle("commenting", next);
-        this.controls.commentMode.classList.toggle("active", next);
-        this.controls.commentMode.setAttribute("aria-pressed", next ? "true" : "false");
         if (next && this.selected) this.focusCommentInput();
       }
 
@@ -2482,7 +2607,6 @@
           this.renderSlideRail();
         }
         this.select(element);
-        this.toggleCommentMode(true);
         this.focusCommentInput();
       }
 
