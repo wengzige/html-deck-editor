@@ -168,6 +168,7 @@
     .editor-shell[data-html-deck-editor-ui] .editor-textarea:focus-visible,
     .editor-shell[data-html-deck-editor-ui] .slide-chip:focus-visible,
     .editor-shell[data-html-deck-editor-ui] .reset-help-button:focus-visible,
+    .editor-shell[data-html-deck-editor-ui] .toolbar-help-button:focus-visible,
     .editor-shell[data-html-deck-editor-ui] .frame-delete:focus-visible,
     .editor-shell[data-html-deck-editor-ui] .shape-choice:focus-visible {
       outline: 2px solid rgba(31, 43, 224, 0.34);
@@ -187,6 +188,17 @@
     .editor-shell[data-html-deck-editor-ui] .shape-picker-wrap {
       position: relative;
       flex: 0 0 auto;
+    }
+
+    .editor-shell[data-html-deck-editor-ui] .toolbar-action-group {
+      position: relative;
+      display: inline-flex;
+      flex: 0 0 auto;
+      min-width: 0;
+    }
+
+    .editor-shell[data-html-deck-editor-ui] .ai-export-group #aiExportBtn {
+      padding-right: 36px;
     }
 
     .editor-shell[data-html-deck-editor-ui] .shape-menu {
@@ -690,7 +702,8 @@
       padding-right: 36px;
     }
 
-    .editor-shell[data-html-deck-editor-ui] .reset-help-button {
+    .editor-shell[data-html-deck-editor-ui] .reset-help-button,
+    .editor-shell[data-html-deck-editor-ui] .toolbar-help-button {
       position: absolute;
       top: 50%;
       right: 10px;
@@ -711,7 +724,9 @@
     }
 
     .editor-shell[data-html-deck-editor-ui] .reset-help-button:hover,
-    .editor-shell[data-html-deck-editor-ui] .reset-help-button:focus-visible {
+    .editor-shell[data-html-deck-editor-ui] .reset-help-button:focus-visible,
+    .editor-shell[data-html-deck-editor-ui] .toolbar-help-button:hover,
+    .editor-shell[data-html-deck-editor-ui] .toolbar-help-button:focus-visible {
       border-color: rgba(17, 17, 17, 0.48);
       background: rgba(17, 17, 17, 0.08);
       color: rgba(17, 17, 17, 0.78);

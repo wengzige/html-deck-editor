@@ -1733,4 +1733,31 @@ describe("editor runtime", () => {
     expect(html).not.toContain("data-ai-commented");
   });
 
+  it("opens for-ai handoff help from the toolbar", () => {
+    document.body.innerHTML = `
+      <div id="deckStage" class="deck-stage">
+        <section class="slide active">
+          <h1 id="title" style="font-size:96px">Original title</h1>
+        </section>
+      </div>
+    `;
+    const title = document.getElementById("title") as HTMLElement;
+    title.getBoundingClientRect = () => rect({ left: 100, top: 120, width: 720, height: 120 });
+
+    installRuntime();
+    const editor = (window as any).FrontendSlidesEditor.mount();
+    editor.toggleEditMode(true);
+
+    const modal = document.getElementById("aiExportHelp") as HTMLElement;
+    expect(modal.hidden).toBe(true);
+
+    (document.getElementById("aiExportHelpBtn") as HTMLButtonElement).click();
+    expect(modal.hidden).toBe(false);
+    expect(modal.textContent).toContain("for-ai.md 是给外部 AI");
+    expect(modal.textContent).toContain("保持 deck-stage 和 slide 层级");
+
+    (document.getElementById("aiExportHelpCloseBtn") as HTMLButtonElement).click();
+    expect(modal.hidden).toBe(true);
+  });
+
 });

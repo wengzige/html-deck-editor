@@ -60,7 +60,10 @@
         <button class="editor-button" id="addShapeBtn" type="button" aria-haspopup="menu" aria-expanded="false">添加形状</button>
       </div>
       <button class="editor-button" id="commentModeBtn" type="button" aria-pressed="false" title="点选元素并写给 AI 的修改意见">批注</button>
-      <button class="editor-button" id="aiExportBtn" type="button" title="下载给 AI 的批注文件，不会保存 HTML">导出 for-ai.md</button>
+      <div class="toolbar-action-group ai-export-group">
+        <button class="editor-button" id="aiExportBtn" type="button" title="下载给 AI 的批注文件，不会保存 HTML">导出 for-ai.md</button>
+        <button class="toolbar-help-button" id="aiExportHelpBtn" type="button" title="for-ai.md 使用说明" aria-label="for-ai.md 使用说明">?</button>
+      </div>
       <button class="editor-button primary" id="saveBtn" type="button" title="覆盖或下载当前 HTML 文件">保存 HTML</button>
       <button class="editor-button danger" id="exitEditBtn" type="button">退出编辑</button>
     </div>
@@ -94,6 +97,37 @@
               <li>选中元素后可拖动、缩放，点选框右上角 × 或按 Delete/Backspace 删除；撤回用 ↶ 或 Cmd/Ctrl+Z，重做用 ↷ 或 Cmd/Ctrl+Shift+Z。</li>
               <li>保存 HTML 会优先覆盖你授权的 index.html；浏览器不支持覆盖写入时，会退回为下载当前 HTML。</li>
               <li>批注会保存在本地草稿里；导出 for-ai.md 会带给 AI，保存 HTML 不会写入批注标记。</li>
+            </ul>
+          </section>
+        </div>
+      </div>
+    </div>
+    <div class="editor-help-modal" id="aiExportHelp" role="dialog" aria-modal="true" aria-labelledby="aiExportHelpTitle" hidden>
+      <div class="editor-help-card">
+        <div class="editor-help-header">
+          <h2 class="editor-help-title" id="aiExportHelpTitle">for-ai.md 使用说明</h2>
+          <button class="editor-help-close" id="aiExportHelpCloseBtn" type="button" aria-label="关闭">×</button>
+        </div>
+        <div class="editor-help-body">
+          <section class="editor-help-section">
+            <h3>它是什么</h3>
+            <p>for-ai.md 是给外部 AI 读取的交接文件。它不会保存 HTML，也不会改写当前页面。</p>
+          </section>
+          <section class="editor-help-section">
+            <h3>里面有什么</h3>
+            <ul>
+              <li>当前 HTML，其中被批注的元素会带稳定 anchor，方便 AI 定位。</li>
+              <li>你在编辑器里写的批注，包括目标元素、所在页和修改意见。</li>
+              <li>给 AI 的结构要求，比如保持 deck-stage 和 slide 层级，不要把内容改成截图。</li>
+            </ul>
+          </section>
+          <section class="editor-help-section">
+            <h3>怎么用</h3>
+            <ul>
+              <li>先点“批注”，选中画面里的文字、图片或块，写清楚想让 AI 怎么改。</li>
+              <li>点“导出 for-ai.md”，把下载的文件内容发给你使用的 AI。</li>
+              <li>让 AI 按批注返回完整 HTML 或明确的修改建议；后续接入用户自己的 API 后，这一步可以自动化。</li>
+              <li>“保存 HTML”只保存当前页面，不会把批注或 anchor 写进正式 HTML。</li>
             </ul>
           </section>
         </div>
@@ -805,6 +839,9 @@
           help: document.getElementById("helpBtn"),
           helpModal: document.getElementById("editorHelp"),
           helpClose: document.getElementById("helpCloseBtn"),
+          aiExportHelp: document.getElementById("aiExportHelpBtn"),
+          aiExportHelpModal: document.getElementById("aiExportHelp"),
+          aiExportHelpClose: document.getElementById("aiExportHelpCloseBtn"),
           resetHelp: document.getElementById("resetHelpBtn"),
           resetHelpModal: document.getElementById("resetHelp"),
           resetHelpClose: document.getElementById("resetHelpCloseBtn"),
@@ -1466,6 +1503,11 @@
         this.controls.helpModal.addEventListener("click", (event) => {
           if (event.target === this.controls.helpModal) this.closeHelp();
         });
+        this.controls.aiExportHelp.addEventListener("click", () => this.openAiExportHelp());
+        this.controls.aiExportHelpClose.addEventListener("click", () => this.closeAiExportHelp());
+        this.controls.aiExportHelpModal.addEventListener("click", (event) => {
+          if (event.target === this.controls.aiExportHelpModal) this.closeAiExportHelp();
+        });
         this.controls.resetHelp.addEventListener("click", () => this.openResetHelp());
         this.controls.resetHelpClose.addEventListener("click", () => this.closeResetHelp());
         this.controls.resetHelpModal.addEventListener("click", (event) => {
@@ -1761,6 +1803,12 @@
           this.closeResetHelp();
           return;
         }
+        if (event.key === "Escape" && !this.controls.aiExportHelpModal.hidden) {
+          event.preventDefault();
+          event.stopPropagation();
+          this.closeAiExportHelp();
+          return;
+        }
         if (event.key === "Escape" && !this.controls.helpModal.hidden) {
           event.preventDefault();
           event.stopPropagation();
@@ -1836,6 +1884,14 @@
 
       closeHelp() {
         this.controls.helpModal.hidden = true;
+      }
+
+      openAiExportHelp() {
+        this.controls.aiExportHelpModal.hidden = false;
+      }
+
+      closeAiExportHelp() {
+        this.controls.aiExportHelpModal.hidden = true;
       }
 
       openResetHelp() {
