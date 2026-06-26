@@ -94,7 +94,7 @@
           </section>
           <section class="editor-help-section">
             <h3>布局和样式</h3>
-            <p>拖动选框移动元素，拖右下角改变尺寸；右侧 Layout 可以精确输入位置和大小。拖动时会出现对齐参考线，方便和画面中心或其他元素吸附。</p>
+            <p>拖动选框移动元素，拖右下角改变尺寸；右侧 Layout 可以精确输入位置和大小。选中元素或文字片段后点工具栏小刷子，可以把样式刷到另一个元素或另一段文字。</p>
           </section>
           <section class="editor-help-section">
             <h3>动效和保存</h3>
@@ -102,7 +102,7 @@
               <li>Motion 区可以设置入场方式、出现顺序、延迟和时长，并支持预览当前元素或重播本页。</li>
               <li>选中元素后可拖动、缩放，点选框右上角 × 或按 Delete/Backspace 删除；撤回用 ↶ 或 Cmd/Ctrl+Z，重做用 ↷ 或 Cmd/Ctrl+Shift+Z。</li>
               <li>保存 HTML 会优先覆盖你授权的 index.html；浏览器不支持覆盖写入时，会退回为下载当前 HTML。</li>
-              <li>批注会保存在本地草稿里；导出 for-ai.md 会带给 AI，保存 HTML 不会写入批注标记。</li>
+              <li>选中元素后可在右侧 AI 批注里写修改意见；导出 for-ai.md 会带给 AI，保存 HTML 不会写入批注标记。</li>
             </ul>
           </section>
         </div>
@@ -132,7 +132,7 @@
             <ul>
               <li>先选中画面里的文字、图片或块，在右侧 AI 批注里写清楚想让 AI 怎么改。</li>
               <li>点“导出 for-ai.md”，把下载的文件内容发给你使用的 AI。</li>
-              <li>让 AI 按批注返回完整 HTML 或明确的修改建议；后续接入用户自己的 API 后，这一步可以自动化。</li>
+              <li>让 AI 按批注返回完整 HTML 或明确的修改建议。</li>
               <li>“保存 HTML”只保存当前页面，不会把批注或 anchor 写进正式 HTML。</li>
             </ul>
           </section>
@@ -1561,7 +1561,7 @@
         this.controls.previewMotion.addEventListener("click", () => this.previewMotion());
         this.controls.previewSlideMotion.addEventListener("click", () => this.replayActiveSlideMotion());
         this.controls.restoreMotion.addEventListener("click", () => this.restoreOriginalMotion(this.selected, true));
-        [this.controls.fontFamily, this.controls.fontFamilyCustom, this.controls.fontSize, this.controls.fontWeight, this.controls.fontStyle, this.controls.colorButton, this.controls.colorEyedropper, this.controls.bg, this.controls.bgEyedropper, this.controls.opacity].filter(Boolean).forEach((control) => {
+        [this.controls.formatBrush, this.controls.fontFamily, this.controls.fontFamilyCustom, this.controls.fontSize, this.controls.fontWeight, this.controls.fontStyle, this.controls.colorButton, this.controls.colorEyedropper, this.controls.bg, this.controls.bgEyedropper, this.controls.opacity].filter(Boolean).forEach((control) => {
           control.addEventListener("pointerdown", () => this.captureTextSelection());
           control.addEventListener("focus", () => this.captureTextSelection());
         });
@@ -1718,6 +1718,10 @@
           if (!this.isActive) return;
           const target = this.getEditableTarget(event.target) || element;
           if (this.formatBrush) {
+            if (this.isTextElement(target)) {
+              this.select(target);
+              return;
+            }
             event.preventDefault();
             event.stopPropagation();
             this.applyFormatBrush(target);
@@ -2138,6 +2142,10 @@
         const directTarget = this.getEditableTarget(event.target);
         if (directTarget) {
           if (this.formatBrush) {
+            if (this.isTextElement(directTarget)) {
+              this.select(directTarget);
+              return;
+            }
             event.preventDefault();
             event.stopPropagation();
             this.applyFormatBrush(directTarget);
@@ -2352,18 +2360,23 @@
       }
 
       captureFormatBrush(element) {
+        this.captureTextSelection({ syncInspector: false });
+        const range = this.isTextElement(element) ? this.validTextSelectionRange(element) : null;
         const computed = window.getComputedStyle(element);
+        const text = range ? this.captureTextRangeFormat(range, element) : (this.isTextElement(element) ? {
+          color: this.editableTextColor(element, computed),
+          fontFamily: computed.fontFamily,
+          fontSize: computed.fontSize,
+          fontStyle: computed.fontStyle,
+          fontWeight: computed.fontWeight,
+          letterSpacing: computed.letterSpacing,
+          lineHeight: computed.lineHeight,
+          textAlign: computed.textAlign,
+          opacity: computed.opacity,
+          backgroundColor: this.editableSurfaceColor(element, computed)
+        } : null);
         return {
-          text: this.isTextElement(element) ? {
-            color: this.editableTextColor(element, computed),
-            fontFamily: computed.fontFamily,
-            fontSize: computed.fontSize,
-            fontStyle: computed.fontStyle,
-            fontWeight: computed.fontWeight,
-            letterSpacing: computed.letterSpacing,
-            lineHeight: computed.lineHeight,
-            textAlign: computed.textAlign
-          } : null,
+          text,
           surface: {
             backgroundColor: this.editableSurfaceColor(element, computed),
             borderColor: computed.borderColor,
@@ -2377,14 +2390,35 @@
         };
       }
 
+      captureTextRangeFormat(range, element) {
+        const summary = this.selectedTextStyleSummary(range, element);
+        return {
+          color: summary.color,
+          fontFamily: summary.fontFamilyRaw || summary.fontFamily,
+          fontSize: summary.fontSize ? `${summary.fontSize}px` : "",
+          fontStyle: summary.fontStyle,
+          fontWeight: summary.fontWeight,
+          letterSpacing: "",
+          lineHeight: "",
+          textAlign: "",
+          opacity: summary.opacity ? String((Number.parseInt(summary.opacity, 10) || 100) / 100) : "",
+          backgroundColor: summary.backgroundColor
+        };
+      }
+
       applyFormatBrush(element) {
         if (!element || !this.formatBrush) return;
         const brush = this.formatBrush;
         this.select(element);
         if (brush.text && this.isTextElement(element)) {
-          Object.entries(brush.text).forEach(([property, value]) => {
-            if (value) element.style.setProperty(this.camelToKebab(property), value);
-          });
+          this.captureTextSelection({ syncInspector: false });
+          if (this.validTextSelectionRange(element)) {
+            if (this.applyTextFormatBrushToSelection(element, brush.text)) {
+              this.finishFormatBrush("已应用到文字片段");
+              return;
+            }
+          }
+          this.applyTextFormatBrushToElement(element, brush.text);
         }
         const surface = brush.surface || {};
         if (this.isVisiblePaint(surface.backgroundColor)) {
@@ -2397,12 +2431,43 @@
           if (value) element.style.setProperty(this.camelToKebab(property), value);
         });
         if (brush.shape && element.classList.contains("shape-layer")) this.applyShape(element, brush.shape);
+        this.finishFormatBrush("已应用格式");
+      }
+
+      finishFormatBrush(message) {
         this.formatBrush = null;
         this.setFormatBrushButtonState(false);
         this.updateFrame();
         this.updateInspector();
         this.saveDraft(false, true);
-        this.toastMessage("已应用格式");
+        this.toastMessage(message);
+      }
+
+      applyTextFormatBrushToSelection(element, text) {
+        const applied = this.applyInlineTextStyles(element, this.textFormatEntries(text));
+        if (applied) this.syncInlineSelectionInspector();
+        return applied;
+      }
+
+      applyTextFormatBrushToElement(element, text) {
+        this.textFormatEntries(text).forEach(([property, value]) => {
+          if (value) element.style.setProperty(property, value);
+        });
+        if (text.textAlign) element.style.textAlign = text.textAlign;
+        if (text.lineHeight) element.style.lineHeight = text.lineHeight;
+      }
+
+      textFormatEntries(text) {
+        return [
+          ["font-family", text.fontFamily],
+          ["font-size", text.fontSize],
+          ["font-style", text.fontStyle],
+          ["font-weight", text.fontWeight],
+          ["letter-spacing", text.letterSpacing],
+          ["color", text.color],
+          ["background-color", text.backgroundColor],
+          ["opacity", text.opacity]
+        ];
       }
 
       camelToKebab(value) {
@@ -2878,6 +2943,32 @@
         wrapper = this.mergeAdjacentInlineSpans(wrapper, property);
         this.select(element);
         this.restoreRangeAround(wrapper);
+        this.normalizeInlineTextStyles(element);
+        this.textSelectionRange = this.currentSelectionRangeFor(element);
+        this.textSelectionElement = element;
+        return true;
+      }
+
+      applyInlineTextStyles(element, entries) {
+        const range = this.validTextSelectionRange(element);
+        const styles = entries.filter((entry) => entry[1]);
+        if (!range || !styles.length) return false;
+        let styleTarget = this.inlineStyleTargetForRange(range, element);
+        if (styleTarget) {
+          styles.forEach(([property, value]) => styleTarget.style.setProperty(property, value));
+        } else {
+          styleTarget = document.createElement("span");
+          styles.forEach(([property, value]) => styleTarget.style.setProperty(property, value));
+          const fragment = range.extractContents();
+          if (!fragment.textContent || !fragment.textContent.trim()) {
+            range.insertNode(fragment);
+            return false;
+          }
+          styleTarget.appendChild(fragment);
+          range.insertNode(styleTarget);
+        }
+        this.select(element);
+        this.restoreRangeAround(styleTarget);
         this.normalizeInlineTextStyles(element);
         this.textSelectionRange = this.currentSelectionRangeFor(element);
         this.textSelectionElement = element;

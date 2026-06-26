@@ -1755,9 +1755,36 @@ describe("editor runtime", () => {
     expect(modal.hidden).toBe(false);
     expect(modal.textContent).toContain("for-ai.md 是给外部 AI");
     expect(modal.textContent).toContain("保持 deck-stage 和 slide 层级");
+    expect(modal.textContent).toContain("右侧 AI 批注");
+    expect(modal.textContent).not.toContain("用户自己的 API");
+    expect(modal.textContent).not.toContain("这一步可以自动化");
 
     (document.getElementById("aiExportHelpCloseBtn") as HTMLButtonElement).click();
     expect(modal.hidden).toBe(true);
+  });
+
+  it("describes format brush and right-side AI comments in the editor help", () => {
+    document.body.innerHTML = `
+      <div id="deckStage" class="deck-stage">
+        <section class="slide active">
+          <h1 id="title" style="font-size:96px">Original title</h1>
+        </section>
+      </div>
+    `;
+    const title = document.getElementById("title") as HTMLElement;
+    title.getBoundingClientRect = () => rect({ left: 100, top: 120, width: 720, height: 120 });
+
+    installRuntime();
+    const editor = (window as any).FrontendSlidesEditor.mount();
+    editor.toggleEditMode(true);
+
+    const modal = document.getElementById("editorHelp") as HTMLElement;
+    (document.getElementById("helpBtn") as HTMLButtonElement).click();
+
+    expect(modal.hidden).toBe(false);
+    expect(modal.textContent).toContain("工具栏小刷子");
+    expect(modal.textContent).toContain("右侧 AI 批注");
+    expect(modal.textContent).not.toContain("先点“批注”");
   });
 
   it("uses an icon-only format brush and removes the top comment mode button", () => {
@@ -1791,11 +1818,62 @@ describe("editor runtime", () => {
     expect(brush.getAttribute("aria-pressed")).toBe("true");
 
     target.dispatchEvent(new Event("pointerdown", { bubbles: true, cancelable: true }));
+    target.dispatchEvent(new Event("click", { bubbles: true, cancelable: true }));
 
     expect(target.style.fontSize).toBe("88px");
     expect(target.style.color).toBe("rgb(255, 0, 0)");
     expect(target.style.backgroundColor).toBe("rgb(217, 249, 157)");
     expect(target.style.fontWeight).toBe("800");
+    expect(brush.getAttribute("aria-pressed")).toBe("false");
+  });
+
+  it("applies the format brush to selected text instead of the whole text box", () => {
+    document.body.innerHTML = `
+      <div id="deckStage" class="deck-stage">
+        <section class="slide active">
+          <h1 id="source" style="font-size:48px">A<span id="sample" style="font-size:88px;color:#ff0000;background-color:#d9f99d;font-weight:800">B</span>C</h1>
+          <h2 id="target" style="font-size:42px;color:#111111;background-color:#ffffff;font-weight:400">XYZ</h2>
+        </section>
+      </div>
+    `;
+    const source = document.getElementById("source") as HTMLElement;
+    const sample = document.getElementById("sample") as HTMLElement;
+    const target = document.getElementById("target") as HTMLElement;
+    source.getBoundingClientRect = () => rect({ left: 100, top: 120, width: 720, height: 120 });
+    target.getBoundingClientRect = () => rect({ left: 100, top: 280, width: 560, height: 90 });
+
+    installRuntime();
+    const editor = (window as any).FrontendSlidesEditor.mount();
+    editor.toggleEditMode(true);
+    const brush = document.getElementById("formatBrushBtn") as HTMLButtonElement;
+
+    editor.select(source);
+    const selectRange = (node: Text, start: number, end: number) => {
+      const range = document.createRange();
+      range.setStart(node, start);
+      range.setEnd(node, end);
+      const selection = window.getSelection() as Selection;
+      selection.removeAllRanges();
+      selection.addRange(range);
+      document.dispatchEvent(new Event("selectionchange"));
+    };
+    selectRange(sample.firstChild as Text, 0, 1);
+    brush.click();
+
+    editor.select(target);
+    selectRange(target.firstChild as Text, 1, 2);
+    editor.applyFormatBrush(target);
+
+    const styled = target.querySelector("span") as HTMLElement;
+    expect(target.textContent).toBe("XYZ");
+    expect(styled.textContent).toBe("Y");
+    expect(styled.style.fontSize).toBe("88px");
+    expect(styled.style.color).toBe("rgb(255, 0, 0)");
+    expect(styled.style.backgroundColor).toBe("rgb(217, 249, 157)");
+    expect(styled.style.fontWeight).toBe("700");
+    expect(target.style.fontSize).toBe("42px");
+    expect(target.style.color).toBe("rgb(17, 17, 17)");
+    expect(target.style.backgroundColor).toBe("rgb(255, 255, 255)");
     expect(brush.getAttribute("aria-pressed")).toBe("false");
   });
 
