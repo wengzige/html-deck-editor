@@ -583,6 +583,31 @@ describe("runtime injection", () => {
     expect(result.filesModified).toEqual(["index.html"]);
   });
 
+  it("uses an AI adaptation plan before normal runtime injection", async () => {
+    const result = await convertInput(input([
+      file("index.html", `
+        <main id="presentation">
+          <article id="one"><h1>One</h1><p>Enough text here</p></article>
+          <article id="two"><h1>Two</h1><p>Enough text here</p></article>
+        </main>
+      `)
+    ]), [], undefined, {
+      aiAdaptationPlan: {
+        stageSelector: "#presentation",
+        slides: [{ selector: "#one" }, { selector: "#two" }],
+        editableTextSelectors: ["#one h1", "#two h1"]
+      }
+    });
+
+    expect(result.blob).toBeTruthy();
+    const zip = await JSZip.loadAsync(result.blob!);
+    const html = await zip.file("index.html")!.async("string");
+    expect(html).toContain('id="presentation" data-html-deck-editor-stage="preserve"');
+    expect(html).toContain('id="one" class="slide active visible"');
+    expect(html).toContain('data-editable=""');
+    expect(html).toContain("runtime/html-deck-editor.js");
+  });
+
   it("keeps runtime files next to a nested index file", async () => {
     const result = await convertInput(input([
       file("deck/index.html", "<deck-stage id=\"deckStage\"><section class=\"slide active\"></section><section class=\"slide\"></section></deck-stage>"),

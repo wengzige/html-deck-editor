@@ -1,5 +1,6 @@
 import JSZip from "jszip";
 import type { ConvertResult, DetectionReport, LoadedInput, VirtualFile } from "../types/deck";
+import { applyAiAdaptationPlanToHtml, type AiAdaptationPlan } from "./aiAdapter";
 import { detectDeck, findIndexFile } from "./detector";
 import { runtimeAssets, RUNTIME_VERSION } from "./runtimeAssets";
 import { bytesToText, textToBytes } from "./text";
@@ -68,13 +69,48 @@ export type ConvertProgressEvent = {
 
 type ConvertProgressCallback = (event: ConvertProgressEvent) => void;
 
+export type ConvertOptions = {
+  aiAdaptationPlan?: AiAdaptationPlan;
+};
+
 export async function convertInput(
   input: LoadedInput,
   inputWarnings: string[] = [],
-  onProgress?: ConvertProgressCallback
+  onProgress?: ConvertProgressCallback,
+  options: ConvertOptions = {}
 ): Promise<ConvertResult> {
+  let workingInput = input;
+  let warnings = [...inputWarnings];
+
+  if (options.aiAdaptationPlan) {
+    const indexFile = findIndexFile(input.files);
+    if (!indexFile) {
+      const report = detectDeck(input);
+      return {
+        report,
+        blob: null,
+        outputName: null,
+        filesAdded: [],
+        filesModified: [],
+        warnings
+      };
+    }
+
+    onProgress?.({ stage: "rewrite", percent: 0, detail: "正在应用 AI 适配标记。" });
+    const adapted = applyAiAdaptationPlanToHtml(bytesToText(indexFile.data), options.aiAdaptationPlan);
+    const adaptedBytes = textToBytes(adapted.html);
+    workingInput = {
+      ...input,
+      files: input.files.map((file) => file.path === indexFile.path
+        ? { ...file, data: adaptedBytes, size: adaptedBytes.byteLength }
+        : file)
+    };
+    warnings = [...warnings, ...adapted.preview.warnings];
+    onProgress?.({ stage: "rewrite", percent: 28, detail: "AI 适配标记已写入本地 HTML。" });
+  }
+
   onProgress?.({ stage: "detect", percent: 0, detail: "正在检查是不是 HTML 演示稿。" });
-  const report = detectDeck(input);
+  const report = detectDeck(workingInput);
   onProgress?.({ stage: "detect", percent: 100, detail: report.messages[0] || "检测完成。" });
   if (report.status === "unsupported" || !report.indexPath) {
     return {
@@ -83,11 +119,11 @@ export async function convertInput(
       outputName: null,
       filesAdded: [],
       filesModified: [],
-      warnings: [...inputWarnings, ...report.warnings]
+      warnings: [...warnings, ...report.warnings]
     };
   }
 
-  const indexFile = findIndexFile(input.files);
+  const indexFile = findIndexFile(workingInput.files);
   if (!indexFile) {
     return {
       report,
@@ -95,7 +131,7 @@ export async function convertInput(
       outputName: null,
       filesAdded: [],
       filesModified: [],
-      warnings: [...inputWarnings, "没有找到可转换的 HTML 文件。"]
+      warnings: [...warnings, "没有找到可转换的 HTML 文件。"]
     };
   }
 
@@ -109,7 +145,7 @@ export async function convertInput(
   const runtimePrefix = indexDir ? `${indexDir}/runtime/` : "runtime/";
 
   onProgress?.({ stage: "runtime", percent: 0, detail: "正在整理原文件和编辑器文件。" });
-  for (const file of input.files) {
+  for (const file of workingInput.files) {
     if (file.path === indexFile.path) {
       zip.file(file.path, rewrittenHtml);
     } else if (isLegacyRuntimeFile(file.path)) {
@@ -118,7 +154,7 @@ export async function convertInput(
       zip.file(file.path, stableBytes(file.data));
     }
   }
-  onProgress?.({ stage: "runtime", percent: 55, detail: `已放入 ${input.files.length} 个原文件。` });
+  onProgress?.({ stage: "runtime", percent: 55, detail: `已放入 ${workingInput.files.length} 个原文件。` });
 
   for (const [path, content] of Object.entries(runtimeAssets)) {
     const name = path.replace("runtime/", "");
@@ -137,7 +173,7 @@ export async function convertInput(
     outputName: `${safeName(input.name)}-editable.zip`,
     filesAdded: Object.keys(runtimeAssets).map((path) => `${runtimePrefix}${path.replace("runtime/", "")}`),
     filesModified: [indexFile.path],
-    warnings: [...inputWarnings, ...report.warnings]
+    warnings: [...warnings, ...report.warnings]
   };
 }
 
