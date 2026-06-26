@@ -1,6 +1,7 @@
-export type AiProvider = "custom" | "deepseek" | "zhipu" | "openrouter" | "relay";
+export type AiProvider = "custom" | "openai" | "anthropic" | "deepseek" | "qwen" | "kimi" | "zhipu" | "minimax" | "siliconflow" | "openrouter" | "relay";
 
 export type AiStorageMode = "none" | "session" | "local";
+export type AiApiProtocol = "openai-chat" | "anthropic-messages";
 
 export type AiConfig = {
   provider: AiProvider;
@@ -16,9 +17,11 @@ export type AiConfig = {
 export type AiProviderPreset = {
   id: AiProvider;
   label: string;
+  protocol: AiApiProtocol;
   baseUrl: string;
   path: string;
   model: string;
+  modelOptions: string[];
 };
 
 const AI_CONFIG_KEY = "html-deck-editor:ai-config:v1";
@@ -27,37 +30,101 @@ export const aiProviderPresets: AiProviderPreset[] = [
   {
     id: "custom",
     label: "OpenAI-compatible",
+    protocol: "openai-chat",
     baseUrl: "",
     path: "/v1/chat/completions",
-    model: ""
+    model: "gpt-5.5",
+    modelOptions: ["gpt-5.5", "gpt-5.4", "gpt-5.4-mini", "gpt-5.4-nano"]
+  },
+  {
+    id: "openai",
+    label: "OpenAI",
+    protocol: "openai-chat",
+    baseUrl: "https://api.openai.com/v1",
+    path: "/chat/completions",
+    model: "gpt-5.5",
+    modelOptions: ["gpt-5.5", "gpt-5.4", "gpt-5.4-mini", "gpt-5.4-nano"]
+  },
+  {
+    id: "anthropic",
+    label: "Claude / Anthropic",
+    protocol: "anthropic-messages",
+    baseUrl: "https://api.anthropic.com",
+    path: "/v1/messages",
+    model: "claude-sonnet-4-6",
+    modelOptions: ["claude-fable-5", "claude-opus-4-8", "claude-sonnet-4-6", "claude-haiku-4-5-20251001"]
   },
   {
     id: "deepseek",
     label: "DeepSeek",
+    protocol: "openai-chat",
     baseUrl: "https://api.deepseek.com",
     path: "/chat/completions",
-    model: "deepseek-v4-flash"
+    model: "deepseek-v4-flash",
+    modelOptions: ["deepseek-v4-flash", "deepseek-v4-pro"]
+  },
+  {
+    id: "qwen",
+    label: "通义千问 / DashScope",
+    protocol: "openai-chat",
+    baseUrl: "https://dashscope.aliyuncs.com/compatible-mode/v1",
+    path: "/chat/completions",
+    model: "qwen3.7-plus",
+    modelOptions: ["qwen3.7-max", "qwen3.7-plus", "qwen3.6-flash", "qwen-plus", "qwen-max"]
+  },
+  {
+    id: "kimi",
+    label: "Kimi / 月之暗面",
+    protocol: "openai-chat",
+    baseUrl: "https://api.moonshot.ai/v1",
+    path: "/chat/completions",
+    model: "kimi-k2.7-code",
+    modelOptions: ["kimi-k2.7-code", "kimi-k2.7-code-highspeed", "kimi-k2.6", "kimi-k2.5", "moonshot-v1-128k"]
   },
   {
     id: "zhipu",
     label: "智谱",
+    protocol: "openai-chat",
     baseUrl: "https://open.bigmodel.cn/api/paas/v4",
     path: "/chat/completions",
-    model: "glm-5.2"
+    model: "glm-5.2",
+    modelOptions: ["glm-5.2", "glm-5.1", "glm-5-turbo", "glm-5", "glm-4.7"]
+  },
+  {
+    id: "minimax",
+    label: "MiniMax",
+    protocol: "openai-chat",
+    baseUrl: "https://api.minimax.io/v1",
+    path: "/chat/completions",
+    model: "MiniMax-M3",
+    modelOptions: ["MiniMax-M3", "MiniMax-M2.7", "MiniMax-M2.7-highspeed", "MiniMax-M2.5"]
+  },
+  {
+    id: "siliconflow",
+    label: "硅基流动",
+    protocol: "openai-chat",
+    baseUrl: "https://api.siliconflow.cn/v1",
+    path: "/chat/completions",
+    model: "deepseek-ai/DeepSeek-V3.2",
+    modelOptions: ["deepseek-ai/DeepSeek-V3.2", "Pro/deepseek-ai/DeepSeek-V3.2", "Pro/zai-org/GLM-4.7", "Qwen/Qwen3-Coder-480B-A35B-Instruct", "Qwen/Qwen3-32B"]
   },
   {
     id: "openrouter",
     label: "OpenRouter",
+    protocol: "openai-chat",
     baseUrl: "https://openrouter.ai/api/v1",
     path: "/chat/completions",
-    model: "openai/gpt-4.1"
+    model: "openai/gpt-5.5",
+    modelOptions: ["openai/gpt-5.5", "openai/gpt-5.4", "anthropic/claude-sonnet-4.5", "anthropic/claude-opus-4.5", "google/gemini-3-pro", "deepseek/deepseek-v4-flash"]
   },
   {
     id: "relay",
     label: "自定义中转站",
+    protocol: "openai-chat",
     baseUrl: "",
     path: "/v1/chat/completions",
-    model: ""
+    model: "gpt-5.5",
+    modelOptions: ["gpt-5.5", "gpt-5.4", "deepseek-v4-flash", "glm-5.2"]
   }
 ];
 
@@ -66,7 +133,7 @@ export const defaultAiConfig: AiConfig = {
   baseUrl: "",
   path: "/v1/chat/completions",
   apiKey: "",
-  model: "",
+  model: "gpt-5.5",
   stream: true,
   storage: "none",
   proxyUrl: ""

@@ -70,7 +70,8 @@ export function buildAiAdaptationMessages(input: LoadedInput): { messages: AiCha
         role: "system",
         content: [
           "你是 Anchor Deck 的 HTML 结构适配助手。",
-          "你的任务是让现有 HTML 更容易被 Anchor Deck 编辑器识别。",
+          "你的任务是生成一个可执行的 HTML 结构修改方案，让现有 HTML 更容易被 Anchor Deck 编辑器识别和编辑。",
+          "本地代码会按你的计划修改 DOM 结构和 data-* 标记，再注入编辑器运行时。",
           "只返回 JSON，不要返回 Markdown、解释、完整 HTML、CSS、JavaScript 或编辑器代码。",
           "只建议最小结构标记：页面、可编辑文本、可编辑媒体、可编辑视觉块和忽略区域。",
           "不要改写用户文案，不要重排样式，不要删除内容。"
@@ -79,7 +80,7 @@ export function buildAiAdaptationMessages(input: LoadedInput): { messages: AiCha
       {
         role: "user",
         content: [
-          "请根据下面的 HTML 结构摘要生成适配计划 JSON。",
+          "请根据下面的 HTML 结构摘要生成可执行的 HTML 结构修改方案 JSON。",
           "JSON 结构必须是：",
           "{",
           '  "stageSelector": "可选，已有舞台/页面容器 selector",',

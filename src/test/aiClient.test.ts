@@ -1,5 +1,5 @@
 import { describe, expect, it } from "vitest";
-import { friendlyAiStatusMessage, joinBaseAndPath, parseChatCompletionContent, parseStreamDataLine } from "../lib/aiClient";
+import { friendlyAiStatusMessage, joinBaseAndPath, parseAnthropicMessageContent, parseAnthropicStreamDataLine, parseChatCompletionContent, parseStreamDataLine } from "../lib/aiClient";
 
 describe("AI client", () => {
   it("joins base URL and path", () => {
@@ -16,6 +16,18 @@ describe("AI client", () => {
     expect(parseStreamDataLine('data: {"choices":[{"delta":{"content":"he"}}]}')).toBe("he");
     expect(parseStreamDataLine('data: {"choices":[{"delta":{"content":"llo"}}]}')).toBe("llo");
     expect(parseStreamDataLine("data: [DONE]")).toBeNull();
+  });
+
+  it("parses Anthropic message content", () => {
+    expect(parseAnthropicMessageContent({
+      content: [{ type: "text", text: "hello" }]
+    })).toBe("hello");
+  });
+
+  it("parses Anthropic streamed data lines", () => {
+    expect(parseAnthropicStreamDataLine('data: {"type":"content_block_delta","delta":{"type":"text_delta","text":"he"}}')).toBe("he");
+    expect(parseAnthropicStreamDataLine('data: {"type":"content_block_delta","delta":{"type":"text_delta","text":"llo"}}')).toBe("llo");
+    expect(parseAnthropicStreamDataLine('data: {"type":"message_stop"}')).toBeNull();
   });
 
   it("maps common HTTP statuses to readable messages", () => {

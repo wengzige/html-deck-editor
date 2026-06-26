@@ -96,7 +96,7 @@ export async function convertInput(
       };
     }
 
-    onProgress?.({ stage: "rewrite", percent: 0, detail: "正在应用 AI 适配标记。" });
+    onProgress?.({ stage: "rewrite", percent: 0, detail: "正在把 AI 优化写入 HTML。" });
     const adapted = applyAiAdaptationPlanToHtml(bytesToText(indexFile.data), options.aiAdaptationPlan);
     const adaptedBytes = textToBytes(adapted.html);
     workingInput = {
@@ -106,7 +106,7 @@ export async function convertInput(
         : file)
     };
     warnings = [...warnings, ...adapted.preview.warnings];
-    onProgress?.({ stage: "rewrite", percent: 28, detail: "AI 适配标记已写入本地 HTML。" });
+    onProgress?.({ stage: "rewrite", percent: 28, detail: "AI 优化已写入本地 HTML。" });
   }
 
   onProgress?.({ stage: "detect", percent: 0, detail: "正在检查是不是 HTML 演示稿。" });

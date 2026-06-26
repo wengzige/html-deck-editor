@@ -1,5 +1,5 @@
 import { afterEach, beforeEach, describe, expect, it, vi } from "vitest";
-import { applyProviderPreset, assertAiConfigReady, clearAiConfigSecret, defaultAiConfig, loadAiConfig, persistAiConfig } from "../lib/aiConfig";
+import { aiProviderPresets, applyProviderPreset, assertAiConfigReady, clearAiConfigSecret, defaultAiConfig, loadAiConfig, persistAiConfig } from "../lib/aiConfig";
 
 describe("AI config", () => {
   beforeEach(() => {
@@ -17,6 +17,21 @@ describe("AI config", () => {
     expect(config.baseUrl).toBe("https://api.deepseek.com");
     expect(config.path).toBe("/chat/completions");
     expect(config.model).toBe("deepseek-v4-flash");
+  });
+
+  it("provides preset model options while allowing custom models", () => {
+    const deepseek = aiProviderPresets.find((preset) => preset.id === "deepseek");
+    const openaiCompatible = aiProviderPresets.find((preset) => preset.id === "custom");
+    const anthropic = aiProviderPresets.find((preset) => preset.id === "anthropic");
+    const qwen = aiProviderPresets.find((preset) => preset.id === "qwen");
+
+    expect(deepseek?.modelOptions).toContain("deepseek-v4-flash");
+    expect(deepseek?.modelOptions).toContain("deepseek-v4-pro");
+    expect(openaiCompatible?.modelOptions).toContain("gpt-5.5");
+    expect(openaiCompatible?.modelOptions).not.toContain("gpt-4.1");
+    expect(anthropic?.protocol).toBe("anthropic-messages");
+    expect(anthropic?.modelOptions).toContain("claude-sonnet-4-6");
+    expect(qwen?.modelOptions).toContain("qwen-plus");
   });
 
   it("stores session config without writing local storage", () => {
@@ -37,7 +52,7 @@ describe("AI config", () => {
   });
 
   it("reports missing required fields", () => {
-    expect(assertAiConfigReady(defaultAiConfig)).toEqual([
+    expect(assertAiConfigReady({ ...defaultAiConfig, model: "" })).toEqual([
       "请填写 API Base URL，或填写 Proxy URL。",
       "请填写 API Key。",
       "请填写 Model。"
