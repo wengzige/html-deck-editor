@@ -155,19 +155,21 @@ export function applyProviderPreset(config: AiConfig, provider: AiProvider): AiC
 }
 
 export function loadAiConfig(): AiConfig {
-  const sessionConfig = readStoredConfig(sessionStorage);
+  const sessionConfig = readStoredConfig(safeStorage("sessionStorage"));
   if (sessionConfig) return sessionConfig;
-  const localConfig = readStoredConfig(localStorage);
+  const localConfig = readStoredConfig(safeStorage("localStorage"));
   return localConfig || defaultAiConfig;
 }
 
 export function persistAiConfig(config: AiConfig): void {
-  sessionStorage.removeItem(AI_CONFIG_KEY);
-  localStorage.removeItem(AI_CONFIG_KEY);
+  const session = safeStorage("sessionStorage");
+  const local = safeStorage("localStorage");
+  removeStoredConfig(session);
+  removeStoredConfig(local);
   if (config.storage === "session") {
-    sessionStorage.setItem(AI_CONFIG_KEY, JSON.stringify(config));
+    writeStoredConfig(session, config);
   } else if (config.storage === "local") {
-    localStorage.setItem(AI_CONFIG_KEY, JSON.stringify(config));
+    writeStoredConfig(local, config);
   }
 }
 
@@ -186,15 +188,42 @@ export function assertAiConfigReady(config: AiConfig): string[] {
   return errors;
 }
 
-function readStoredConfig(storage: Storage): AiConfig | null {
+function safeStorage(name: "sessionStorage" | "localStorage"): Storage | null {
+  try {
+    return globalThis[name];
+  } catch {
+    return null;
+  }
+}
+
+function readStoredConfig(storage: Storage | null): AiConfig | null {
+  if (!storage) return null;
   try {
     const raw = storage.getItem(AI_CONFIG_KEY);
     if (!raw) return null;
     const parsed = JSON.parse(raw) as Partial<AiConfig>;
     return normalizeAiConfig(parsed);
   } catch {
-    storage.removeItem(AI_CONFIG_KEY);
+    removeStoredConfig(storage);
     return null;
+  }
+}
+
+function writeStoredConfig(storage: Storage | null, config: AiConfig): void {
+  if (!storage) return;
+  try {
+    storage.setItem(AI_CONFIG_KEY, JSON.stringify(config));
+  } catch {
+    // Storage can be unavailable in private browsing, file://, or sandboxed pages.
+  }
+}
+
+function removeStoredConfig(storage: Storage | null): void {
+  if (!storage) return;
+  try {
+    storage.removeItem(AI_CONFIG_KEY);
+  } catch {
+    // Storage can be unavailable in private browsing, file://, or sandboxed pages.
   }
 }
 

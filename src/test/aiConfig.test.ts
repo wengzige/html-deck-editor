@@ -51,6 +51,16 @@ describe("AI config", () => {
     expect(loadAiConfig().apiKey).toBe("");
   });
 
+  it("falls back safely when browser storage is unavailable", () => {
+    vi.stubGlobal("localStorage", blockedStorage());
+    vi.stubGlobal("sessionStorage", blockedStorage());
+
+    expect(() => loadAiConfig()).not.toThrow();
+    expect(loadAiConfig()).toEqual(defaultAiConfig);
+    expect(() => persistAiConfig({ ...defaultAiConfig, storage: "local", apiKey: "sk-local", model: "demo", baseUrl: "https://api.example.com" })).not.toThrow();
+    expect(() => clearAiConfigSecret({ ...defaultAiConfig, storage: "session", apiKey: "sk-session", model: "demo", baseUrl: "https://api.example.com" })).not.toThrow();
+  });
+
   it("reports missing required fields", () => {
     expect(assertAiConfigReady({ ...defaultAiConfig, model: "" })).toEqual([
       "请填写 API Base URL，或填写 Proxy URL。",
@@ -74,6 +84,29 @@ function memoryStorage(): Storage {
     },
     setItem: (key: string, value: string) => {
       values.set(key, value);
+    }
+  };
+}
+
+function blockedStorage(): Storage {
+  return {
+    get length(): number {
+      throw new DOMException("blocked", "SecurityError");
+    },
+    clear: () => {
+      throw new DOMException("blocked", "SecurityError");
+    },
+    getItem: () => {
+      throw new DOMException("blocked", "SecurityError");
+    },
+    key: (): string | null => {
+      throw new DOMException("blocked", "SecurityError");
+    },
+    removeItem: () => {
+      throw new DOMException("blocked", "SecurityError");
+    },
+    setItem: () => {
+      throw new DOMException("blocked", "SecurityError");
     }
   };
 }

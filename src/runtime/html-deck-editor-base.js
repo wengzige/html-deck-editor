@@ -356,8 +356,12 @@
   </div>
 `;
 
+  function editorUiElement(id) {
+    return document.querySelector(`#${id}[data-html-deck-editor-ui]`);
+  }
+
   function editorRootExists() {
-    return Boolean(document.getElementById("editorShell") && document.getElementById("editToggle"));
+    return Boolean(editorUiElement("editorShell") && editorUiElement("editToggle"));
   }
 
   function ensureEditorDom() {
@@ -807,6 +811,7 @@
         this.isRestoringHistory = false;
         this.hasPendingHistoryChange = false;
         this.historyLimit = 40;
+        this.historyCharacterLimit = 8_000_000;
         this.lastInsert = { x: 720, y: 300 };
         this.snapThreshold = 12;
         this.motionFrameRaf = null;
@@ -829,93 +834,93 @@
         this.commentMode = false;
         this.commentInputAnchor = "";
         this.formatBrush = null;
-        this.toggle = document.getElementById("editToggle");
-        this.hotzone = document.querySelector(".edit-hotzone");
-        this.shell = document.getElementById("editorShell");
+        this.toggle = editorUiElement("editToggle");
+        this.hotzone = document.querySelector(".edit-hotzone[data-html-deck-editor-ui]");
+        this.shell = editorUiElement("editorShell");
         this.stage = presentation.stage || getStage();
-        this.frame = document.getElementById("editorFrame");
-        this.frameMove = document.getElementById("frameMove");
-        this.frameDelete = document.getElementById("frameDelete");
-        this.frameResize = document.getElementById("frameResize");
+        this.frame = this.control("editorFrame");
+        this.frameMove = this.control("frameMove");
+        this.frameDelete = this.control("frameDelete");
+        this.frameResize = this.control("frameResize");
         this.guideV = this.ensureOverlayElement("editorGuideV", "editor-guide vertical");
         this.guideH = this.ensureOverlayElement("editorGuideH", "editor-guide horizontal");
-        this.toast = document.getElementById("editorToast");
+        this.toast = this.control("editorToast");
         this.attachFrame();
         this.controls = {
-          slideRail: document.getElementById("slideRail"),
-          help: document.getElementById("helpBtn"),
-          helpModal: document.getElementById("editorHelp"),
-          helpClose: document.getElementById("helpCloseBtn"),
-          aiExportHelp: document.getElementById("aiExportHelpBtn"),
-          aiExportHelpModal: document.getElementById("aiExportHelp"),
-          aiExportHelpClose: document.getElementById("aiExportHelpCloseBtn"),
-          resetHelp: document.getElementById("resetHelpBtn"),
-          resetHelpModal: document.getElementById("resetHelp"),
-          resetHelpClose: document.getElementById("resetHelpCloseBtn"),
-          confirmModal: document.getElementById("editorConfirm"),
-          confirmTitle: document.getElementById("editorConfirmTitle"),
-          confirmMessage: document.getElementById("editorConfirmMessage"),
-          confirmClose: document.getElementById("editorConfirmCloseBtn"),
-          confirmCancel: document.getElementById("editorConfirmCancelBtn"),
-          confirmOk: document.getElementById("editorConfirmOkBtn"),
-          undo: document.getElementById("undoBtn"),
-          redo: document.getElementById("redoBtn"),
-          formatBrush: document.getElementById("formatBrushBtn"),
-          addText: document.getElementById("addTextBtn"),
-          addImage: document.getElementById("addImageBtn"),
-          addShape: document.getElementById("addShapeBtn"),
-          shapeMenu: document.getElementById("shapeMenu"),
-          aiExport: document.getElementById("aiExportBtn"),
-          save: document.getElementById("saveBtn"),
-          exit: document.getElementById("exitEditBtn"),
-          selectionName: document.getElementById("selectionName"),
-          commentTarget: document.getElementById("commentTargetStatus"),
-          commentInput: document.getElementById("commentInput"),
-          saveComment: document.getElementById("saveCommentBtn"),
-          clearComment: document.getElementById("clearCommentBtn"),
-          commentList: document.getElementById("commentList"),
-          dropZone: document.getElementById("imageDropZone"),
-          imagePick: document.getElementById("imagePickBtn"),
-          imageName: document.getElementById("imageFileName"),
-          text: document.getElementById("textInput"),
-          image: document.getElementById("imageInput"),
-          shape: document.getElementById("shapeInput"),
-          fontFamily: document.getElementById("fontFamilyInput"),
-          fontFamilyCustom: document.getElementById("fontFamilyCustomInput"),
-          fontSize: document.getElementById("fontSizeInput"),
-          fontWeight: document.getElementById("fontWeightBtn"),
-          fontStyle: document.getElementById("fontStyleBtn"),
-          colorButton: document.getElementById("colorButton"),
-          colorPalette: document.getElementById("colorPalette"),
-          colorPresetGrid: document.getElementById("colorPresetGrid"),
-          colorPickerHost: document.getElementById("colorPickerHost"),
-          colorEyedropper: document.getElementById("colorEyedropperBtn"),
-          colorSwatch: document.getElementById("colorSwatch"),
-          colorText: document.getElementById("colorInputText"),
-          bg: document.getElementById("bgInput"),
-          bgPickerHost: document.getElementById("bgPickerHost"),
-          bgEyedropper: document.getElementById("bgEyedropperBtn"),
-          bgSwatch: document.getElementById("bgSwatch"),
-          bgText: document.getElementById("bgInputText"),
-          bgPalette: document.getElementById("bgPalette"),
-          bgPresetGrid: document.getElementById("bgPresetGrid"),
-          opacity: document.getElementById("opacityInput"),
-          x: document.getElementById("xInput"),
-          y: document.getElementById("yInput"),
-          width: document.getElementById("widthInput"),
-          height: document.getElementById("heightInput"),
-          bringForward: document.getElementById("bringForwardBtn"),
-          sendBackward: document.getElementById("sendBackwardBtn"),
-          motionStatus: document.getElementById("motionStatus"),
-          anim: document.getElementById("animSelect"),
-          order: document.getElementById("motionOrderInput"),
-          delay: document.getElementById("delayInput"),
-          duration: document.getElementById("durationInput"),
-          previewMotion: document.getElementById("previewMotionBtn"),
-          previewSlideMotion: document.getElementById("previewSlideMotionBtn"),
-          restoreMotion: document.getElementById("restoreMotionBtn"),
-          delete: document.getElementById("deleteBtn"),
-          reset: document.getElementById("resetBtn")
+          slideRail: this.control("slideRail"),
+          help: this.control("helpBtn"),
+          helpModal: this.control("editorHelp"),
+          helpClose: this.control("helpCloseBtn"),
+          aiExportHelp: this.control("aiExportHelpBtn"),
+          aiExportHelpModal: this.control("aiExportHelp"),
+          aiExportHelpClose: this.control("aiExportHelpCloseBtn"),
+          resetHelp: this.control("resetHelpBtn"),
+          resetHelpModal: this.control("resetHelp"),
+          resetHelpClose: this.control("resetHelpCloseBtn"),
+          confirmModal: this.control("editorConfirm"),
+          confirmTitle: this.control("editorConfirmTitle"),
+          confirmMessage: this.control("editorConfirmMessage"),
+          confirmClose: this.control("editorConfirmCloseBtn"),
+          confirmCancel: this.control("editorConfirmCancelBtn"),
+          confirmOk: this.control("editorConfirmOkBtn"),
+          undo: this.control("undoBtn"),
+          redo: this.control("redoBtn"),
+          formatBrush: this.control("formatBrushBtn"),
+          addText: this.control("addTextBtn"),
+          addImage: this.control("addImageBtn"),
+          addShape: this.control("addShapeBtn"),
+          shapeMenu: this.control("shapeMenu"),
+          aiExport: this.control("aiExportBtn"),
+          save: this.control("saveBtn"),
+          exit: this.control("exitEditBtn"),
+          selectionName: this.control("selectionName"),
+          commentTarget: this.control("commentTargetStatus"),
+          commentInput: this.control("commentInput"),
+          saveComment: this.control("saveCommentBtn"),
+          clearComment: this.control("clearCommentBtn"),
+          commentList: this.control("commentList"),
+          dropZone: this.control("imageDropZone"),
+          imagePick: this.control("imagePickBtn"),
+          imageName: this.control("imageFileName"),
+          text: this.control("textInput"),
+          image: this.control("imageInput"),
+          shape: this.control("shapeInput"),
+          fontFamily: this.control("fontFamilyInput"),
+          fontFamilyCustom: this.control("fontFamilyCustomInput"),
+          fontSize: this.control("fontSizeInput"),
+          fontWeight: this.control("fontWeightBtn"),
+          fontStyle: this.control("fontStyleBtn"),
+          colorButton: this.control("colorButton"),
+          colorPalette: this.control("colorPalette"),
+          colorPresetGrid: this.control("colorPresetGrid"),
+          colorPickerHost: this.control("colorPickerHost"),
+          colorEyedropper: this.control("colorEyedropperBtn"),
+          colorSwatch: this.control("colorSwatch"),
+          colorText: this.control("colorInputText"),
+          bg: this.control("bgInput"),
+          bgPickerHost: this.control("bgPickerHost"),
+          bgEyedropper: this.control("bgEyedropperBtn"),
+          bgSwatch: this.control("bgSwatch"),
+          bgText: this.control("bgInputText"),
+          bgPalette: this.control("bgPalette"),
+          bgPresetGrid: this.control("bgPresetGrid"),
+          opacity: this.control("opacityInput"),
+          x: this.control("xInput"),
+          y: this.control("yInput"),
+          width: this.control("widthInput"),
+          height: this.control("heightInput"),
+          bringForward: this.control("bringForwardBtn"),
+          sendBackward: this.control("sendBackwardBtn"),
+          motionStatus: this.control("motionStatus"),
+          anim: this.control("animSelect"),
+          order: this.control("motionOrderInput"),
+          delay: this.control("delayInput"),
+          duration: this.control("durationInput"),
+          previewMotion: this.control("previewMotionBtn"),
+          previewSlideMotion: this.control("previewSlideMotionBtn"),
+          restoreMotion: this.control("restoreMotionBtn"),
+          delete: this.control("deleteBtn"),
+          reset: this.control("resetBtn")
         };
         [this.controls.colorPalette, this.controls.bgPalette].forEach((palette) => {
           if (palette && palette.parentElement !== this.shell) this.shell.appendChild(palette);
@@ -954,7 +959,7 @@
       }
 
       attachFrame() {
-        this.stage.querySelectorAll("[data-html-deck-editor-ui], #editorFrame, #editorGuideV, #editorGuideH").forEach((node) => {
+        this.stage.querySelectorAll("[data-html-deck-editor-ui]").forEach((node) => {
           if (node !== this.frame && node !== this.guideV && node !== this.guideH) node.remove();
         });
         this.frame.classList.remove("active");
@@ -966,7 +971,7 @@
       }
 
       ensureOverlayElement(id, className) {
-        let element = document.getElementById(id);
+        let element = this.control(id) || document.querySelector(`#${id}[data-html-deck-editor-ui]`);
         if (!element) {
           element = document.createElement("div");
           element.id = id;
@@ -978,7 +983,11 @@
       }
 
       isEditorUiElement(target) {
-        return Boolean(target?.closest?.("[data-html-deck-editor-ui], #editorShell, #editorFrame, #editorGuideV, #editorGuideH, #editorToast"));
+        return Boolean(target?.closest?.("[data-html-deck-editor-ui]"));
+      }
+
+      control(id) {
+        return this.shell?.querySelector?.(`#${id}`) || null;
       }
 
       makeStorageKey() {
@@ -4379,7 +4388,8 @@
         this.bindElement(wrapper);
         this.select(wrapper);
         this.lastInsert = point;
-        this.saveDraft();
+        const stored = this.saveDraft(false);
+        this.toastMessage(stored ? "图片已添加" : "图片已添加，但浏览器草稿空间不足；请立即保存 HTML");
       }
 
       applyShape(element, value) {
@@ -4506,9 +4516,9 @@
           element.style.backgroundRepeat = "no-repeat";
           element.dataset.inlineImage = "true";
         }
-        this.saveDraft();
+        const stored = this.saveDraft(false);
         this.updateInspector();
-        this.toastMessage("图片已替换");
+        this.toastMessage(stored ? "图片已替换" : "图片已替换，但浏览器草稿空间不足；请立即保存 HTML");
       }
 
       motionClasses() {
@@ -4900,7 +4910,7 @@
       }
 
       cleanEditorArtifacts(root) {
-        root.querySelectorAll("[data-html-deck-editor-ui], #editorFrame, #editorToast, #editorGuideV, #editorGuideH, #editorShell").forEach((node) => node.remove());
+        root.querySelectorAll("[data-html-deck-editor-ui]").forEach((node) => node.remove());
         root.querySelectorAll(".editor-selected").forEach((node) => node.classList.remove("editor-selected"));
         root.querySelectorAll(".editor-motion-parent-stable").forEach((node) => node.classList.remove("editor-motion-parent-stable"));
         root.querySelectorAll(".html-deck-editor-edit-visible").forEach((node) => node.classList.remove("html-deck-editor-edit-visible"));
@@ -5031,9 +5041,20 @@
           this.undoStack = this.undoStack.slice(0, this.historyIndex + 1);
         }
         this.undoStack.push(snapshot);
-        if (this.undoStack.length > this.historyLimit) this.undoStack.shift();
+        this.trimHistoryStack();
         this.historyIndex = this.undoStack.length - 1;
         this.updateHistoryButtons();
+      }
+
+      trimHistoryStack() {
+        while (this.undoStack.length > this.historyLimit) this.undoStack.shift();
+        while (this.undoStack.length > 2 && this.historyCharacterCount() > this.historyCharacterLimit) {
+          this.undoStack.shift();
+        }
+      }
+
+      historyCharacterCount() {
+        return this.undoStack.reduce((total, snapshot) => total + snapshot.length, 0);
       }
 
       markPendingHistoryChange() {
@@ -5138,13 +5159,6 @@
           node.classList.remove("editor-motion-preview", "editor-motion-running");
           if (!node.dataset.editAnim) this.editorMotionClasses().forEach((className) => node.classList.remove(className));
         });
-        clone.querySelectorAll("#editToggle").forEach((node) => {
-          node.classList.remove("active", "show");
-        });
-        clone.querySelectorAll("#editorHelp, #resetHelp, #editorConfirm").forEach((node) => {
-          node.hidden = true;
-        });
-        clone.querySelectorAll("#editorFrame, #editorGuideV, #editorGuideH").forEach((node) => node.classList.remove("active"));
         clone.querySelectorAll("[data-html-deck-editor-stage='preserve']").forEach((node) => {
           resetPreservedStageForExport(node);
           delete node.dataset.htmlDeckEditorCurrentSlide;
@@ -5168,10 +5182,6 @@
           node.style.removeProperty("--deck-stage-inset-right");
           node.style.removeProperty("--deck-stage-inset-top");
           node.style.removeProperty("--deck-stage-inset-bottom");
-        });
-        clone.querySelectorAll("#editorToast").forEach((node) => {
-          node.classList.remove("show");
-          node.textContent = "";
         });
         const body = clone.querySelector("body");
         if (body) body.classList.remove("editing", "editor-on", "dragging-file", "commenting");

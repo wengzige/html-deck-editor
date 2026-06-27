@@ -1499,6 +1499,89 @@ describe("editor runtime", () => {
     expect(revokeObjectURL).toHaveBeenCalledWith("blob:test-download");
   });
 
+  it("does not treat user content with editor-like IDs as editor chrome", () => {
+    document.body.innerHTML = `
+      <div id="deckStage" class="deck-stage">
+        <section class="slide active">
+          <button id="editToggle">用户按钮</button>
+          <div id="editorShell" style="font-size:96px">用户 editorShell 内容</div>
+          <div id="editorFrame" style="font-size:88px">用户 editorFrame 内容</div>
+          <div id="editorToast" style="font-size:82px">用户 editorToast 内容</div>
+          <div id="editorGuideV" style="font-size:76px">用户 editorGuideV 内容</div>
+          <div id="editorGuideH" style="font-size:70px">用户 editorGuideH 内容</div>
+        </section>
+      </div>
+    `;
+    ["editToggle", "editorShell", "editorFrame", "editorToast", "editorGuideV", "editorGuideH"].forEach((id, index) => {
+      (document.getElementById(id) as HTMLElement).getBoundingClientRect = () => rect({ left: 100, top: 100 + index * 80, width: 720, height: 70 });
+    });
+
+    installRuntime();
+    const editor = (window as any).FrontendSlidesEditor.mount();
+    const serialized = JSON.stringify(editor.serialize());
+    const html = editor.buildExportHtml();
+
+    expect(document.querySelectorAll("#editorShell")).toHaveLength(2);
+    expect((document.querySelector("#editorShell[data-html-deck-editor-ui]") as HTMLElement)).toBeTruthy();
+    expect(serialized).toContain("用户 editorShell 内容");
+    expect(serialized).toContain("用户 editorFrame 内容");
+    expect(serialized).toContain("用户 editorToast 内容");
+    expect(serialized).toContain("用户 editorGuideV 内容");
+    expect(serialized).toContain("用户 editorGuideH 内容");
+    expect(html).toContain("用户按钮");
+    expect(html).toContain("用户 editorFrame 内容");
+    expect(html).not.toContain("data-html-deck-editor-ui");
+  });
+
+  it("trims large image history snapshots by total size instead of only entry count", () => {
+    const imageData = `data:image/png;base64,${"c".repeat(600_000)}`;
+    document.body.innerHTML = `
+      <div id="deckStage" class="deck-stage">
+        <section class="slide active">
+          <h1 id="title" style="font-size:96px">第 0 次</h1>
+          <img id="hero" src="${imageData}" alt="大图">
+        </section>
+      </div>
+    `;
+    (document.getElementById("title") as HTMLElement).getBoundingClientRect = () => rect({ left: 100, top: 100, width: 640, height: 120 });
+    (document.getElementById("hero") as HTMLElement).getBoundingClientRect = () => rect({ left: 100, top: 260, width: 640, height: 360 });
+
+    installRuntime();
+    const editor = (window as any).FrontendSlidesEditor.mount();
+    editor.historyCharacterLimit = 1_400_000;
+    for (let index = 1; index <= 8; index += 1) {
+      (document.getElementById("title") as HTMLElement).textContent = `第 ${index} 次`;
+      editor.saveDraft(false, true);
+    }
+
+    expect(editor.undoStack.length).toBeLessThan(8);
+    expect(editor.undoStack.length).toBeGreaterThanOrEqual(2);
+    expect(editor.historyCharacterCount()).toBeLessThanOrEqual(editor.historyCharacterLimit + editor.undoStack[0].length);
+    expect(editor.historyIndex).toBe(editor.undoStack.length - 1);
+  });
+
+  it("warns when replacing an image cannot be written to browser draft storage", () => {
+    document.body.innerHTML = `
+      <div id="deckStage" class="deck-stage">
+        <section class="slide active">
+          <img id="hero" src="old.png" alt="旧图">
+        </section>
+      </div>
+    `;
+    const hero = document.getElementById("hero") as HTMLElement;
+    hero.getBoundingClientRect = () => rect({ left: 100, top: 100, width: 640, height: 360 });
+
+    installRuntime();
+    const editor = (window as any).FrontendSlidesEditor.mount();
+    vi.mocked(localStorage.setItem).mockImplementation(() => {
+      throw new DOMException("The quota has been exceeded.", "QuotaExceededError");
+    });
+
+    editor.replaceImage(hero, `data:image/png;base64,${"d".repeat(2000)}`);
+
+    expect(document.getElementById("editorToast")?.textContent).toContain("草稿空间不足");
+  });
+
   it("maps inspector text selection across existing inline HTML", () => {
     document.body.innerHTML = `
       <div id="deckStage" class="deck-stage">
