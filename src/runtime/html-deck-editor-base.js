@@ -70,7 +70,7 @@
         <button class="editor-button" id="aiExportBtn" type="button" title="下载给 AI 的批注文件，不会保存 HTML">导出 for-ai.md</button>
         <button class="toolbar-help-button" id="aiExportHelpBtn" type="button" title="for-ai.md 使用说明" aria-label="for-ai.md 使用说明">?</button>
       </div>
-      <button class="editor-button primary" id="saveBtn" type="button" title="覆盖或下载当前 HTML 文件">保存 HTML</button>
+      <button class="editor-button primary" id="saveBtn" type="button" title="覆盖当前 index.html；不支持覆盖时下载替换文件">保存 HTML</button>
       <button class="editor-button danger" id="exitEditBtn" type="button">退出编辑</button>
     </div>
     <div class="editor-help-modal" id="editorHelp" role="dialog" aria-modal="true" aria-labelledby="editorHelpTitle" hidden>
@@ -101,7 +101,7 @@
             <ul>
               <li>Motion 区可以设置入场方式、出现顺序、延迟和时长，并支持预览当前元素或重播本页。</li>
               <li>选中元素后可拖动、缩放，点选框右上角 × 或按 Delete/Backspace 删除；撤回用 ↶ 或 Cmd/Ctrl+Z，重做用 ↷ 或 Cmd/Ctrl+Shift+Z。</li>
-              <li>保存 HTML 会优先覆盖你授权的 index.html；浏览器不支持覆盖写入时，会退回为下载当前 HTML。</li>
+              <li>保存 HTML 会优先覆盖你授权的 index.html；浏览器不支持覆盖时会下载新的 index.html，请用它替换原项目目录里的同名文件，保留 runtime 和资源目录。</li>
               <li>选中元素后可在右侧 AI 批注里写修改意见；导出 for-ai.md 会带给 AI，保存 HTML 不会写入批注标记。</li>
             </ul>
           </section>
@@ -156,7 +156,7 @@
           </section>
           <section class="editor-help-section">
             <h3>和保存的关系</h3>
-            <p>“保存 HTML”会把当前画面写入你授权的 HTML 文件；如果浏览器不支持覆盖写入，就下载新的 index.html。“重置编辑”只是清掉当前浏览器的自动草稿。刷新后页面会重新读取 HTML 文件本身，不再叠加草稿；如果这个文件之前已经被覆盖保存过，刷新后看到的仍然是已保存后的内容。如果刷新前又点保存 HTML，保存的仍然是当前屏幕上的内容。</p>
+            <p>“保存 HTML”会把当前画面写入你授权的 HTML 文件；如果浏览器不支持覆盖写入，就下载新的 index.html，请把它放回原项目目录替换旧文件，不要脱离 runtime 和资源目录单独打开。“重置编辑”只是清掉当前浏览器的自动草稿。刷新后页面会重新读取 HTML 文件本身，不再叠加草稿；如果这个文件之前已经被覆盖保存过，刷新后看到的仍然是已保存后的内容。如果刷新前又点保存 HTML，保存的仍然是当前屏幕上的内容。</p>
           </section>
         </div>
       </div>
@@ -1980,6 +1980,11 @@
           return;
         }
         const key = event.key;
+        if ((event.metaKey || event.ctrlKey) && key.toLowerCase() === "s") {
+          this.handleKeydown(event);
+          event.stopImmediatePropagation();
+          return;
+        }
         const navigationKeys = [
           "Escape",
           " ",
@@ -4878,11 +4883,11 @@
       }
 
       hasSeenDeleteConfirm() {
-        return localStorage.getItem(this.deleteConfirmKey) === "true";
+        return this.readStoredValue(this.deleteConfirmKey) === "true";
       }
 
       markDeleteConfirmSeen() {
-        localStorage.setItem(this.deleteConfirmKey, "true");
+        this.writeStoredValue(this.deleteConfirmKey, "true");
       }
 
       deleteSelected() {
@@ -4930,39 +4935,25 @@
       }
 
       serialize() {
-        const items = {};
-        this.getEditableElements().forEach((element) => {
-          const key = element.dataset.editId;
-          if (!key) return;
-          items[key] = {
-            html: element.innerHTML,
-            text: element.innerText,
-            attrs: {
-              class: element.getAttribute("class") || "",
-              style: element.getAttribute("style") || "",
-              src: element.getAttribute("src") || "",
-              alt: element.getAttribute("alt") || "",
-              shape: element.dataset.shape || "",
-              editAnim: element.dataset.editAnim || "",
-              editOrder: element.dataset.editOrder || "",
-              editDelay: element.dataset.editDelay || "",
-              editDuration: element.dataset.editDuration || ""
-            }
-          };
-        });
         const stageClone = this.stage.cloneNode(true);
         this.cleanEditorArtifacts(stageClone);
-        return { stage: stageClone.innerHTML, items, comments: this.normalizeComments(this.comments) };
+        return { stage: stageClone.innerHTML, comments: this.normalizeComments(this.comments) };
       }
 
       saveDraft(showToast = true, recordHistory = true) {
         const data = this.serialize();
-        localStorage.setItem(this.storageKey, JSON.stringify(data));
+        const snapshot = JSON.stringify(data);
         if (recordHistory) {
           this.hasPendingHistoryChange = false;
-          this.pushHistory(data);
+          this.pushHistory(snapshot);
         }
-        if (showToast) this.toastMessage("已保存到本地草稿；点“保存 HTML”才会写入文件");
+        const stored = this.writeStoredValue(this.storageKey, snapshot);
+        if (showToast) {
+          this.toastMessage(stored
+            ? "已保存到本地草稿；点“保存 HTML”才会写入文件"
+            : "浏览器草稿空间不足；撤回仍可用，请尽快保存 HTML");
+        }
+        return stored;
       }
 
       restore() {
@@ -4971,26 +4962,52 @@
         try {
           const data = JSON.parse(raw);
           if (data.stage) this.restoreSnapshot(data);
-          localStorage.setItem(this.storageKey, raw);
+          this.writeStoredValue(this.storageKey, raw);
         } catch (error) {
-          localStorage.removeItem(this.storageKey);
+          this.removeStoredValue(this.storageKey);
         }
       }
 
       readStoredDraft() {
-        const current = localStorage.getItem(this.storageKey);
+        const current = this.readStoredValue(this.storageKey);
         if (current) return current;
         for (const key of this.legacyStorageKeys) {
-          const legacy = localStorage.getItem(key);
+          const legacy = this.readStoredValue(key);
           if (legacy) return legacy;
         }
         return "";
       }
 
+      readStoredValue(key) {
+        try {
+          return localStorage.getItem(key);
+        } catch (error) {
+          return null;
+        }
+      }
+
+      writeStoredValue(key, value) {
+        try {
+          localStorage.setItem(key, value);
+          return true;
+        } catch (error) {
+          return false;
+        }
+      }
+
+      removeStoredValue(key) {
+        try {
+          localStorage.removeItem(key);
+          return true;
+        } catch (error) {
+          return false;
+        }
+      }
+
       resetDraft() {
-        localStorage.removeItem(this.storageKey);
-        localStorage.removeItem(this.deleteConfirmKey);
-        this.legacyStorageKeys.forEach((key) => localStorage.removeItem(key));
+        this.removeStoredValue(this.storageKey);
+        this.removeStoredValue(this.deleteConfirmKey);
+        this.legacyStorageKeys.forEach((key) => this.removeStoredValue(key));
         this.toastMessage("本地草稿已清除，刷新后读取 HTML 文件本身");
       }
 
@@ -5005,7 +5022,7 @@
 
       pushHistory(data = this.serialize()) {
         if (this.isRestoringHistory) return;
-        const snapshot = JSON.stringify(data);
+        const snapshot = typeof data === "string" ? data : JSON.stringify(data);
         if (this.undoStack[this.historyIndex] === snapshot) {
           this.updateHistoryButtons();
           return;
@@ -5039,7 +5056,7 @@
         this.isRestoringHistory = true;
         try {
           this.restoreSnapshot(JSON.parse(snapshot));
-          localStorage.setItem(this.storageKey, snapshot);
+          this.writeStoredValue(this.storageKey, snapshot);
         } finally {
           this.isRestoringHistory = false;
           this.updateHistoryButtons();
@@ -5055,7 +5072,7 @@
         this.isRestoringHistory = true;
         try {
           this.restoreSnapshot(JSON.parse(snapshot));
-          localStorage.setItem(this.storageKey, snapshot);
+          this.writeStoredValue(this.storageKey, snapshot);
         } finally {
           this.isRestoringHistory = false;
           this.updateHistoryButtons();
@@ -5238,8 +5255,8 @@
       }
 
       async exportHtml() {
-        this.saveDraft(false, false);
         const html = this.buildExportHtml();
+        this.saveDraft(false, false);
         if (this.canWriteFile()) {
           try {
             await this.writeHtmlFile(html);
@@ -5250,10 +5267,11 @@
               this.toastMessage("已取消保存");
               return;
             }
+            this.fileHandle = null;
           }
         }
         this.downloadHtml(html);
-        this.toastMessage("已下载 HTML");
+        this.toastMessage("已下载 index.html；请替换原项目目录里的同名文件");
       }
 
       canWriteFile() {
@@ -5284,10 +5302,13 @@
       downloadText(text, filename, type) {
         const blob = new Blob([text], { type });
         const link = document.createElement("a");
-        link.href = URL.createObjectURL(blob);
+        const objectUrl = URL.createObjectURL(blob);
+        link.href = objectUrl;
         link.download = filename;
+        document.body.appendChild(link);
         link.click();
-        URL.revokeObjectURL(link.href);
+        link.remove();
+        window.setTimeout(() => URL.revokeObjectURL(objectUrl), 1000);
       }
 
       toHex(value) {

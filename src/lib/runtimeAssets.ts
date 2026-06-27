@@ -6,7 +6,7 @@ import vanillaPickerCss from "../runtime/vendor/vanilla-picker.css?raw";
 import vanillaPickerLicense from "../runtime/vendor/vanilla-picker.LICENSE.md?raw";
 import vanillaPickerJs from "../runtime/vendor/vanilla-picker.js?raw";
 
-export const RUNTIME_VERSION = "0.1.4";
+export const RUNTIME_VERSION = "0.1.5";
 
 export const runtimeAssets = {
   "runtime/deck-stage.js": deckStage,

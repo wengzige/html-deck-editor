@@ -109,6 +109,7 @@ describe("editor runtime", () => {
     (window as any).editor?.destroy?.();
     window.getSelection()?.removeAllRanges();
     Element.prototype.getBoundingClientRect = originalGetBoundingClientRect;
+    vi.useRealTimers();
     vi.unstubAllGlobals();
   });
 
@@ -1372,6 +1373,130 @@ describe("editor runtime", () => {
 
     editor.undo();
     expect((document.getElementById("title") as HTMLElement).textContent).toBe("原始标题");
+  });
+
+  it("keeps undo available when browser draft storage is unavailable", () => {
+    document.body.innerHTML = `
+      <div id="deckStage" class="deck-stage">
+        <section class="slide active">
+          <h1 id="title" style="font-size:96px">原始标题</h1>
+        </section>
+      </div>
+    `;
+    const title = document.getElementById("title") as HTMLElement;
+    title.getBoundingClientRect = () => rect({ left: 100, top: 100, width: 640, height: 120 });
+
+    installRuntime();
+    const editor = (window as any).FrontendSlidesEditor.mount();
+    vi.mocked(localStorage.setItem).mockImplementation(() => {
+      throw new DOMException("The quota has been exceeded.", "QuotaExceededError");
+    });
+
+    title.textContent = "配额超限后的修改";
+    expect(() => editor.saveDraft(false, true)).not.toThrow();
+    expect(editor.undoStack).toHaveLength(2);
+
+    expect(() => editor.undo()).not.toThrow();
+    expect((document.getElementById("title") as HTMLElement).textContent).toBe("原始标题");
+  });
+
+  it("stores inline image data only once in each history snapshot", () => {
+    const imageData = `data:image/png;base64,${"a".repeat(2000)}`;
+    document.body.innerHTML = `
+      <div id="deckStage" class="deck-stage">
+        <section class="slide active">
+          <img id="hero" src="${imageData}" alt="测试图片">
+        </section>
+      </div>
+    `;
+    const hero = document.getElementById("hero") as HTMLElement;
+    hero.getBoundingClientRect = () => rect({ left: 100, top: 100, width: 640, height: 360 });
+
+    installRuntime();
+    const editor = (window as any).FrontendSlidesEditor.mount();
+    const serialized = editor.serialize();
+    const snapshot = JSON.stringify(serialized);
+
+    expect(serialized).not.toHaveProperty("items");
+    expect(snapshot.split(imageData)).toHaveLength(2);
+  });
+
+  it("exports current text and inline images even when draft storage exceeds quota", async () => {
+    const imageData = `data:image/png;base64,${"b".repeat(2000)}`;
+    document.body.innerHTML = `
+      <div id="deckStage" class="deck-stage">
+        <section class="slide active">
+          <h1 id="title" style="font-size:96px">导出后的文字仍在</h1>
+          <img id="hero" src="${imageData}" alt="导出图片">
+        </section>
+      </div>
+    `;
+    (document.getElementById("title") as HTMLElement).getBoundingClientRect = () => rect({ left: 100, top: 100, width: 640, height: 120 });
+    (document.getElementById("hero") as HTMLElement).getBoundingClientRect = () => rect({ left: 100, top: 260, width: 640, height: 360 });
+
+    installRuntime();
+    const editor = (window as any).FrontendSlidesEditor.mount();
+    vi.mocked(localStorage.setItem).mockImplementation(() => {
+      throw new DOMException("The quota has been exceeded.", "QuotaExceededError");
+    });
+    vi.spyOn(editor, "canWriteFile").mockReturnValue(false);
+    const download = vi.spyOn(editor, "downloadHtml").mockImplementation(() => undefined);
+
+    await expect(editor.exportHtml()).resolves.toBeUndefined();
+    expect(download).toHaveBeenCalledOnce();
+    const html = download.mock.calls[0][0] as string;
+    expect(html).toContain("导出后的文字仍在");
+    expect(html).toContain(imageData);
+  });
+
+  it("handles Ctrl+S from the inspector instead of opening the browser save dialog", () => {
+    document.body.innerHTML = `
+      <div id="deckStage" class="deck-stage">
+        <section class="slide active">
+          <h1 id="title" style="font-size:96px">快捷键保存</h1>
+        </section>
+      </div>
+    `;
+    const title = document.getElementById("title") as HTMLElement;
+    title.getBoundingClientRect = () => rect({ left: 100, top: 100, width: 640, height: 120 });
+
+    installRuntime();
+    const editor = (window as any).FrontendSlidesEditor.mount();
+    editor.toggleEditMode(true);
+    editor.select(title);
+    const exportHtml = vi.spyOn(editor, "exportHtml").mockResolvedValue(undefined);
+    const event = new KeyboardEvent("keydown", { key: "s", ctrlKey: true, bubbles: true, cancelable: true });
+
+    document.getElementById("textInput")?.dispatchEvent(event);
+
+    expect(event.defaultPrevented).toBe(true);
+    expect(exportHtml).toHaveBeenCalledOnce();
+  });
+
+  it("clicks a connected download link and revokes its object URL after the click", () => {
+    document.body.innerHTML = `
+      <div id="deckStage" class="deck-stage">
+        <section class="slide active"><h1 style="font-size:96px">下载</h1></section>
+      </div>
+    `;
+    vi.useFakeTimers();
+    const createObjectURL = vi.fn(() => "blob:test-download");
+    const revokeObjectURL = vi.fn();
+    vi.stubGlobal("URL", { ...URL, createObjectURL, revokeObjectURL });
+    let connectedWhenClicked = false;
+    vi.spyOn(HTMLAnchorElement.prototype, "click").mockImplementation(function (this: HTMLAnchorElement) {
+      connectedWhenClicked = this.isConnected;
+    });
+
+    installRuntime();
+    const editor = (window as any).FrontendSlidesEditor.mount();
+    editor.downloadText("内容", "index.html", "text/html;charset=utf-8");
+
+    expect(connectedWhenClicked).toBe(true);
+    expect(document.querySelector('a[download="index.html"]')).toBeNull();
+    expect(revokeObjectURL).not.toHaveBeenCalled();
+    vi.runAllTimers();
+    expect(revokeObjectURL).toHaveBeenCalledWith("blob:test-download");
   });
 
   it("maps inspector text selection across existing inline HTML", () => {
