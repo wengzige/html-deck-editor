@@ -4,6 +4,16 @@
   "private": false,
   "type": "module",
   "description": "Core converter and editor runtime for editable HTML decks.",
+  "license": "MIT",
+  "author": "wengzige",
+  "repository": {
+    "type": "git",
+    "url": "git+https://github.com/wengzige/html-deck-editor.git"
+  },
+  "homepage": "https://wengzige.github.io/html-deck-editor/",
+  "bugs": {
+    "url": "https://github.com/wengzige/html-deck-editor/issues"
+  },
   "scripts": {
     "test": "vitest run",
     "typecheck": "tsc -b"

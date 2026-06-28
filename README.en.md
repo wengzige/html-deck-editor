@@ -192,4 +192,8 @@ docs/           HTML deck contract and public documentation
 
 ## License
 
-MIT. This project reuses ideas and runtime code derived from `frontend-slides`; see [NOTICE.md](NOTICE.md).
+Anchor Deck is licensed under the [MIT License](LICENSE). Any copy, modification, distribution, sublicense, or sale of this project must keep the copyright notice and license text.
+
+This license applies to the source code, documentation, and examples published in this repository. It does not grant rights to source code for the hosted website shell that is not published on the `main` branch, and it does not permit removing attribution, obscuring this project's provenance, or misrepresenting authorship.
+
+This project reuses ideas and runtime code derived from `frontend-slides`; attribution and license notices are preserved in [NOTICE.md](NOTICE.md). Third-party components remain under their own licenses.

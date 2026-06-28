@@ -194,4 +194,8 @@ docs/           HTML deck 结构契约
 
 ## License
 
-MIT. 这个项目复用了 `frontend-slides` 的编辑器 runtime 思路和部分代码，署名见 [NOTICE.md](NOTICE.md)。
+Anchor Deck 采用 [MIT License](LICENSE) 开源。使用、复制、修改、分发、再授权或销售本项目的副本时，必须保留版权声明和许可文本。
+
+本许可适用于本仓库中公开的源码、文档和示例；它不代表授予未随 `main` 分支公开的网站外壳源码，也不允许移除作者署名、隐瞒本项目来源或冒充原作者。
+
+这个项目复用了 `frontend-slides` 的编辑器 runtime 思路和部分代码，已在 [NOTICE.md](NOTICE.md) 保留署名和许可说明。第三方组件仍遵循各自许可。
