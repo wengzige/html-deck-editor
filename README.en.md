@@ -29,6 +29,8 @@ AI can generate beautiful HTML slides quickly, but editing them afterwards is us
 - **Static output**: the result is still plain HTML that you can save, share, or host.
 - **BYOK AI**: bring your own key for OpenAI-compatible APIs, Claude / Anthropic, DeepSeek, Zhipu, OpenRouter, and relays.
 - **for-ai.md handoff**: add element-level notes in the editor and export a Markdown handoff for external AI agents.
+- **Font library and imports**: use common Chinese font stacks, optional online open fonts, or imported WOFF2 / WOFF / TTF / OTF files.
+- **PDF and image export**: select any pages and export PDF, PNG, or JPG; multiple images are packed into a ZIP.
 
 ## Major Update: AI Smart Adapt
 
@@ -60,6 +62,16 @@ The generated Markdown includes:
 - Instructions for AI, such as preserving the `deck-stage` / `.slide` hierarchy, editable text, and asset paths.
 
 `for-ai.md` is useful for Codex, Claude, ChatGPT, or another agent that should make small, targeted changes to the HTML. Exporting it does not save the HTML and does not leak comment markers into the normal exported page.
+
+## Fonts And PDF / Image Export
+
+After entering edit mode and selecting text, the font menu is split into:
+
+- **Common system fonts**: Chinese sans, Song, FangSong, Kai, PingFang, Microsoft YaHei, plus common Latin and monospace stacks.
+- **Online fonts**: Noto Sans SC, Noto Serif SC, LXGW WenKai, and ZCOOL XiaoWei. Selecting one contacts a pinned jsDelivr CDN URL; licensing follows OFL 1.1 and each font project's notice.
+- **Imported fonts**: WOFF2, WOFF, TTF, and OTF up to 20MB per file. The font is embedded in HTML as a Data URL. Click **Save HTML** before refreshing or the font must be imported again.
+
+Use **Export PDF / Images** in the toolbar to choose the current page, all pages, no pages, or individual pages. A PDF contains one slide per page. A single PNG or JPG downloads directly; multiple images are placed in a ZIP. Images render at 2x resolution and JPG quality is 0.92. Export waits for fonts and resources. If a cross-origin image cannot be read, the editor reports the exact slide and stops instead of silently producing a file with missing artwork.
 
 ## Who It Is For
 
@@ -167,6 +179,7 @@ Create a complete static HTML presentation. It must have exactly one <deck-stage
 - AI Adapt only calls the provider or proxy configured by the user.
 - API keys are not stored long-term by default.
 - AI Adapt sends the necessary HTML structure summary, not image binaries or the full resource package by default.
+- The editor contacts the external jsDelivr CDN only after the user selects an online font. Imported fonts and PDF/image rendering stay in the browser.
 
 ## Open Source Scope
 

@@ -34,6 +34,14 @@ Local storage means the key stays in that browser profile until it is cleared. U
 
 The editor can export `for-ai.md` as a local Markdown file for external AI agents. This file may include the current HTML and any user-written AI comments. It is downloaded locally; sharing it with another AI tool is controlled by the user.
 
+## Fonts And Document Export
+
+- System fonts do not make network requests.
+- Selecting an online font requests a pinned stylesheet and font files from jsDelivr. The selected CDN link remains in saved HTML, so reopening that file may contact the CDN again.
+- Imported WOFF2, WOFF, TTF, and OTF files are read locally and embedded into saved HTML as Data URLs. They are not uploaded by Anchor Deck.
+- PDF, PNG, JPG, and ZIP outputs are rendered and generated in the browser. Anchor Deck does not upload the rendered pages.
+- Users are responsible for checking the license of fonts they import or redistribute.
+
 ## Hosting
 
 The public demo is intended to be hosted as static files. If analytics, hosted processing, cloud previews, accounts, or server-side AI calls are added later, this page should be updated before release.
