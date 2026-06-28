@@ -439,6 +439,13 @@ function ensureRuntimeLinks(doc: Document): void {
   picker.setAttribute(marker, RUNTIME_VERSION);
   doc.body.appendChild(picker);
 
+  ["html-to-image.js", "jspdf.umd.min.js", "jszip.min.js"].forEach((filename) => {
+    const script = doc.createElement("script");
+    script.src = `runtime/${filename}`;
+    script.setAttribute(marker, RUNTIME_VERSION);
+    doc.body.appendChild(script);
+  });
+
   const editor = doc.createElement("script");
   editor.src = "runtime/html-deck-editor.js";
   editor.setAttribute(marker, RUNTIME_VERSION);
@@ -479,7 +486,10 @@ function removeOwnedRuntime(doc: Document): void {
     'script[src*="html-deck-editor"]',
     'link[href*="html-deck-editor"]',
     'script[src*="runtime/vanilla-picker"]',
-    'link[href*="runtime/vanilla-picker"]'
+    'link[href*="runtime/vanilla-picker"]',
+    'script[src*="runtime/html-to-image"]',
+    'script[src*="runtime/jspdf"]',
+    'script[src*="runtime/jszip"]'
   ].join(", ")).forEach((node) => {
     node.parentNode?.removeChild(node);
   });

@@ -580,7 +580,21 @@ describe("runtime injection", () => {
     expect(result.filesAdded).toContain("runtime/vanilla-picker.js");
     expect(result.filesAdded).toContain("runtime/vanilla-picker.css");
     expect(result.filesAdded).toContain("runtime/vanilla-picker.LICENSE.md");
+    expect(result.filesAdded).toContain("runtime/html-to-image.js");
+    expect(result.filesAdded).toContain("runtime/html-to-image.LICENSE.md");
+    expect(result.filesAdded).toContain("runtime/jspdf.umd.min.js");
+    expect(result.filesAdded).toContain("runtime/jspdf.LICENSE.md");
+    expect(result.filesAdded).toContain("runtime/jszip.min.js");
+    expect(result.filesAdded).toContain("runtime/jszip.LICENSE.md");
+    expect(result.filesAdded).toContain("runtime/FONT-LICENSES.md");
     expect(result.filesModified).toEqual(["index.html"]);
+
+    const zip = await JSZip.loadAsync(result.blob!);
+    const html = await zip.file("index.html")!.async("string");
+    expect(html).toContain('src="runtime/html-to-image.js"');
+    expect(html).toContain('src="runtime/jspdf.umd.min.js"');
+    expect(html).toContain('src="runtime/jszip.min.js"');
+    expect(html).toContain('data-html-deck-editor-runtime="0.1.6"');
   });
 
   it("uses an AI adaptation plan before normal runtime injection", async () => {
@@ -622,6 +636,9 @@ describe("runtime injection", () => {
     expect(zip.file("deck/index.html")).toBeTruthy();
     expect(zip.file("deck/runtime/html-deck-editor.js")).toBeTruthy();
     expect(zip.file("deck/runtime/vanilla-picker.LICENSE.md")).toBeTruthy();
+    expect(zip.file("deck/runtime/html-to-image.LICENSE.md")).toBeTruthy();
+    expect(zip.file("deck/runtime/jspdf.LICENSE.md")).toBeTruthy();
+    expect(zip.file("deck/runtime/jszip.LICENSE.md")).toBeTruthy();
     expect(zip.file("deck/assets/style.css")).toBeTruthy();
   });
 

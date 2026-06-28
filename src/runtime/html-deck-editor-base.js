@@ -6,8 +6,19 @@
   const FONT_MONO_STACK = '"SFMono-Regular", Consolas, "Liberation Mono", Menlo, monospace';
   const FONT_HEITI_STACK = '"PingFang SC", "Microsoft YaHei", "Noto Sans SC", sans-serif';
   const FONT_SONGTI_STACK = '"Songti SC", STSong, SimSun, serif';
+  const FONT_FANGSONG_STACK = 'FangSong, STFangsong, "FangSong_GB2312", serif';
   const FONT_KAITI_STACK = '"Kaiti SC", STKaiti, KaiTi, serif';
+  const FONT_PINGFANG_STACK = '"PingFang SC", "Helvetica Neue", Arial, sans-serif';
+  const FONT_YAHEI_STACK = '"Microsoft YaHei", "Noto Sans SC", Arial, sans-serif';
   const FONT_DISPLAY_STACK = '"DIN Alternate", "Arial Narrow", Impact, sans-serif';
+  const MAX_IMPORTED_FONT_BYTES = 20 * 1024 * 1024;
+  const IMPORTED_FONT_STYLE_SELECTOR = "style[data-html-deck-editor-font]";
+  const ONLINE_FONTS = [
+    { id: "noto-sans-sc", label: "思源黑体", family: "Noto Sans SC", value: '"Noto Sans SC", sans-serif', cssUrl: "https://cdn.jsdelivr.net/npm/@fontsource/noto-sans-sc@5.2.9/400.css", source: "Fontsource / OFL 1.1" },
+    { id: "noto-serif-sc", label: "思源宋体", family: "Noto Serif SC", value: '"Noto Serif SC", serif', cssUrl: "https://cdn.jsdelivr.net/npm/@fontsource/noto-serif-sc@5.2.9/400.css", source: "Fontsource / OFL 1.1" },
+    { id: "lxgw-wenkai", label: "霞鹜文楷", family: "LXGW WenKai", value: '"LXGW WenKai", "Kaiti SC", serif', cssUrl: "https://cdn.jsdelivr.net/npm/lxgw-wenkai-webfont@1.7.0/lxgwwenkai-regular.css", source: "LXGW WenKai / OFL 1.1" },
+    { id: "zcool-xiaowei", label: "站酷小薇体", family: "ZCOOL XiaoWei", value: '"ZCOOL XiaoWei", "Noto Serif SC", serif', cssUrl: "https://cdn.jsdelivr.net/npm/@fontsource/zcool-xiaowei@5.2.8/400.css", source: "Fontsource / OFL 1.1" }
+  ];
   const TEXT_COLOR_PALETTE = [
     "#111111", "#444444", "#737373", "#a3a3a3", "#d4d4d4", "#ffffff",
     "#b42318", "#ef4444", "#f97316", "#f59e0b", "#eab308", "#84cc16",
@@ -70,6 +81,7 @@
         <button class="editor-button" id="aiExportBtn" type="button" title="下载给 AI 的批注文件，不会保存 HTML">导出 for-ai.md</button>
         <button class="toolbar-help-button" id="aiExportHelpBtn" type="button" title="for-ai.md 使用说明" aria-label="for-ai.md 使用说明">?</button>
       </div>
+      <button class="editor-button" id="exportBtn" type="button">导出 PDF / 图片</button>
       <button class="editor-button primary" id="saveBtn" type="button" title="覆盖当前 index.html；不支持覆盖时下载替换文件">保存 HTML</button>
       <button class="editor-button danger" id="exitEditBtn" type="button">退出编辑</button>
     </div>
@@ -95,6 +107,14 @@
           <section class="editor-help-section">
             <h3>布局和样式</h3>
             <p>拖动选框移动元素，拖右下角改变尺寸；右侧 Layout 可以精确输入位置和大小。选中元素或文字片段后点工具栏小刷子，可以把样式刷到另一个元素或另一段文字。</p>
+          </section>
+          <section class="editor-help-section">
+            <h3>字体和导出</h3>
+            <ul>
+              <li>字体菜单提供本机常用字体、需联网的开源字体和已导入字体；本地字体支持 WOFF2、WOFF、TTF、OTF，单文件不超过 20MB。</li>
+              <li>导入字体后请点“保存 HTML”，否则刷新页面后需要重新导入；联网字体会访问外部 CDN。</li>
+              <li>“导出 PDF / 图片”可逐页勾选。单页图片直接下载，多页图片打包 ZIP；资源读取失败时会提示具体页码并停止导出。</li>
+            </ul>
           </section>
           <section class="editor-help-section">
             <h3>动效和保存</h3>
@@ -176,6 +196,39 @@
         </div>
       </div>
     </div>
+    <div class="editor-help-modal editor-export-modal" id="exportModal" role="dialog" aria-modal="true" aria-labelledby="exportTitle" hidden>
+      <div class="editor-help-card editor-export-card">
+        <div class="editor-help-header">
+          <div>
+            <h2 class="editor-help-title" id="exportTitle">导出 PDF / 图片</h2>
+            <p class="editor-export-intro">按原页面顺序导出；图片为 2 倍分辨率，多页图片会自动打包 ZIP。</p>
+          </div>
+          <button class="editor-help-close" id="exportCloseBtn" type="button" aria-label="关闭">×</button>
+        </div>
+        <div class="editor-help-body editor-export-body">
+          <fieldset class="editor-export-format">
+            <legend>格式</legend>
+            <label><input type="radio" name="editorExportFormat" value="pdf" checked> PDF</label>
+            <label><input type="radio" name="editorExportFormat" value="png"> PNG</label>
+            <label><input type="radio" name="editorExportFormat" value="jpg"> JPG</label>
+          </fieldset>
+          <div class="editor-export-page-header">
+            <strong>页面</strong>
+            <div class="editor-export-page-actions">
+              <button class="editor-button" id="exportCurrentBtn" type="button">当前页</button>
+              <button class="editor-button" id="exportAllBtn" type="button">全选</button>
+              <button class="editor-button" id="exportNoneBtn" type="button">取消全选</button>
+            </div>
+          </div>
+          <div class="editor-export-pages" id="exportPageList" aria-label="选择导出页面"></div>
+          <p class="editor-export-status" id="exportStatus" aria-live="polite">已选择全部页面</p>
+          <div class="editor-export-actions">
+            <button class="editor-button" id="exportCancelBtn" type="button">取消</button>
+            <button class="editor-button primary" id="exportStartBtn" type="button">开始导出</button>
+          </div>
+        </div>
+      </div>
+    </div>
     <div class="shape-menu" id="shapeMenu" role="menu" hidden>
       <button class="shape-choice" type="button" data-shape-choice="rect">矩形</button>
       <button class="shape-choice" type="button" data-shape-choice="roundRect">圆角矩形</button>
@@ -232,21 +285,36 @@
         <label class="field-label" for="fontFamilyInput">字体</label>
         <select class="editor-select" id="fontFamilyInput" disabled>
           <option value="">跟随原样式</option>
-          <option value='${FONT_BODY_STACK}'>正文无衬线</option>
-          <option value='${FONT_HEITI_STACK}'>中文黑体</option>
-          <option value='${FONT_CJK_SERIF_STACK}'>中文标题衬线</option>
-          <option value='${FONT_SONGTI_STACK}'>中文宋体</option>
-          <option value='${FONT_KAITI_STACK}'>中文楷体</option>
-          <option value='${FONT_LATIN_SERIF_STACK}'>英文衬线</option>
-          <option value='Inter, Arial, Helvetica, sans-serif'>Inter / Arial</option>
-          <option value='Aptos, Calibri, Arial, sans-serif'>Aptos / Calibri</option>
-          <option value='Arial, Helvetica, sans-serif'>Arial</option>
-          <option value='"Times New Roman", Times, serif'>Times New Roman</option>
-          <option value='${FONT_DISPLAY_STACK}'>窄体展示</option>
-          <option value='${FONT_MONO_STACK}'>等宽代码</option>
-          <option value="__custom__">自定义字体...</option>
+          <optgroup label="本机常用字体">
+            <option value='${FONT_BODY_STACK}'>正文无衬线</option>
+            <option value='${FONT_HEITI_STACK}'>中文黑体</option>
+            <option value='${FONT_SONGTI_STACK}'>中文宋体</option>
+            <option value='${FONT_FANGSONG_STACK}'>中文仿宋</option>
+            <option value='${FONT_KAITI_STACK}'>中文楷体</option>
+            <option value='${FONT_PINGFANG_STACK}'>苹方</option>
+            <option value='${FONT_YAHEI_STACK}'>微软雅黑</option>
+            <option value='${FONT_CJK_SERIF_STACK}'>中文标题衬线</option>
+            <option value='${FONT_LATIN_SERIF_STACK}'>英文衬线</option>
+            <option value='Inter, Arial, Helvetica, sans-serif'>Inter / Arial</option>
+            <option value='Aptos, Calibri, Arial, sans-serif'>Aptos / Calibri</option>
+            <option value='Arial, Helvetica, sans-serif'>Arial</option>
+            <option value='"Times New Roman", Times, serif'>Times New Roman</option>
+            <option value='${FONT_DISPLAY_STACK}'>窄体展示</option>
+            <option value='${FONT_MONO_STACK}'>等宽代码</option>
+          </optgroup>
+          <optgroup label="联网字体 · 需联网">
+            ${ONLINE_FONTS.map((font) => `<option value='${font.value}' data-online-font="${font.id}">${font.label} · ${font.source}</option>`).join("")}
+          </optgroup>
+          <optgroup label="已导入字体" id="importedFontGroup"></optgroup>
+          <option value="__custom__">输入其他字体名...</option>
         </select>
         <input class="editor-field font-custom-field" id="fontFamilyCustomInput" type="text" placeholder='输入字体名或字体栈，如 "霞鹜文楷", serif' disabled>
+        <div class="font-import-row">
+          <button class="editor-button" id="fontImportBtn" type="button">导入字体文件</button>
+          <input class="file-input-hidden" id="fontImportInput" type="file" accept=".woff2,.woff,.ttf,.otf,font/woff2,font/woff,font/ttf,font/otf,application/font-woff,application/x-font-ttf,application/x-font-opentype" tabindex="-1">
+          <span class="font-import-limit">WOFF2 / WOFF / TTF / OTF，≤ 20MB</span>
+        </div>
+        <p class="field-help font-import-status" id="fontImportStatus">联网字体会访问外部 CDN；导入字体仅在当前页面中使用，点“保存 HTML”后才会写入文件。</p>
         <div class="field-grid">
           <label><span class="field-label">字号</span><input class="editor-field" id="fontSizeInput" type="number" min="8" max="220" disabled></label>
           <div class="color-field">
@@ -834,6 +902,9 @@
         this.commentMode = false;
         this.commentInputAnchor = "";
         this.formatBrush = null;
+        this.isExporting = false;
+        this.importedFontCounter = 0;
+        this.onlineFontPromises = new Map();
         this.toggle = editorUiElement("editToggle");
         this.hotzone = document.querySelector(".edit-hotzone[data-html-deck-editor-ui]");
         this.shell = editorUiElement("editorShell");
@@ -871,6 +942,16 @@
           addShape: this.control("addShapeBtn"),
           shapeMenu: this.control("shapeMenu"),
           aiExport: this.control("aiExportBtn"),
+          export: this.control("exportBtn"),
+          exportModal: this.control("exportModal"),
+          exportClose: this.control("exportCloseBtn"),
+          exportCancel: this.control("exportCancelBtn"),
+          exportStart: this.control("exportStartBtn"),
+          exportCurrent: this.control("exportCurrentBtn"),
+          exportAll: this.control("exportAllBtn"),
+          exportNone: this.control("exportNoneBtn"),
+          exportPageList: this.control("exportPageList"),
+          exportStatus: this.control("exportStatus"),
           save: this.control("saveBtn"),
           exit: this.control("exitEditBtn"),
           selectionName: this.control("selectionName"),
@@ -887,6 +968,10 @@
           shape: this.control("shapeInput"),
           fontFamily: this.control("fontFamilyInput"),
           fontFamilyCustom: this.control("fontFamilyCustomInput"),
+          importedFontGroup: this.control("importedFontGroup"),
+          fontImport: this.control("fontImportBtn"),
+          fontImportInput: this.control("fontImportInput"),
+          fontImportStatus: this.control("fontImportStatus"),
           fontSize: this.control("fontSizeInput"),
           fontWeight: this.control("fontWeightBtn"),
           fontStyle: this.control("fontStyleBtn"),
@@ -927,6 +1012,7 @@
         });
         this.prepareEditableElements();
         this.prepareEditableIds();
+        this.restoreManagedFonts();
         this.renderTextColorPalette();
         this.renderBackgroundPalette();
         this.initColorPickers();
@@ -1558,6 +1644,16 @@
           });
         });
         this.controls.aiExport.addEventListener("click", () => this.exportForAi());
+        this.controls.export.addEventListener("click", () => this.openExportModal());
+        this.controls.exportClose.addEventListener("click", () => this.closeExportModal());
+        this.controls.exportCancel.addEventListener("click", () => this.closeExportModal());
+        this.controls.exportModal.addEventListener("click", (event) => {
+          if (event.target === this.controls.exportModal) this.closeExportModal();
+        });
+        this.controls.exportCurrent.addEventListener("click", () => this.selectExportPages("current"));
+        this.controls.exportAll.addEventListener("click", () => this.selectExportPages("all"));
+        this.controls.exportNone.addEventListener("click", () => this.selectExportPages("none"));
+        this.controls.exportStart.addEventListener("click", () => this.exportSelectedPages());
         this.controls.saveComment.addEventListener("click", () => this.saveCommentForSelected());
         this.controls.clearComment.addEventListener("click", () => this.clearCommentForSelected());
         this.controls.save.addEventListener("click", () => this.exportHtml());
@@ -1620,9 +1716,18 @@
             return;
           }
           this.controls.fontFamilyCustom.value = "";
+          const onlineFontId = this.controls.fontFamily.selectedOptions?.[0]?.dataset?.onlineFont;
+          if (onlineFontId) {
+            this.ensureOnlineFont(onlineFontId).catch((error) => {
+              this.controls.fontImportStatus.textContent = error.message;
+              this.toastMessage(error.message);
+            });
+          }
         });
         this.controls.fontFamilyCustom.addEventListener("input", () => this.applyInspectorValue("fontFamily", { recordHistory: false, refreshInspector: false, live: true }));
         this.controls.fontFamilyCustom.addEventListener("change", () => this.applyInspectorValue("fontFamily", { recordHistory: true }));
+        this.controls.fontImport.addEventListener("click", () => this.controls.fontImportInput.click());
+        this.controls.fontImportInput.addEventListener("change", (event) => this.handleFontImport(event));
         const liveInspectorControls = new Set(["text", "fontSize", "opacity", "x", "y", "width", "height", "order", "delay", "duration"]);
         ["text", "shape", "fontFamily", "fontSize", "bg", "opacity", "x", "y", "width", "height", "anim", "order", "delay", "duration"].forEach((name) => {
           const control = this.controls[name];
@@ -1827,6 +1932,12 @@
 
       handleKeydown(event) {
         const formTarget = this.isFormTarget(event.target);
+        if (event.key === "Escape" && !this.controls.exportModal.hidden) {
+          event.preventDefault();
+          event.stopPropagation();
+          this.closeExportModal();
+          return;
+        }
         if (event.key === "Escape" && !this.controls.confirmModal.hidden) {
           event.preventDefault();
           event.stopPropagation();
@@ -3461,6 +3572,139 @@
         return this.controls.fontFamily.value;
       }
 
+      restoreManagedFonts() {
+        document.querySelectorAll(IMPORTED_FONT_STYLE_SELECTOR).forEach((style) => {
+          const family = style.dataset.fontFamily || "";
+          if (!family) return;
+          this.registerImportedFontOption(family, style.dataset.fontLabel || family);
+        });
+        document.querySelectorAll("link[data-html-deck-editor-online-font]").forEach((link) => {
+          const id = link.dataset.htmlDeckEditorOnlineFont;
+          if (id && ONLINE_FONTS.some((font) => font.id === id)) this.trackOnlineFontLink(link, id).catch(() => {});
+        });
+      }
+
+      registerImportedFontOption(family, label) {
+        if (!this.controls.importedFontGroup || !family) return "";
+        const value = `"${family}", sans-serif`;
+        const existing = Array.from(this.controls.importedFontGroup.querySelectorAll("option")).find((option) => option.value === value);
+        if (existing) return existing.value;
+        const option = document.createElement("option");
+        option.value = value;
+        option.dataset.importedFont = family;
+        option.textContent = label;
+        this.controls.importedFontGroup.appendChild(option);
+        return value;
+      }
+
+      async handleFontImport(event) {
+        const input = event.currentTarget;
+        const file = input.files?.[0];
+        input.value = "";
+        if (!file) return;
+        try {
+          const extension = this.validateFontFile(file);
+          const dataUrl = await this.readFileAsDataUrl(file);
+          const family = `HtmlDeckImported_${Date.now().toString(36)}_${++this.importedFontCounter}`;
+          const label = file.name.replace(/\.[^.]+$/, "") || "导入字体";
+          const safeFamily = family.replace(/["\\\r\n]/g, "");
+          const style = document.createElement("style");
+          style.dataset.htmlDeckEditorFont = "imported";
+          style.dataset.fontFamily = safeFamily;
+          style.dataset.fontLabel = label.slice(0, 120);
+          style.dataset.fontFile = file.name.slice(0, 180);
+          style.textContent = `@font-face { font-family: "${safeFamily}"; src: url("${dataUrl}") format("${this.fontFormatForExtension(extension)}"); font-style: normal; font-weight: 400; font-display: swap; }`;
+          document.head.appendChild(style);
+          const value = this.registerImportedFontOption(safeFamily, label);
+          this.controls.fontFamily.value = value;
+          this.controls.fontFamilyCustom.value = "";
+          if (this.selected && this.isTextElement(this.selected)) this.applyInspectorValue("fontFamily", { recordHistory: true });
+          this.controls.fontImportStatus.textContent = `已导入“${label}”。刷新前请点“保存 HTML”，否则需要重新导入。`;
+          this.toastMessage(`已导入字体：${label}`);
+        } catch (error) {
+          const message = error?.message || "字体导入失败";
+          this.controls.fontImportStatus.textContent = message;
+          this.toastMessage(message);
+        }
+      }
+
+      validateFontFile(file) {
+        const extension = (file.name.match(/\.([^.]+)$/)?.[1] || "").toLowerCase();
+        if (!["woff2", "woff", "ttf", "otf"].includes(extension)) {
+          throw new Error("仅支持 WOFF2、WOFF、TTF、OTF 字体文件");
+        }
+        if (!file.size) throw new Error("字体文件为空");
+        if (file.size > MAX_IMPORTED_FONT_BYTES) throw new Error("字体文件不能超过 20MB");
+        return extension;
+      }
+
+      fontFormatForExtension(extension) {
+        return ({ woff2: "woff2", woff: "woff", ttf: "truetype", otf: "opentype" })[extension] || extension;
+      }
+
+      readFileAsDataUrl(file) {
+        return new Promise((resolve, reject) => {
+          const reader = new FileReader();
+          reader.addEventListener("load", () => resolve(String(reader.result || "")), { once: true });
+          reader.addEventListener("error", () => reject(new Error("无法读取字体文件")), { once: true });
+          reader.readAsDataURL(file);
+        });
+      }
+
+      ensureOnlineFont(id) {
+        const font = ONLINE_FONTS.find((item) => item.id === id);
+        if (!font) return Promise.reject(new Error("未找到联网字体"));
+        if (this.onlineFontPromises.has(id)) return this.onlineFontPromises.get(id);
+        let link = document.querySelector(`link[data-html-deck-editor-online-font="${id}"]`);
+        let created = false;
+        if (!link) {
+          link = document.createElement("link");
+          link.rel = "stylesheet";
+          link.href = font.cssUrl;
+          link.dataset.htmlDeckEditorOnlineFont = id;
+          link.dataset.htmlDeckEditorFontSource = font.source;
+          created = true;
+        }
+        const promise = this.trackOnlineFontLink(link, id);
+        if (created) document.head.appendChild(link);
+        return promise;
+      }
+
+      trackOnlineFontLink(link, id) {
+        if (this.onlineFontPromises.has(id)) return this.onlineFontPromises.get(id);
+        const font = ONLINE_FONTS.find((item) => item.id === id);
+        if (!font) return Promise.reject(new Error("未找到联网字体"));
+        const promise = new Promise((resolve, reject) => {
+          let timer = null;
+          const finish = async () => {
+            window.clearTimeout(timer);
+            link.dataset.htmlDeckEditorFontState = "loaded";
+            this.controls.fontImportStatus.textContent = `${font.label}已加载；来源：${font.source}。`;
+            try {
+              await document.fonts?.load?.(`16px "${font.family}"`);
+            } catch (error) {
+              // The stylesheet loaded; browsers without FontFaceSet still render normally.
+            }
+            resolve(font);
+          };
+          const fail = () => {
+            window.clearTimeout(timer);
+            link.dataset.htmlDeckEditorFontState = "error";
+            this.onlineFontPromises.delete(id);
+            reject(new Error(`联网字体“${font.label}”加载失败，请检查网络后重试`));
+          };
+          if (link.dataset.htmlDeckEditorFontState === "loaded" || link.sheet) {
+            finish();
+            return;
+          }
+          link.addEventListener("load", finish, { once: true });
+          link.addEventListener("error", fail, { once: true });
+          timer = window.setTimeout(fail, 15000);
+        });
+        this.onlineFontPromises.set(id, promise);
+        return promise;
+      }
+
       renderTextColorPalette() {
         const palette = this.controls.colorPresetGrid;
         if (!palette) return;
@@ -3615,11 +3859,21 @@
 
       matchFontFamilyValue(value) {
         const normalized = (value || "").toLowerCase();
+        const imported = Array.from(this.controls.importedFontGroup?.querySelectorAll("option") || []).find((option) => {
+          const family = (option.dataset.importedFont || "").toLowerCase();
+          return family && normalized.includes(family);
+        });
+        if (imported) return imported.value;
+        const online = ONLINE_FONTS.find((font) => (
+          document.querySelector(`link[data-html-deck-editor-online-font="${font.id}"]`) && normalized.includes(font.family.toLowerCase())
+        ));
+        if (online) return online.value;
         const presets = [
           { value: FONT_BODY_STACK, tokens: ["hanken grotesk", "system-ui", "-apple-system", "segoe ui"] },
           { value: FONT_HEITI_STACK, tokens: ["pingfang sc", "microsoft yahei", "noto sans sc"] },
           { value: FONT_CJK_SERIF_STACK, tokens: ["noto serif sc", "songti sc", "simsun"] },
           { value: FONT_SONGTI_STACK, tokens: ["songti sc", "stsong", "simsun"] },
+          { value: FONT_FANGSONG_STACK, tokens: ["fangsong", "stfangsong"] },
           { value: FONT_KAITI_STACK, tokens: ["kaiti sc", "stkaiti", "kaiti"] },
           { value: FONT_LATIN_SERIF_STACK, tokens: ["newsreader", "georgia", "times new roman"] },
           { value: "Inter, Arial, Helvetica, sans-serif", tokens: ["inter"] },
@@ -5264,6 +5518,313 @@
         this.toastMessage(syncedComment ? "已保存当前批注并下载 for-ai.md，HTML 未改动" : "已下载 for-ai.md，HTML 未改动");
       }
 
+      openExportModal() {
+        this.presentation.slides = stageSlides(this.stage);
+        this.renderExportPageList();
+        this.controls.exportModal.hidden = false;
+        this.controls.exportStatus.textContent = `已选择全部 ${this.presentation.slides.length} 页`;
+        this.controls.exportStart.disabled = this.presentation.slides.length === 0;
+      }
+
+      closeExportModal() {
+        if (this.isExporting) return;
+        this.controls.exportModal.hidden = true;
+      }
+
+      renderExportPageList() {
+        this.controls.exportPageList.innerHTML = "";
+        this.presentation.slides.forEach((slide, index) => {
+          const label = document.createElement("label");
+          label.className = "editor-export-page";
+          const checkbox = document.createElement("input");
+          checkbox.type = "checkbox";
+          checkbox.value = String(index);
+          checkbox.checked = true;
+          checkbox.addEventListener("change", () => this.updateExportSelectionStatus());
+          const number = document.createElement("span");
+          number.className = "editor-export-page-number";
+          number.textContent = String(index + 1).padStart(2, "0");
+          const title = document.createElement("span");
+          title.className = "editor-export-page-title";
+          title.textContent = this.exportSlideTitle(slide, index);
+          label.append(checkbox, number, title);
+          this.controls.exportPageList.appendChild(label);
+        });
+      }
+
+      exportSlideTitle(slide, index) {
+        return slide?.dataset?.title || slide?.getAttribute?.("aria-label") || slide?.querySelector?.("h1, h2, h3, [data-title]")?.textContent?.trim() || `Slide ${index + 1}`;
+      }
+
+      selectExportPages(mode) {
+        const current = normalizeSlideIndex(this.presentation.currentSlide, this.presentation.slides);
+        this.controls.exportPageList.querySelectorAll("input[type='checkbox']").forEach((input) => {
+          input.checked = mode === "all" || (mode === "current" && Number(input.value) === current);
+        });
+        this.updateExportSelectionStatus();
+      }
+
+      selectedExportPageIndexes() {
+        return Array.from(this.controls.exportPageList.querySelectorAll("input[type='checkbox']:checked"))
+          .map((input) => Number(input.value))
+          .filter((index) => Number.isInteger(index) && index >= 0 && index < this.presentation.slides.length)
+          .sort((a, b) => a - b);
+      }
+
+      updateExportSelectionStatus() {
+        const count = this.selectedExportPageIndexes().length;
+        this.controls.exportStart.disabled = count === 0 || this.isExporting;
+        this.controls.exportStatus.textContent = count ? `已选择 ${count} 页` : "请至少选择一页";
+      }
+
+      selectedExportFormat() {
+        return this.controls.exportModal.querySelector("input[name='editorExportFormat']:checked")?.value || "pdf";
+      }
+
+      setExportBusy(busy) {
+        this.isExporting = busy;
+        [this.controls.exportClose, this.controls.exportCancel, this.controls.exportCurrent, this.controls.exportAll, this.controls.exportNone]
+          .forEach((control) => { control.disabled = busy; });
+        this.controls.exportModal.querySelectorAll("input").forEach((input) => { input.disabled = busy; });
+        this.controls.exportStart.disabled = busy || this.selectedExportPageIndexes().length === 0;
+        this.controls.exportStart.textContent = busy ? "正在导出…" : "开始导出";
+      }
+
+      async exportSelectedPages() {
+        if (this.isExporting) return;
+        const indexes = this.selectedExportPageIndexes();
+        if (!indexes.length) {
+          this.updateExportSelectionStatus();
+          return;
+        }
+        const format = this.selectedExportFormat();
+        let exportState = null;
+        let succeeded = false;
+        this.setExportBusy(true);
+        try {
+          this.assertExportDependencies(format, indexes.length);
+          exportState = this.beginExportState();
+          await this.waitForExportFonts();
+          const captures = [];
+          for (let position = 0; position < indexes.length; position += 1) {
+            const index = indexes[position];
+            this.controls.exportStatus.textContent = `正在渲染第 ${index + 1} 页（${position + 1} / ${indexes.length}）`;
+            this.presentation.showSlide(index);
+            await this.waitForAnimationFrames(2);
+            const slide = this.presentation.slides[index];
+            await this.verifySlideResources(slide, index);
+            captures.push(await this.captureExportSlide(slide, index));
+          }
+          this.controls.exportStatus.textContent = "正在生成下载文件…";
+          if (format === "pdf") {
+            await this.exportCapturesAsPdf(captures);
+          } else {
+            await this.exportCapturesAsImages(captures, format);
+          }
+          succeeded = true;
+          this.controls.exportStatus.textContent = `已导出 ${captures.length} 页`;
+          this.toastMessage(`已导出 ${captures.length} 页 ${format.toUpperCase()}`);
+        } catch (error) {
+          const message = error?.message || "导出失败";
+          this.controls.exportStatus.textContent = message;
+          this.toastMessage(message);
+        } finally {
+          if (exportState) await this.restoreExportState(exportState);
+          this.setExportBusy(false);
+          if (succeeded) this.closeExportModal();
+        }
+      }
+
+      assertExportDependencies(format, pageCount = 1) {
+        if (!window.htmlToImage?.toCanvas) throw new Error("图片渲染组件未加载，请刷新页面后重试");
+        if (format === "pdf" && !window.jspdf?.jsPDF) throw new Error("PDF 组件未加载，请刷新页面后重试");
+        if (format !== "pdf" && pageCount > 1 && !window.JSZip) throw new Error("ZIP 组件未加载，请刷新页面后重试");
+      }
+
+      beginExportState() {
+        const state = {
+          currentSlide: this.presentation.currentSlide,
+          selected: this.selected,
+          bodyEditing: document.body.classList.contains("editing"),
+          bodyEditorOn: document.body.classList.contains("editor-on"),
+          editorInsets: { ...(this.presentation.editorInsets || zeroInsets()) }
+        };
+        this.selected?.classList.remove("editor-selected");
+        this.selected = null;
+        this.frame.classList.remove("active");
+        document.body.classList.add("html-deck-editor-exporting");
+        document.body.classList.remove("editing", "editor-on");
+        this.presentation.setEditorInsets?.(zeroInsets());
+        return state;
+      }
+
+      async restoreExportState(state) {
+        this.presentation.showSlide(state.currentSlide);
+        this.presentation.setEditorInsets?.(state.editorInsets);
+        document.body.classList.remove("html-deck-editor-exporting");
+        document.body.classList.toggle("editing", state.bodyEditing);
+        document.body.classList.toggle("editor-on", state.bodyEditorOn);
+        this.renderSlideRail();
+        await this.waitForAnimationFrames(1);
+        if (state.selected?.isConnected) this.select(state.selected);
+        else this.clearSelection();
+      }
+
+      async waitForExportFonts() {
+        const pending = Array.from(this.onlineFontPromises.values());
+        if (pending.length) await Promise.all(pending);
+        const failed = document.querySelector("link[data-html-deck-editor-online-font][data-html-deck-editor-font-state='error']");
+        if (failed) {
+          const font = ONLINE_FONTS.find((item) => item.id === failed.dataset.htmlDeckEditorOnlineFont);
+          throw new Error(`联网字体“${font?.label || "未知字体"}”加载失败，已停止导出`);
+        }
+        if (document.fonts?.ready) {
+          await Promise.race([
+            document.fonts.ready,
+            new Promise((_, reject) => window.setTimeout(() => reject(new Error("字体加载超时，已停止导出")), 15000))
+          ]);
+        }
+      }
+
+      waitForAnimationFrames(count = 1) {
+        return new Promise((resolve) => {
+          const next = () => {
+            if (count <= 0) {
+              resolve();
+              return;
+            }
+            count -= 1;
+            requestAnimationFrame(next);
+          };
+          next();
+        });
+      }
+
+      async verifySlideResources(slide, index) {
+        if (!slide || typeof window.fetch !== "function") return;
+        const urls = new Set();
+        slide.querySelectorAll("img").forEach((image) => {
+          const source = image.currentSrc || image.getAttribute("src") || "";
+          if (source) urls.add(source);
+          if (image.complete && source && image.naturalWidth === 0) {
+            throw new Error(`第 ${index + 1} 页图片加载失败：${this.shortResourceUrl(source)}`);
+          }
+        });
+        slide.querySelectorAll("image").forEach((image) => {
+          const source = image.getAttribute("href") || image.getAttribute("xlink:href") || "";
+          if (source) urls.add(source);
+        });
+        slide.querySelectorAll("video[poster]").forEach((video) => urls.add(video.getAttribute("poster")));
+        [slide, ...slide.querySelectorAll("*")].forEach((element) => {
+          const computed = getComputedStyle(element);
+          [computed.backgroundImage, computed.maskImage, computed.webkitMaskImage].forEach((value) => {
+            String(value || "").replace(/url\(["']?([^"')]+)["']?\)/g, (_match, source) => {
+              if (source) urls.add(source);
+              return _match;
+            });
+          });
+        });
+        for (const source of urls) {
+          const url = new URL(source, document.baseURI);
+          if (["data:", "blob:"].includes(url.protocol)) continue;
+          try {
+            const response = await window.fetch(url.href, { mode: "cors", credentials: url.origin === window.location.origin ? "same-origin" : "omit" });
+            if (!response.ok) throw new Error(`HTTP ${response.status}`);
+          } catch (error) {
+            throw new Error(`第 ${index + 1} 页资源无法读取：${this.shortResourceUrl(url.href)}`);
+          }
+        }
+      }
+
+      shortResourceUrl(value) {
+        const text = String(value || "");
+        return text.length > 90 ? `${text.slice(0, 87)}…` : text;
+      }
+
+      exportBackgroundColor(slide) {
+        const candidates = [slide, this.stage, document.body];
+        for (const element of candidates) {
+          const value = getComputedStyle(element).backgroundColor;
+          if (value && value !== "transparent" && value !== "rgba(0, 0, 0, 0)") return value;
+        }
+        return "#ffffff";
+      }
+
+      async captureExportSlide(slide, index) {
+        if (!slide) throw new Error(`第 ${index + 1} 页不存在`);
+        const size = elementDesignSize(slide, stageDesignSize(this.stage));
+        let imageError = false;
+        let canvas;
+        try {
+          canvas = await window.htmlToImage.toCanvas(slide, {
+            pixelRatio: 2,
+            width: Math.round(size.width),
+            height: Math.round(size.height),
+            backgroundColor: this.exportBackgroundColor(slide),
+            cacheBust: true,
+            skipAutoScale: true,
+            style: { transform: "none", transformOrigin: "top left", margin: "0" },
+            filter: (node) => !(node instanceof Element && node.matches("[data-html-deck-editor-ui], .editor-frame, .editor-guide")),
+            onImageErrorHandler: () => { imageError = true; }
+          });
+        } catch (error) {
+          throw new Error(`第 ${index + 1} 页渲染失败：${error?.message || "未知错误"}`);
+        }
+        if (imageError) throw new Error(`第 ${index + 1} 页包含无法读取的图片，已停止导出`);
+        if (!canvas?.width || !canvas?.height) throw new Error(`第 ${index + 1} 页渲染结果为空`);
+        return { canvas, index, width: Math.round(size.width), height: Math.round(size.height) };
+      }
+
+      async exportCapturesAsImages(captures, format) {
+        const mime = format === "jpg" ? "image/jpeg" : "image/png";
+        const extension = format === "jpg" ? "jpg" : "png";
+        const files = [];
+        for (const capture of captures) {
+          const blob = await this.canvasToBlob(capture.canvas, mime, format === "jpg" ? 0.92 : undefined);
+          files.push({ blob, filename: `${this.exportBaseName()}-page-${String(capture.index + 1).padStart(2, "0")}.${extension}` });
+        }
+        if (files.length === 1) {
+          this.downloadBlob(files[0].blob, files[0].filename);
+          return;
+        }
+        const zip = new window.JSZip();
+        files.forEach((file) => zip.file(file.filename, file.blob));
+        const blob = await zip.generateAsync({ type: "blob" });
+        this.downloadBlob(blob, `${this.exportBaseName()}-${extension}.zip`);
+      }
+
+      async exportCapturesAsPdf(captures) {
+        const jsPDF = window.jspdf.jsPDF;
+        const first = captures[0];
+        const pdf = new jsPDF({
+          orientation: first.width >= first.height ? "landscape" : "portrait",
+          unit: "px",
+          format: [first.width, first.height],
+          hotfixes: ["px_scaling"]
+        });
+        captures.forEach((capture, position) => {
+          if (position > 0) pdf.addPage([capture.width, capture.height], capture.width >= capture.height ? "landscape" : "portrait");
+          const dataUrl = capture.canvas.toDataURL("image/jpeg", 0.92);
+          pdf.addImage(dataUrl, "JPEG", 0, 0, capture.width, capture.height, undefined, "FAST");
+        });
+        this.downloadBlob(pdf.output("blob"), `${this.exportBaseName()}.pdf`);
+      }
+
+      canvasToBlob(canvas, mime, quality) {
+        return new Promise((resolve, reject) => {
+          canvas.toBlob((blob) => {
+            if (blob) resolve(blob);
+            else reject(new Error("无法生成图片文件"));
+          }, mime, quality);
+        });
+      }
+
+      exportBaseName() {
+        const title = String(document.title || "html-deck").replace(/\.[a-z0-9]+$/i, "");
+        const safe = title.replace(/[\\/:*?"<>|\u0000-\u001f]+/g, "-").replace(/\s+/g, "-").replace(/^-+|-+$/g, "");
+        return safe || "html-deck";
+      }
+
       async exportHtml() {
         const html = this.buildExportHtml();
         this.saveDraft(false, false);
@@ -5311,6 +5872,10 @@
 
       downloadText(text, filename, type) {
         const blob = new Blob([text], { type });
+        this.downloadBlob(blob, filename);
+      }
+
+      downloadBlob(blob, filename) {
         const link = document.createElement("a");
         const objectUrl = URL.createObjectURL(blob);
         link.href = objectUrl;

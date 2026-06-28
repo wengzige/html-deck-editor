@@ -1115,6 +1115,266 @@ describe("editor runtime", () => {
     expect((document.getElementById("bgInput") as HTMLButtonElement).dataset.value).toBe("#123456");
   });
 
+  it("groups common, online, and imported fonts and deduplicates online font links", async () => {
+    document.body.innerHTML = `
+      <div id="deckStage" class="deck-stage">
+        <section class="slide active"><h1 id="title" data-editable>字体测试</h1></section>
+      </div>
+    `;
+    installRuntime();
+    const editor = (window as any).FrontendSlidesEditor.mount();
+    const title = document.getElementById("title") as HTMLElement;
+    editor.toggleEditMode(true);
+    editor.select(title);
+
+    const select = document.getElementById("fontFamilyInput") as HTMLSelectElement;
+    expect(Array.from(select.querySelectorAll("optgroup")).map((group) => group.label)).toEqual([
+      "本机常用字体",
+      "联网字体 · 需联网",
+      "已导入字体"
+    ]);
+    expect(select.textContent).toContain("中文仿宋");
+    expect(select.textContent).toContain("苹方");
+    expect(select.textContent).toContain("微软雅黑");
+    expect(select.textContent).toContain("思源黑体 · Fontsource / OFL 1.1");
+
+    select.value = '"Noto Sans SC", sans-serif';
+    select.dispatchEvent(new Event("change", { bubbles: true }));
+    const link = document.querySelector('link[data-html-deck-editor-online-font="noto-sans-sc"]') as HTMLLinkElement;
+    expect(link.href).toContain("@fontsource/noto-sans-sc@5.2.9/400.css");
+    link.dispatchEvent(new Event("load"));
+    await Promise.resolve();
+    select.dispatchEvent(new Event("change", { bubbles: true }));
+    expect(document.querySelectorAll('link[data-html-deck-editor-online-font="noto-sans-sc"]')).toHaveLength(1);
+    expect(title.style.fontFamily).toContain("Noto Sans SC");
+  });
+
+  it("validates and embeds imported font files, then restores their option on remount", async () => {
+    document.body.innerHTML = `
+      <div id="deckStage" class="deck-stage">
+        <section class="slide active"><h1 id="title" data-editable>导入字体</h1></section>
+      </div>
+    `;
+    installRuntime();
+    const editor = (window as any).FrontendSlidesEditor.mount();
+    const title = document.getElementById("title") as HTMLElement;
+    editor.toggleEditMode(true);
+    editor.select(title);
+
+    expect(() => editor.validateFontFile({ name: "bad.zip", size: 10 })).toThrow("仅支持");
+    expect(() => editor.validateFontFile({ name: "large.ttf", size: 20 * 1024 * 1024 + 1 })).toThrow("20MB");
+
+    const file = new File([new Uint8Array([0, 1, 2, 3])], "演示字体.woff2", { type: "font/woff2" });
+    const input = { files: [file], value: "selected" };
+    await editor.handleFontImport({ currentTarget: input });
+
+    const style = document.querySelector("style[data-html-deck-editor-font]") as HTMLStyleElement;
+    expect(style.textContent).toContain("data:font/woff2;base64");
+    expect(title.style.fontFamily).toContain("HtmlDeckImported_");
+    expect((document.getElementById("fontImportStatus") as HTMLElement).textContent).toContain("保存 HTML");
+    expect(editor.buildExportHtml()).toContain("data-html-deck-editor-font=\"imported\"");
+
+    editor.destroy();
+    document.querySelectorAll("[data-html-deck-editor-ui]").forEach((node) => node.remove());
+    const remounted = (window as any).FrontendSlidesEditor.mount();
+    expect(remounted.controls.importedFontGroup.querySelectorAll("option")).toHaveLength(1);
+    expect(remounted.controls.importedFontGroup.textContent).toContain("演示字体");
+  });
+
+  it("lists only top-level slides and supports current, all, and empty export selections", () => {
+    document.body.innerHTML = `
+      <div id="deckStage" class="deck-stage">
+        <section class="slide active" data-title="首页"><div class="slide">嵌套伪页面</div></section>
+        <section class="slide" data-title="结尾"></section>
+      </div>
+    `;
+    installRuntime();
+    const editor = (window as any).FrontendSlidesEditor.mount();
+    editor.presentation.showSlide(1);
+    editor.openExportModal();
+
+    expect(editor.controls.exportPageList.querySelectorAll("input[type='checkbox']")).toHaveLength(2);
+    editor.selectExportPages("current");
+    expect(editor.selectedExportPageIndexes()).toEqual([1]);
+    editor.selectExportPages("all");
+    expect(editor.selectedExportPageIndexes()).toEqual([0, 1]);
+    editor.selectExportPages("none");
+    expect(editor.selectedExportPageIndexes()).toEqual([]);
+    expect(editor.controls.exportStart.disabled).toBe(true);
+    expect(editor.controls.exportStatus.textContent).toBe("请至少选择一页");
+  });
+
+  it("downloads a single PNG directly at 2x rendering resolution", async () => {
+    document.title = "演示文稿";
+    document.body.innerHTML = `<div id="deckStage" class="deck-stage"><section class="slide active"><h1 id="single-title" data-editable>一页</h1></section></div>`;
+    installRuntime();
+    const editor = (window as any).FrontendSlidesEditor.mount();
+    const title = document.getElementById("single-title") as HTMLElement;
+    editor.toggleEditMode(true);
+    editor.select(title);
+    const canvas = {
+      width: 3840,
+      height: 2160,
+      toBlob: vi.fn((callback: (blob: Blob) => void) => callback(new Blob(["png"], { type: "image/png" }))),
+      toDataURL: vi.fn(() => "data:image/png;base64,AA==")
+    };
+    const toCanvas = vi.fn(async (_slide: HTMLElement, _options: any) => canvas);
+    vi.stubGlobal("htmlToImage", { toCanvas });
+    vi.stubGlobal("requestAnimationFrame", (callback: FrameRequestCallback) => { callback(0); return 1; });
+    const download = vi.spyOn(editor, "downloadBlob").mockImplementation(() => undefined);
+
+    editor.openExportModal();
+    (editor.controls.exportModal.querySelector("input[value='png']") as HTMLInputElement).checked = true;
+    await editor.exportSelectedPages();
+
+    expect(toCanvas).toHaveBeenCalledOnce();
+    expect(toCanvas.mock.calls[0][1]).toMatchObject({ pixelRatio: 2, width: 1920, height: 1080 });
+    expect(download).toHaveBeenCalledWith(expect.any(Blob), "演示文稿-page-01.png");
+    expect(editor.controls.exportModal.hidden).toBe(true);
+    expect(document.body.classList.contains("editing")).toBe(true);
+    expect(editor.selected).toBe(title);
+    expect(title.classList.contains("editor-selected")).toBe(true);
+  });
+
+  it("packages selected JPG pages in original order with quality 0.92", async () => {
+    document.title = "选页测试";
+    document.body.innerHTML = `
+      <div id="deckStage" class="deck-stage">
+        <section class="slide active"><h1>One</h1></section>
+        <section class="slide"><h1>Two</h1></section>
+        <section class="slide"><h1>Three</h1></section>
+      </div>
+    `;
+    installRuntime();
+    const editor = (window as any).FrontendSlidesEditor.mount();
+    const rendered: string[] = [];
+    const quality: number[] = [];
+    vi.stubGlobal("htmlToImage", {
+      toCanvas: vi.fn(async (slide: HTMLElement) => {
+        rendered.push(slide.textContent?.trim() || "");
+        return {
+          width: 3840,
+          height: 2160,
+          toBlob: (callback: (blob: Blob) => void, _mime: string, value: number) => { quality.push(value); callback(new Blob([slide.textContent || ""])); },
+          toDataURL: () => "data:image/jpeg;base64,AA=="
+        };
+      })
+    });
+    const zipFiles: string[] = [];
+    class ZipStub {
+      file(name: string): void { zipFiles.push(name); }
+      async generateAsync(): Promise<Blob> { return new Blob(["zip"]); }
+    }
+    vi.stubGlobal("JSZip", ZipStub);
+    vi.stubGlobal("requestAnimationFrame", (callback: FrameRequestCallback) => { callback(0); return 1; });
+    const download = vi.spyOn(editor, "downloadBlob").mockImplementation(() => undefined);
+
+    editor.openExportModal();
+    editor.selectExportPages("none");
+    const choices = editor.controls.exportPageList.querySelectorAll("input[type='checkbox']") as NodeListOf<HTMLInputElement>;
+    choices[2].checked = true;
+    choices[0].checked = true;
+    editor.updateExportSelectionStatus();
+    (editor.controls.exportModal.querySelector("input[value='jpg']") as HTMLInputElement).checked = true;
+    await editor.exportSelectedPages();
+
+    expect(rendered).toEqual(["One", "Three"]);
+    expect(quality).toEqual([0.92, 0.92]);
+    expect(zipFiles).toEqual(["选页测试-page-01.jpg", "选页测试-page-03.jpg"]);
+    expect(download).toHaveBeenCalledWith(expect.any(Blob), "选页测试-jpg.zip");
+  });
+
+  it("creates one PDF page per selected slide with matching order and size", async () => {
+    document.title = "PDF 测试";
+    document.body.innerHTML = `
+      <div id="deckStage" class="deck-stage">
+        <section class="slide active"><h1>A</h1></section>
+        <section class="slide"><h1>B</h1></section>
+        <section class="slide"><h1>C</h1></section>
+      </div>
+    `;
+    installRuntime();
+    const editor = (window as any).FrontendSlidesEditor.mount();
+    const rendered: string[] = [];
+    vi.stubGlobal("htmlToImage", {
+      toCanvas: vi.fn(async (slide: HTMLElement) => {
+        rendered.push(slide.textContent?.trim() || "");
+        return { width: 3840, height: 2160, toBlob: vi.fn(), toDataURL: vi.fn(() => "data:image/jpeg;base64,AA==") };
+      })
+    });
+    const addPage = vi.fn();
+    const addImage = vi.fn();
+    const output = vi.fn(() => new Blob(["pdf"], { type: "application/pdf" }));
+    const constructorOptions: any[] = [];
+    class PdfStub {
+      constructor(options: any) { constructorOptions.push(options); }
+      addPage = addPage;
+      addImage = addImage;
+      output = output;
+    }
+    vi.stubGlobal("jspdf", { jsPDF: PdfStub });
+    vi.stubGlobal("requestAnimationFrame", (callback: FrameRequestCallback) => { callback(0); return 1; });
+    const download = vi.spyOn(editor, "downloadBlob").mockImplementation(() => undefined);
+
+    editor.openExportModal();
+    editor.selectExportPages("none");
+    const choices = editor.controls.exportPageList.querySelectorAll("input[type='checkbox']") as NodeListOf<HTMLInputElement>;
+    choices[2].checked = true;
+    choices[1].checked = true;
+    editor.updateExportSelectionStatus();
+    await editor.exportSelectedPages();
+
+    expect(rendered).toEqual(["B", "C"]);
+    expect(constructorOptions[0]).toMatchObject({ unit: "px", format: [1920, 1080], orientation: "landscape" });
+    expect(addPage).toHaveBeenCalledOnce();
+    expect(addImage).toHaveBeenCalledTimes(2);
+    expect(download).toHaveBeenCalledWith(expect.any(Blob), "PDF-测试.pdf");
+  });
+
+  it("reports a page-specific resource failure and restores the original editing state", async () => {
+    document.body.innerHTML = `
+      <div id="deckStage" class="deck-stage">
+        <section class="slide active"><h1 id="title">Original</h1></section>
+        <section class="slide"><img src="https://assets.example.com/blocked.png" alt="blocked"></section>
+      </div>
+    `;
+    installRuntime();
+    const editor = (window as any).FrontendSlidesEditor.mount();
+    const title = document.getElementById("title") as HTMLElement;
+    editor.toggleEditMode(true);
+    editor.select(title);
+    vi.stubGlobal("htmlToImage", { toCanvas: vi.fn() });
+    vi.stubGlobal("fetch", vi.fn(async () => { throw new Error("CORS"); }));
+    vi.stubGlobal("requestAnimationFrame", (callback: FrameRequestCallback) => { callback(0); return 1; });
+    const download = vi.spyOn(editor, "downloadBlob").mockImplementation(() => undefined);
+
+    editor.openExportModal();
+    editor.selectExportPages("none");
+    const choices = editor.controls.exportPageList.querySelectorAll("input[type='checkbox']") as NodeListOf<HTMLInputElement>;
+    choices[1].checked = true;
+    editor.updateExportSelectionStatus();
+    (editor.controls.exportModal.querySelector("input[value='png']") as HTMLInputElement).checked = true;
+    await editor.exportSelectedPages();
+
+    expect(download).not.toHaveBeenCalled();
+    expect(editor.controls.exportStatus.textContent).toContain("第 2 页资源无法读取");
+    expect(editor.presentation.currentSlide).toBe(0);
+    expect(document.body.classList.contains("editing")).toBe(true);
+    expect(editor.selected).toBe(title);
+    expect(editor.controls.exportModal.hidden).toBe(false);
+  });
+
+  it("stops export when a managed online font is marked as failed", async () => {
+    document.body.innerHTML = `<div id="deckStage" class="deck-stage"><section class="slide active"><h1>Font</h1></section></div>`;
+    installRuntime();
+    const editor = (window as any).FrontendSlidesEditor.mount();
+    const link = document.createElement("link");
+    link.dataset.htmlDeckEditorOnlineFont = "noto-serif-sc";
+    link.dataset.htmlDeckEditorFontState = "error";
+    document.head.appendChild(link);
+    await expect(editor.waitForExportFonts()).rejects.toThrow("思源宋体");
+  });
+
   it("renders picker controls and high-contrast edit outlines", () => {
     document.body.innerHTML = `
       <div id="deckStage" class="deck-stage">
