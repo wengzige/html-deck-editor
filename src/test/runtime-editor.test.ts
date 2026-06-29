@@ -1078,7 +1078,7 @@ describe("editor runtime", () => {
     expect(title.textContent).toBe("甲乙丙丁");
   });
 
-  it("supports expanded font choices, custom fonts, text color presets, and background custom colors", () => {
+  it("supports expanded font choices, text color presets, and background custom colors", () => {
     document.body.innerHTML = `
       <div id="deckStage" class="deck-stage">
         <section class="slide active">
@@ -1097,13 +1097,11 @@ describe("editor runtime", () => {
 
     const fontFamily = document.getElementById("fontFamilyInput") as HTMLSelectElement;
     expect(fontFamily.options.length).toBeGreaterThan(10);
-    fontFamily.value = "__custom__";
+    const yahei = Array.from(fontFamily.options).find((option) => option.textContent === "微软雅黑");
+    expect(yahei).toBeTruthy();
+    fontFamily.value = yahei!.value;
     fontFamily.dispatchEvent(new Event("change", { bubbles: true }));
-    const customFont = document.getElementById("fontFamilyCustomInput") as HTMLInputElement;
-    expect(customFont.disabled).toBe(false);
-    customFont.value = '"LXGW WenKai", serif';
-    customFont.dispatchEvent(new Event("change", { bubbles: true }));
-    expect(title.style.fontFamily).toContain("LXGW WenKai");
+    expect(title.style.fontFamily).toContain("Microsoft YaHei");
 
     expect(document.querySelectorAll("[data-color-value]").length).toBeGreaterThan(20);
     chooseTextColor("#ff3d8b");
@@ -1137,6 +1135,9 @@ describe("editor runtime", () => {
     expect(select.textContent).toContain("苹方");
     expect(select.textContent).toContain("微软雅黑");
     expect(select.textContent).toContain("思源黑体 · Fontsource / OFL 1.1");
+    expect(select.textContent).not.toContain("输入其他字体名");
+    expect((document.getElementById("fontFamilyCustomInput") as HTMLInputElement | null)).toBeNull();
+    expect((document.getElementById("importedFontGroup") as HTMLOptGroupElement).hidden).toBe(true);
 
     select.value = '"Noto Sans SC", sans-serif';
     select.dispatchEvent(new Event("change", { bubbles: true }));
@@ -1173,6 +1174,7 @@ describe("editor runtime", () => {
     expect(title.style.fontFamily).toContain("HtmlDeckImported_");
     expect((document.getElementById("fontImportStatus") as HTMLElement).textContent).toContain("保存 HTML");
     expect(editor.buildExportHtml()).toContain("data-html-deck-editor-font=\"imported\"");
+    expect((document.getElementById("importedFontGroup") as HTMLOptGroupElement).hidden).toBe(false);
 
     editor.destroy();
     document.querySelectorAll("[data-html-deck-editor-ui]").forEach((node) => node.remove());

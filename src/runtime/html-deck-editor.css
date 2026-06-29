@@ -372,10 +372,6 @@
       gap: 8px;
     }
 
-    .editor-shell[data-html-deck-editor-ui] .font-custom-field {
-      margin-top: 8px;
-    }
-
     .editor-shell[data-html-deck-editor-ui] .font-import-row {
       display: grid;
       grid-template-columns: auto 1fr;
@@ -826,6 +822,10 @@
 
     .editor-shell[data-html-deck-editor-ui] .editor-export-card {
       width: min(680px, calc(100vw - 32px));
+      max-height: min(720px, calc(100dvh - 48px));
+      display: flex;
+      flex-direction: column;
+      overflow: hidden;
     }
 
     .editor-shell[data-html-deck-editor-ui] .editor-export-intro {
@@ -836,6 +836,10 @@
 
     .editor-shell[data-html-deck-editor-ui] .editor-export-body {
       gap: 14px;
+      flex: 1 1 auto;
+      grid-template-rows: auto auto minmax(0, 1fr) auto auto;
+      min-height: 0;
+      overflow: hidden;
     }
 
     .editor-shell[data-html-deck-editor-ui] .editor-export-format {
@@ -882,9 +886,12 @@
       display: grid;
       grid-template-columns: repeat(2, minmax(0, 1fr));
       gap: 8px;
-      max-height: min(360px, 42vh);
+      min-height: 96px;
+      max-height: min(320px, 38dvh);
       overflow: auto;
-      padding: 1px;
+      overscroll-behavior: contain;
+      padding: 1px 4px 1px 1px;
+      scrollbar-gutter: stable;
     }
 
     .editor-shell[data-html-deck-editor-ui] .editor-export-page {

@@ -305,16 +305,14 @@
           <optgroup label="联网字体 · 需联网">
             ${ONLINE_FONTS.map((font) => `<option value='${font.value}' data-online-font="${font.id}">${font.label} · ${font.source}</option>`).join("")}
           </optgroup>
-          <optgroup label="已导入字体" id="importedFontGroup"></optgroup>
-          <option value="__custom__">输入其他字体名...</option>
+          <optgroup label="已导入字体" id="importedFontGroup" hidden></optgroup>
         </select>
-        <input class="editor-field font-custom-field" id="fontFamilyCustomInput" type="text" placeholder='输入字体名或字体栈，如 "霞鹜文楷", serif' disabled>
         <div class="font-import-row">
           <button class="editor-button" id="fontImportBtn" type="button">导入字体文件</button>
           <input class="file-input-hidden" id="fontImportInput" type="file" accept=".woff2,.woff,.ttf,.otf,font/woff2,font/woff,font/ttf,font/otf,application/font-woff,application/x-font-ttf,application/x-font-opentype" tabindex="-1">
           <span class="font-import-limit">WOFF2 / WOFF / TTF / OTF，≤ 20MB</span>
         </div>
-        <p class="field-help font-import-status" id="fontImportStatus">联网字体会访问外部 CDN；导入字体仅在当前页面中使用，点“保存 HTML”后才会写入文件。</p>
+        <p class="field-help font-import-status" id="fontImportStatus">需要更多字体请点“导入字体文件”；联网字体会访问外部 CDN，导入后点“保存 HTML”才会写入文件。</p>
         <div class="field-grid">
           <label><span class="field-label">字号</span><input class="editor-field" id="fontSizeInput" type="number" min="8" max="220" disabled></label>
           <div class="color-field">
@@ -967,7 +965,6 @@
           image: this.control("imageInput"),
           shape: this.control("shapeInput"),
           fontFamily: this.control("fontFamilyInput"),
-          fontFamilyCustom: this.control("fontFamilyCustomInput"),
           importedFontGroup: this.control("importedFontGroup"),
           fontImport: this.control("fontImportBtn"),
           fontImportInput: this.control("fontImportInput"),
@@ -1666,7 +1663,7 @@
         this.controls.previewMotion.addEventListener("click", () => this.previewMotion());
         this.controls.previewSlideMotion.addEventListener("click", () => this.replayActiveSlideMotion());
         this.controls.restoreMotion.addEventListener("click", () => this.restoreOriginalMotion(this.selected, true));
-        [this.controls.formatBrush, this.controls.fontFamily, this.controls.fontFamilyCustom, this.controls.fontSize, this.controls.fontWeight, this.controls.fontStyle, this.controls.colorButton, this.controls.colorEyedropper, this.controls.bg, this.controls.bgEyedropper, this.controls.opacity].filter(Boolean).forEach((control) => {
+        [this.controls.formatBrush, this.controls.fontFamily, this.controls.fontSize, this.controls.fontWeight, this.controls.fontStyle, this.controls.colorButton, this.controls.colorEyedropper, this.controls.bg, this.controls.bgEyedropper, this.controls.opacity].filter(Boolean).forEach((control) => {
           control.addEventListener("pointerdown", () => this.captureTextSelection());
           control.addEventListener("focus", () => this.captureTextSelection());
         });
@@ -1710,12 +1707,6 @@
           this.pickBackgroundColor();
         });
         this.controls.fontFamily.addEventListener("change", () => {
-          if (this.controls.fontFamily.value === "__custom__") {
-            this.controls.fontFamilyCustom.disabled = !this.selected || !this.isTextElement(this.selected);
-            this.controls.fontFamilyCustom.focus({ preventScroll: true });
-            return;
-          }
-          this.controls.fontFamilyCustom.value = "";
           const onlineFontId = this.controls.fontFamily.selectedOptions?.[0]?.dataset?.onlineFont;
           if (onlineFontId) {
             this.ensureOnlineFont(onlineFontId).catch((error) => {
@@ -1724,8 +1715,6 @@
             });
           }
         });
-        this.controls.fontFamilyCustom.addEventListener("input", () => this.applyInspectorValue("fontFamily", { recordHistory: false, refreshInspector: false, live: true }));
-        this.controls.fontFamilyCustom.addEventListener("change", () => this.applyInspectorValue("fontFamily", { recordHistory: true }));
         this.controls.fontImport.addEventListener("click", () => this.controls.fontImportInput.click());
         this.controls.fontImportInput.addEventListener("change", (event) => this.handleFontImport(event));
         const liveInspectorControls = new Set(["text", "fontSize", "opacity", "x", "y", "width", "height", "order", "delay", "duration"]);
@@ -2386,7 +2375,6 @@
         this.controls.image.disabled = false;
         this.controls.shape.disabled = !shapeCapable;
         this.controls.fontFamily.disabled = !textCapable;
-        this.controls.fontFamilyCustom.disabled = !textCapable || this.controls.fontFamily.value !== "__custom__";
         this.controls.fontSize.disabled = !textCapable;
         this.controls.fontWeight.disabled = !textCapable;
         this.controls.fontStyle.disabled = !textCapable;
@@ -2419,7 +2407,7 @@
           this.controls.text.value = "";
           this.controls.image.value = "";
           this.controls.shape.value = "rect";
-          ["fontFamily", "fontFamilyCustom", "fontSize", "opacity", "x", "y", "width", "height", "anim", "order", "delay", "duration"].forEach((name) => {
+          ["fontFamily", "fontSize", "opacity", "x", "y", "width", "height", "anim", "order", "delay", "duration"].forEach((name) => {
             this.controls[name].value = "";
           });
           this.updateBackgroundPickerState("");
@@ -3289,7 +3277,6 @@
         }
         if (name === "fontFamily" && this.isTextElement(element)) {
           const value = this.currentFontFamilyValue();
-          if (this.controls.fontFamily.value === "__custom__" && !value) return;
           if (value && this.applyInlineSelectionStyle(element, "font-family", value, { live, recordHistory })) return;
           if (value) {
             element.style.fontFamily = value;
@@ -3555,20 +3542,10 @@
 
       updateFontFamilyControls(value) {
         const normalized = this.matchFontFamilyValue(value);
-        if (normalized) {
-          this.controls.fontFamily.value = normalized;
-          this.controls.fontFamilyCustom.value = "";
-          this.controls.fontFamilyCustom.disabled = true;
-          return;
-        }
-        const raw = String(value || "").trim();
-        this.controls.fontFamily.value = raw ? "__custom__" : "";
-        this.controls.fontFamilyCustom.value = raw;
-        this.controls.fontFamilyCustom.disabled = !raw;
+        this.controls.fontFamily.value = normalized || "";
       }
 
       currentFontFamilyValue() {
-        if (this.controls.fontFamily.value === "__custom__") return this.controls.fontFamilyCustom.value.trim();
         return this.controls.fontFamily.value;
       }
 
@@ -3594,6 +3571,7 @@
         option.dataset.importedFont = family;
         option.textContent = label;
         this.controls.importedFontGroup.appendChild(option);
+        this.controls.importedFontGroup.hidden = false;
         return value;
       }
 
@@ -3617,7 +3595,6 @@
           document.head.appendChild(style);
           const value = this.registerImportedFontOption(safeFamily, label);
           this.controls.fontFamily.value = value;
-          this.controls.fontFamilyCustom.value = "";
           if (this.selected && this.isTextElement(this.selected)) this.applyInspectorValue("fontFamily", { recordHistory: true });
           this.controls.fontImportStatus.textContent = `已导入“${label}”。刷新前请点“保存 HTML”，否则需要重新导入。`;
           this.toastMessage(`已导入字体：${label}`);

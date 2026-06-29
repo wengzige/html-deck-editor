@@ -11,4 +11,13 @@ describe("editor runtime css", () => {
     expect(editorCss).toContain(`${activeSlideSelector} .edit-moved.editor-anim-rise`);
     expect(editorCss).toContain(`${activeSlideSelector} .editor-motion-parent-stable`);
   });
+
+  it("keeps the export page picker scrollable inside the modal", () => {
+    expect(editorCss).toContain(".editor-shell[data-html-deck-editor-ui] .editor-export-card");
+    expect(editorCss).toContain("max-height: min(720px, calc(100dvh - 48px));");
+    expect(editorCss).toContain("overflow: hidden;");
+    expect(editorCss).toContain(".editor-shell[data-html-deck-editor-ui] .editor-export-pages");
+    expect(editorCss).toContain("max-height: min(320px, 38dvh);");
+    expect(editorCss).toContain("overscroll-behavior: contain;");
+  });
 });
