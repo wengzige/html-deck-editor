@@ -597,6 +597,21 @@ describe("runtime injection", () => {
     expect(html).toContain('data-html-deck-editor-runtime="0.1.6"');
   });
 
+  it("adds local image assets to the export manifest", async () => {
+    const result = await convertInput(input([
+      file("deck/index.html", "<main><section><h1>One</h1><p>Enough text here</p><img src=\"assets/1.jpg\"></section><section><h1>Two</h1><p>Enough text here</p></section></main>"),
+      file("deck/assets/1.jpg", "fake jpeg")
+    ]));
+
+    expect(result.blob).toBeTruthy();
+    const zip = await JSZip.loadAsync(result.blob!);
+    const html = await zip.file("deck/index.html")!.async("string");
+    expect(html).toContain('id="html-deck-editor-export-assets"');
+    expect(html).toContain('"path":"assets/1.jpg"');
+    expect(html).toContain('"deck/assets/1.jpg"');
+    expect(html).toContain("data:image/jpeg;base64");
+  });
+
   it("uses an AI adaptation plan before normal runtime injection", async () => {
     const result = await convertInput(input([
       file("index.html", `

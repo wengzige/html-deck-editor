@@ -901,6 +901,8 @@
         this.commentInputAnchor = "";
         this.formatBrush = null;
         this.isExporting = false;
+        this.exportAssetMap = this.loadExportAssetMap();
+        this.exportAssetEntries = Array.from(this.exportAssetMap.entries());
         this.importedFontCounter = 0;
         this.onlineFontPromises = new Map();
         this.toggle = editorUiElement("editToggle");
@@ -1075,6 +1077,57 @@
 
       makeStorageKey() {
         return `frontend-slides:${location.pathname}:${document.title}:visual-edits:v1`;
+      }
+
+      loadExportAssetMap() {
+        const map = new Map();
+        const script = document.getElementById("html-deck-editor-export-assets");
+        if (!script?.textContent) return map;
+        try {
+          const data = JSON.parse(script.textContent);
+          const assets = Array.isArray(data?.assets) ? data.assets : [];
+          assets.forEach((asset) => {
+            if (!asset?.dataUrl) return;
+            const keys = Array.isArray(asset.keys) && asset.keys.length ? asset.keys : [asset.path];
+            keys.forEach((key) => {
+              const normalized = this.normalizeExportAssetKey(key);
+              if (normalized) map.set(normalized, asset.dataUrl);
+            });
+          });
+        } catch (error) {
+          console.warn("HtmlDeckEditor could not read export assets.", error);
+        }
+        return map;
+      }
+
+      normalizeExportAssetKey(value) {
+        const text = String(value || "").split(/[?#]/)[0].trim().replaceAll("\\", "/");
+        if (!text) return "";
+        let normalized = text.replace(/^\.\//, "").replace(/^\/+/g, "");
+        try {
+          normalized = decodeURIComponent(normalized);
+        } catch (error) {
+          // Keep the original if the path contains malformed escapes.
+        }
+        return normalized;
+      }
+
+      exportAssetDataUrl(source) {
+        const keys = [source];
+        try {
+          const url = new URL(source, document.baseURI);
+          keys.push(url.pathname);
+        } catch (error) {
+          // Non-URL values are matched as plain paths below.
+        }
+        for (const key of keys) {
+          const normalized = this.normalizeExportAssetKey(key);
+          const exact = this.exportAssetMap.get(normalized);
+          if (exact) return exact;
+          const suffixMatch = this.exportAssetEntries.find(([assetKey]) => normalized.endsWith(`/${assetKey}`));
+          if (suffixMatch) return suffixMatch[1];
+        }
+        return "";
       }
 
       getEditableElements() {
@@ -4323,7 +4376,9 @@
         if (this.isActive && this.selected && slide && this.closestSlide(this.selected) !== slide) {
           this.clearSelection();
         }
-        requestAnimationFrame(() => this.replayActiveSlideMotion(false));
+        if (!document.body.classList.contains("html-deck-editor-exporting")) {
+          requestAnimationFrame(() => this.replayActiveSlideMotion(false));
+        }
       }
 
       trackFrameDuringMotion(element, totalMs) {
@@ -5178,8 +5233,9 @@
         root.querySelectorAll("[contenteditable]").forEach((node) => node.removeAttribute("contenteditable"));
         root.querySelectorAll("[data-ai-commented]").forEach((node) => node.removeAttribute("data-ai-commented"));
         root.querySelectorAll("[data-editor-bound]").forEach((node) => delete node.dataset.editorBound);
-        root.querySelectorAll("[data-html-deck-editor-motion-hold]").forEach((node) => {
+        root.querySelectorAll("[data-html-deck-editor-motion-hold], [data-html-deck-editor-export-visible]").forEach((node) => {
           node.removeAttribute("data-html-deck-editor-motion-hold");
+          node.removeAttribute("data-html-deck-editor-export-visible");
           node.style.removeProperty("--html-deck-editor-edit-opacity");
         });
         root.querySelectorAll("[data-editor-auto], [data-editor-kind], [data-editor-small]").forEach((node) => {
@@ -5398,8 +5454,9 @@
           delete node.dataset.inlineImage;
           delete node.dataset.originalMotionClasses;
         });
-        clone.querySelectorAll("[data-html-deck-editor-motion-hold]").forEach((node) => {
+        clone.querySelectorAll("[data-html-deck-editor-motion-hold], [data-html-deck-editor-export-visible]").forEach((node) => {
           node.removeAttribute("data-html-deck-editor-motion-hold");
+          node.removeAttribute("data-html-deck-editor-export-visible");
           node.style.removeProperty("--html-deck-editor-edit-opacity");
         });
         clone.querySelectorAll(".html-deck-editor-edit-visible").forEach((node) => node.classList.remove("html-deck-editor-edit-visible"));
@@ -5613,9 +5670,9 @@
             const index = indexes[position];
             this.controls.exportStatus.textContent = `正在渲染第 ${index + 1} 页（${position + 1} / ${indexes.length}）`;
             this.presentation.showSlide(index);
+            this.refreshEditableElements();
             await this.waitForAnimationFrames(2);
             const slide = this.presentation.slides[index];
-            await this.verifySlideResources(slide, index);
             captures.push(await this.captureExportSlide(slide, index));
           }
           this.controls.exportStatus.textContent = "正在生成下载文件…";
@@ -5703,45 +5760,295 @@
         });
       }
 
-      async verifySlideResources(slide, index) {
-        if (!slide || typeof window.fetch !== "function") return;
-        const urls = new Set();
-        slide.querySelectorAll("img").forEach((image) => {
-          const source = image.currentSrc || image.getAttribute("src") || "";
-          if (source) urls.add(source);
-          if (image.complete && source && image.naturalWidth === 0) {
-            throw new Error(`第 ${index + 1} 页图片加载失败：${this.shortResourceUrl(source)}`);
-          }
-        });
-        slide.querySelectorAll("image").forEach((image) => {
-          const source = image.getAttribute("href") || image.getAttribute("xlink:href") || "";
-          if (source) urls.add(source);
-        });
-        slide.querySelectorAll("video[poster]").forEach((video) => urls.add(video.getAttribute("poster")));
-        [slide, ...slide.querySelectorAll("*")].forEach((element) => {
-          const computed = getComputedStyle(element);
-          [computed.backgroundImage, computed.maskImage, computed.webkitMaskImage].forEach((value) => {
-            String(value || "").replace(/url\(["']?([^"')]+)["']?\)/g, (_match, source) => {
-              if (source) urls.add(source);
-              return _match;
-            });
-          });
-        });
-        for (const source of urls) {
-          const url = new URL(source, document.baseURI);
-          if (["data:", "blob:"].includes(url.protocol)) continue;
-          try {
-            const response = await window.fetch(url.href, { mode: "cors", credentials: url.origin === window.location.origin ? "same-origin" : "omit" });
-            if (!response.ok) throw new Error(`HTTP ${response.status}`);
-          } catch (error) {
-            throw new Error(`第 ${index + 1} 页资源无法读取：${this.shortResourceUrl(url.href)}`);
-          }
-        }
-      }
-
       shortResourceUrl(value) {
         const text = String(value || "");
         return text.length > 90 ? `${text.slice(0, 87)}…` : text;
+      }
+
+      rememberAttribute(element, name, restore) {
+        const hadAttribute = element.hasAttribute(name);
+        const value = element.getAttribute(name);
+        restore.push(() => {
+          if (hadAttribute) element.setAttribute(name, value);
+          else element.removeAttribute(name);
+        });
+      }
+
+      rememberInlineStyle(element, property, restore) {
+        const value = element.style.getPropertyValue(property);
+        const priority = element.style.getPropertyPriority(property);
+        restore.push(() => {
+          if (value) element.style.setProperty(property, value, priority);
+          else element.style.removeProperty(property);
+        });
+      }
+
+      async prepareSlideForExport(slide, index) {
+        const restore = [];
+        const cleanup = () => {
+          for (let i = restore.length - 1; i >= 0; i -= 1) restore[i]();
+        };
+        try {
+          this.clearMotionRunState(slide);
+          this.prepareExportVisibility(slide, restore);
+          await this.inlineSlideResourcesForExport(slide, index, restore);
+          return cleanup;
+        } catch (error) {
+          cleanup();
+          throw error;
+        }
+      }
+
+      prepareExportVisibility(slide, restore) {
+        const targets = new Set();
+        this.getEditableElements()
+          .filter((element) => this.closestSlide(element) === slide && (this.isTextElement(element) || element.classList.contains("edit-moved")))
+          .forEach((element) => {
+            this.motionHoldTargetsFor(element, slide).forEach((node) => targets.add(node));
+          });
+        targets.forEach((node) => this.forceExportVisible(node, restore));
+      }
+
+      forceExportVisible(node, restore) {
+        if (!node?.style) return;
+        this.rememberAttribute(node, "data-html-deck-editor-export-visible", restore);
+        ["opacity", "visibility", "filter"].forEach((property) => this.rememberInlineStyle(node, property, restore));
+        node.setAttribute("data-html-deck-editor-export-visible", "");
+        node.style.setProperty("opacity", "1", "important");
+        node.style.setProperty("visibility", "visible", "important");
+        node.style.setProperty("filter", "none", "important");
+      }
+
+      async inlineSlideResourcesForExport(slide, index, restore) {
+        const cache = new Map();
+        for (const image of Array.from(slide.querySelectorAll("img"))) {
+          await this.inlineHtmlImageForExport(image, index, restore, cache);
+        }
+        for (const image of Array.from(slide.querySelectorAll("image"))) {
+          await this.inlineSvgImageForExport(image, index, restore, cache);
+        }
+        for (const element of [slide, ...slide.querySelectorAll("*")]) {
+          await this.inlineCssImagesForExport(element, index, restore, cache);
+        }
+      }
+
+      async inlineHtmlImageForExport(image, index, restore, cache) {
+        const source = image.currentSrc || image.getAttribute("src") || "";
+        if (!source) return;
+        if (this.isDataResourceUrl(source)) return;
+        let dataUrl = this.exportAssetDataUrl(source);
+        if (!dataUrl) {
+          await this.waitForExportImageLoad(image, index, source);
+          try {
+            dataUrl = this.imageElementToDataUrl(image, source);
+          } catch (error) {
+            dataUrl = await this.exportResourceDataUrl(source, index, cache);
+          }
+        }
+        this.rememberAttribute(image, "src", restore);
+        this.rememberAttribute(image, "srcset", restore);
+        image.setAttribute("src", dataUrl);
+        image.removeAttribute("srcset");
+        if ("src" in image) image.src = dataUrl;
+        if ("srcset" in image) image.srcset = "";
+
+        const picture = image.closest("picture");
+        if (picture) {
+          picture.querySelectorAll("source").forEach((sourceElement) => {
+            this.rememberAttribute(sourceElement, "srcset", restore);
+            sourceElement.setAttribute("srcset", dataUrl);
+          });
+        }
+      }
+
+      async inlineSvgImageForExport(image, index, restore, cache) {
+        const source = image.getAttribute("href") || image.getAttribute("xlink:href") || "";
+        if (!source || this.isDataResourceUrl(source) || source.startsWith("#")) return;
+        const dataUrl = await this.exportResourceDataUrl(source, index, cache);
+        this.rememberAttribute(image, "href", restore);
+        this.rememberAttribute(image, "xlink:href", restore);
+        image.setAttribute("href", dataUrl);
+        image.setAttribute("xlink:href", dataUrl);
+      }
+
+      async inlineCssImagesForExport(element, index, restore, cache) {
+        if (!element?.style) return;
+        const computed = getComputedStyle(element);
+        const properties = [
+          { computed: "backgroundImage", css: "background-image" },
+          { computed: "maskImage", css: "mask-image" },
+          { computed: "webkitMaskImage", css: "-webkit-mask-image" }
+        ];
+        for (const property of properties) {
+          const value = computed[property.computed] || "";
+          if (!this.hasCssResourceUrl(value)) continue;
+          const inlined = await this.inlineCssResourceUrls(value, index, cache);
+          if (inlined === value) continue;
+          this.rememberInlineStyle(element, property.css, restore);
+          element.style.setProperty(property.css, inlined, "important");
+        }
+      }
+
+      hasCssResourceUrl(value) {
+        return /url\(/i.test(String(value || ""));
+      }
+
+      async inlineCssResourceUrls(value, index, cache) {
+        const pattern = /url\((['"]?)(.*?)\1\)/g;
+        let result = "";
+        let lastIndex = 0;
+        let changed = false;
+        let match;
+        while ((match = pattern.exec(value))) {
+          const source = (match[2] || "").trim();
+          result += value.slice(lastIndex, match.index);
+          if (!source || this.isDataResourceUrl(source) || source.startsWith("#")) {
+            result += match[0];
+          } else {
+            const dataUrl = await this.exportResourceDataUrl(source, index, cache);
+            result += `url("${dataUrl}")`;
+            changed = true;
+          }
+          lastIndex = pattern.lastIndex;
+        }
+        result += value.slice(lastIndex);
+        return changed ? result : value;
+      }
+
+      isDataResourceUrl(source) {
+        return /^data:/i.test(String(source || "").trim());
+      }
+
+      resolveExportResourceUrl(source) {
+        try {
+          return new URL(source, document.baseURI).href;
+        } catch (error) {
+          return source;
+        }
+      }
+
+      async exportResourceDataUrl(source, index, cache) {
+        const resolved = this.resolveExportResourceUrl(source);
+        if (this.isDataResourceUrl(resolved)) return resolved;
+        const assetDataUrl = this.exportAssetDataUrl(source) || this.exportAssetDataUrl(resolved);
+        if (assetDataUrl) return assetDataUrl;
+        if (!cache.has(resolved)) {
+          const load = this.imageUrlToDataUrl(resolved)
+            .catch(() => this.fetchResourceAsDataUrl(resolved))
+            .catch(() => {
+              throw new Error(`第 ${index + 1} 页资源无法读取：${this.shortResourceUrl(resolved)}`);
+            });
+          cache.set(resolved, load);
+        }
+        return cache.get(resolved);
+      }
+
+      async waitForExportImageLoad(image, index, source) {
+        if (image.complete) {
+          if (image.naturalWidth === 0) throw new Error(`第 ${index + 1} 页图片加载失败：${this.shortResourceUrl(source)}`);
+          return;
+        }
+        await new Promise((resolve, reject) => {
+          const timeout = window.setTimeout(() => {
+            cleanup();
+            reject(new Error(`第 ${index + 1} 页图片加载超时：${this.shortResourceUrl(source)}`));
+          }, 15000);
+          const cleanup = () => {
+            window.clearTimeout(timeout);
+            image.removeEventListener("load", onLoad);
+            image.removeEventListener("error", onError);
+          };
+          const onLoad = () => {
+            cleanup();
+            if (image.naturalWidth === 0) reject(new Error(`第 ${index + 1} 页图片加载失败：${this.shortResourceUrl(source)}`));
+            else resolve();
+          };
+          const onError = () => {
+            cleanup();
+            reject(new Error(`第 ${index + 1} 页图片加载失败：${this.shortResourceUrl(source)}`));
+          };
+          image.addEventListener("load", onLoad, { once: true });
+          image.addEventListener("error", onError, { once: true });
+        });
+      }
+
+      imageElementToDataUrl(image, source = "") {
+        const width = image.naturalWidth || image.width || image.clientWidth;
+        const height = image.naturalHeight || image.height || image.clientHeight;
+        if (!width || !height) throw new Error("图片尺寸为空");
+        const canvas = document.createElement("canvas");
+        canvas.width = width;
+        canvas.height = height;
+        const context = canvas.getContext("2d");
+        if (!context) throw new Error("无法读取图片像素");
+        context.drawImage(image, 0, 0, width, height);
+        return canvas.toDataURL(this.canvasMimeForResource(source));
+      }
+
+      canvasMimeForResource(source) {
+        const path = String(source || "").split(/[?#]/)[0].toLowerCase();
+        if (/\.jpe?g$/.test(path)) return "image/jpeg";
+        if (/\.webp$/.test(path)) return "image/webp";
+        return "image/png";
+      }
+
+      imageUrlToDataUrl(source) {
+        if (typeof Image !== "function") return Promise.reject(new Error("Image unavailable"));
+        return new Promise((resolve, reject) => {
+          const image = new Image();
+          const timeout = window.setTimeout(() => {
+            cleanup();
+            reject(new Error("图片加载超时"));
+          }, 15000);
+          const cleanup = () => {
+            window.clearTimeout(timeout);
+            image.onload = null;
+            image.onerror = null;
+          };
+          image.onload = () => {
+            cleanup();
+            try {
+              resolve(this.imageElementToDataUrl(image, source));
+            } catch (error) {
+              reject(error);
+            }
+          };
+          image.onerror = () => {
+            cleanup();
+            reject(new Error("图片加载失败"));
+          };
+          if (this.shouldUseAnonymousImage(source)) image.crossOrigin = "anonymous";
+          image.decoding = "async";
+          image.src = source;
+        });
+      }
+
+      shouldUseAnonymousImage(source) {
+        try {
+          const url = new URL(source, document.baseURI);
+          return /^https?:$/i.test(url.protocol) && url.origin !== window.location.origin;
+        } catch (error) {
+          return false;
+        }
+      }
+
+      async fetchResourceAsDataUrl(source) {
+        if (typeof window.fetch !== "function") throw new Error("fetch unavailable");
+        const url = new URL(source, document.baseURI);
+        const response = await window.fetch(url.href, {
+          credentials: url.origin === window.location.origin ? "same-origin" : "omit"
+        });
+        if (!response.ok) throw new Error(`HTTP ${response.status}`);
+        return this.blobToDataUrl(await response.blob());
+      }
+
+      blobToDataUrl(blob) {
+        return new Promise((resolve, reject) => {
+          const reader = new FileReader();
+          reader.onerror = () => reject(new Error("资源读取失败"));
+          reader.onloadend = () => resolve(reader.result);
+          reader.readAsDataURL(blob);
+        });
       }
 
       exportBackgroundColor(slide) {
@@ -5756,6 +6063,7 @@
       async captureExportSlide(slide, index) {
         if (!slide) throw new Error(`第 ${index + 1} 页不存在`);
         const size = elementDesignSize(slide, stageDesignSize(this.stage));
+        const restore = await this.prepareSlideForExport(slide, index);
         let imageError = false;
         let canvas;
         try {
@@ -5772,6 +6080,8 @@
           });
         } catch (error) {
           throw new Error(`第 ${index + 1} 页渲染失败：${error?.message || "未知错误"}`);
+        } finally {
+          restore();
         }
         if (imageError) throw new Error(`第 ${index + 1} 页包含无法读取的图片，已停止导出`);
         if (!canvas?.width || !canvas?.height) throw new Error(`第 ${index + 1} 页渲染结果为空`);

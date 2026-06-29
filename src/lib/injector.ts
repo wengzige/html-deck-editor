@@ -137,7 +137,7 @@ export async function convertInput(
 
   onProgress?.({ stage: "rewrite", percent: 0, detail: `正在改写 ${indexFile.path}` });
   const sourceHtml = bytesToText(indexFile.data);
-  const rewrittenHtml = rewriteHtml(sourceHtml, report);
+  const rewrittenHtml = injectExportAssetManifest(rewriteHtml(sourceHtml, report), workingInput.files, indexFile.path);
   onProgress?.({ stage: "rewrite", percent: 100, detail: "HTML 已加入编辑器入口。" });
 
   const zip = new JSZip();
@@ -476,6 +476,67 @@ function ensureRuntimeMount(doc: Document): void {
     })();
   `;
   doc.body.appendChild(script);
+}
+
+function injectExportAssetManifest(html: string, files: VirtualFile[], indexPath: string): string {
+  const assets = collectExportAssets(files, indexPath);
+  if (!assets.length) return html;
+  const doc = new DOMParser().parseFromString(html, "text/html");
+  doc.getElementById("html-deck-editor-export-assets")?.remove();
+  const script = doc.createElement("script");
+  script.id = "html-deck-editor-export-assets";
+  script.type = "application/json";
+  script.setAttribute(marker, RUNTIME_VERSION);
+  script.textContent = JSON.stringify({ assets }).replace(/</g, "\\u003c");
+  doc.head.appendChild(script);
+  return `<!doctype html>\n${doc.documentElement.outerHTML}`;
+}
+
+function collectExportAssets(files: VirtualFile[], indexPath: string): Array<{ path: string; keys: string[]; dataUrl: string }> {
+  const indexDir = indexPath.includes("/") ? indexPath.split("/").slice(0, -1).join("/") : "";
+  const imageFiles = files.filter((file) => file.path !== indexPath && imageMimeForPath(file.path));
+  const baseCounts = new Map<string, number>();
+  imageFiles.forEach((file) => {
+    const base = file.path.split("/").pop() || file.path;
+    baseCounts.set(base, (baseCounts.get(base) || 0) + 1);
+  });
+
+  return imageFiles.map((file) => {
+    const relativePath = relativeAssetPath(file.path, indexDir);
+    const base = file.path.split("/").pop() || file.path;
+    const keys = new Set([file.path, relativePath, `./${relativePath}`]);
+    if (baseCounts.get(base) === 1) keys.add(base);
+    return {
+      path: relativePath,
+      keys: Array.from(keys).filter(Boolean),
+      dataUrl: `data:${imageMimeForPath(file.path)};base64,${bytesToBase64(file.data)}`
+    };
+  });
+}
+
+function relativeAssetPath(path: string, indexDir: string): string {
+  if (indexDir && path.startsWith(`${indexDir}/`)) return path.slice(indexDir.length + 1);
+  return path;
+}
+
+function imageMimeForPath(path: string): string {
+  const clean = path.split(/[?#]/)[0].toLowerCase();
+  if (/\.jpe?g$/.test(clean)) return "image/jpeg";
+  if (/\.png$/.test(clean)) return "image/png";
+  if (/\.webp$/.test(clean)) return "image/webp";
+  if (/\.gif$/.test(clean)) return "image/gif";
+  if (/\.svg$/.test(clean)) return "image/svg+xml";
+  return "";
+}
+
+function bytesToBase64(data: Uint8Array): string {
+  let binary = "";
+  const chunkSize = 0x8000;
+  for (let offset = 0; offset < data.length; offset += chunkSize) {
+    const chunk = data.subarray(offset, offset + chunkSize);
+    binary += String.fromCharCode(...chunk);
+  }
+  return btoa(binary);
 }
 
 function removeOwnedRuntime(doc: Document): void {

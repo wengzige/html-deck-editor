@@ -1286,6 +1286,147 @@ describe("editor runtime", () => {
     expect(title.classList.contains("editor-selected")).toBe(true);
   });
 
+  it("inlines already loaded slide images before canvas export without CORS preflight", async () => {
+    document.title = "图片导出";
+    document.body.innerHTML = [
+      "<div id=\"deckStage\" class=\"deck-stage\">",
+      "  <section class=\"slide active\">",
+      "    <img id=\"hero\" src=\"assets/1.jpg\" alt=\"用户图片\">",
+      "    <h1 id=\"title\">带图页面</h1>",
+      "  </section>",
+      "</div>"
+    ].join("");
+    const hero = document.getElementById("hero") as HTMLImageElement;
+    const title = document.getElementById("title") as HTMLElement;
+    hero.getBoundingClientRect = () => rect({ left: 80, top: 160, width: 800, height: 520 });
+    title.getBoundingClientRect = () => rect({ left: 80, top: 80, width: 600, height: 80 });
+    Object.defineProperty(hero, "complete", { value: true, configurable: true });
+    Object.defineProperty(hero, "naturalWidth", { value: 1200, configurable: true });
+    Object.defineProperty(hero, "naturalHeight", { value: 800, configurable: true });
+
+    installRuntime();
+    const editor = (window as any).FrontendSlidesEditor.mount();
+    const drawImage = vi.fn();
+    const getContext = vi.spyOn(HTMLCanvasElement.prototype, "getContext").mockReturnValue({ drawImage } as any);
+    const toDataURL = vi.spyOn(HTMLCanvasElement.prototype, "toDataURL").mockReturnValue("data:image/jpeg;base64,INLINE");
+    const captureCanvas = {
+      width: 3840,
+      height: 2160,
+      toBlob: vi.fn((callback: (blob: Blob) => void) => callback(new Blob(["png"], { type: "image/png" }))),
+      toDataURL: vi.fn(() => "data:image/png;base64,AA==")
+    };
+    const toCanvas = vi.fn(async (slide: HTMLElement) => {
+      expect((slide.querySelector("#hero") as HTMLImageElement).getAttribute("src")).toBe("data:image/jpeg;base64,INLINE");
+      return captureCanvas;
+    });
+    vi.stubGlobal("htmlToImage", { toCanvas });
+    vi.stubGlobal("fetch", vi.fn(async () => { throw new Error("CORS"); }));
+    vi.stubGlobal("requestAnimationFrame", (callback: FrameRequestCallback) => { callback(0); return 1; });
+    const download = vi.spyOn(editor, "downloadBlob").mockImplementation(() => undefined);
+
+    try {
+      editor.openExportModal();
+      (editor.controls.exportModal.querySelector("input[value='png']") as HTMLInputElement).checked = true;
+      await editor.exportSelectedPages();
+
+      expect(drawImage).toHaveBeenCalledWith(hero, 0, 0, 1200, 800);
+      expect(window.fetch).not.toHaveBeenCalled();
+      expect(download).toHaveBeenCalledWith(expect.any(Blob), "图片导出-page-01.png");
+      expect(hero.getAttribute("src")).toBe("assets/1.jpg");
+      expect(hero.getAttribute("srcset")).toBeNull();
+    } finally {
+      getContext.mockRestore();
+      toDataURL.mockRestore();
+    }
+  });
+
+  it("makes animation-hidden text ancestors visible only while exporting", async () => {
+    document.title = "动画导出";
+    document.body.innerHTML = [
+      "<div id=\"deckStage\" class=\"deck-stage\">",
+      "  <section class=\"slide active\">",
+      "    <div id=\"wrapper\" data-anim=\"line\" style=\"opacity:0\">",
+      "      <h1 id=\"title\" style=\"font-size:96px\">主题字</h1>",
+      "    </div>",
+      "  </section>",
+      "</div>"
+    ].join("");
+    const wrapper = document.getElementById("wrapper") as HTMLElement;
+    const title = document.getElementById("title") as HTMLElement;
+    wrapper.getBoundingClientRect = () => rect({ left: 100, top: 120, width: 820, height: 140 });
+    title.getBoundingClientRect = () => rect({ left: 100, top: 120, width: 760, height: 110 });
+
+    installRuntime();
+    const editor = (window as any).FrontendSlidesEditor.mount();
+    const captureCanvas = {
+      width: 3840,
+      height: 2160,
+      toBlob: vi.fn((callback: (blob: Blob) => void) => callback(new Blob(["png"], { type: "image/png" }))),
+      toDataURL: vi.fn(() => "data:image/png;base64,AA==")
+    };
+    vi.stubGlobal("htmlToImage", {
+      toCanvas: vi.fn(async () => {
+        expect(wrapper.hasAttribute("data-html-deck-editor-export-visible")).toBe(true);
+        expect(wrapper.style.opacity).toBe("1");
+        expect(wrapper.style.getPropertyPriority("opacity")).toBe("important");
+        return captureCanvas;
+      })
+    });
+    vi.stubGlobal("requestAnimationFrame", (callback: FrameRequestCallback) => { callback(0); return 1; });
+    const download = vi.spyOn(editor, "downloadBlob").mockImplementation(() => undefined);
+
+    editor.openExportModal();
+    (editor.controls.exportModal.querySelector("input[value='png']") as HTMLInputElement).checked = true;
+    await editor.exportSelectedPages();
+
+    expect(download).toHaveBeenCalledWith(expect.any(Blob), "动画导出-page-01.png");
+    expect(wrapper.hasAttribute("data-html-deck-editor-export-visible")).toBe(false);
+    expect(wrapper.style.opacity).toBe("0");
+  });
+
+  it("uses the export asset manifest for CSS background images", async () => {
+    document.title = "背景图导出";
+    document.body.innerHTML = [
+      "<script id=\"html-deck-editor-export-assets\" type=\"application/json\">",
+      "{\"assets\":[{\"path\":\"assets/2.webp\",\"keys\":[\"assets/2.webp\",\"2.webp\"],\"dataUrl\":\"data:image/webp;base64,WEBP\"}]}",
+      "</script>",
+      "<div id=\"deckStage\" class=\"deck-stage\">",
+      "  <section class=\"slide active\">",
+      "    <div id=\"panel\" style=\"width:640px;height:360px;background-image:url('assets/2.webp')\"></div>",
+      "  </section>",
+      "</div>"
+    ].join("");
+    const panel = document.getElementById("panel") as HTMLElement;
+    panel.getBoundingClientRect = () => rect({ left: 80, top: 120, width: 640, height: 360 });
+
+    installRuntime();
+    const editor = (window as any).FrontendSlidesEditor.mount();
+    const captureCanvas = {
+      width: 3840,
+      height: 2160,
+      toBlob: vi.fn((callback: (blob: Blob) => void) => callback(new Blob(["png"], { type: "image/png" }))),
+      toDataURL: vi.fn(() => "data:image/png;base64,AA==")
+    };
+    vi.stubGlobal("htmlToImage", {
+      toCanvas: vi.fn(async () => {
+        expect(panel.getAttribute("style")).toContain("data:image/webp;base64,WEBP");
+        return captureCanvas;
+      })
+    });
+    vi.stubGlobal("fetch", vi.fn(async () => { throw new Error("should not fetch manifest assets"); }));
+    vi.stubGlobal("requestAnimationFrame", (callback: FrameRequestCallback) => { callback(0); return 1; });
+    const download = vi.spyOn(editor, "downloadBlob").mockImplementation(() => undefined);
+
+    editor.openExportModal();
+    (editor.controls.exportModal.querySelector("input[value='png']") as HTMLInputElement).checked = true;
+    await editor.exportSelectedPages();
+
+    expect(window.fetch).not.toHaveBeenCalled();
+    expect(download).toHaveBeenCalledWith(expect.any(Blob), "背景图导出-page-01.png");
+    expect(panel.getAttribute("style")).toContain("assets/2.webp");
+    expect(panel.getAttribute("style")).not.toContain("data:image/webp;base64,WEBP");
+  });
+
   it("packages selected JPG pages in original order with quality 0.92", async () => {
     document.title = "选页测试";
     document.body.innerHTML = `
@@ -1388,6 +1529,9 @@ describe("editor runtime", () => {
         <section class="slide"><img src="https://assets.example.com/blocked.png" alt="blocked"></section>
       </div>
     `;
+    const blocked = document.querySelector("img") as HTMLImageElement;
+    Object.defineProperty(blocked, "complete", { value: true, configurable: true });
+    Object.defineProperty(blocked, "naturalWidth", { value: 0, configurable: true });
     installRuntime();
     const editor = (window as any).FrontendSlidesEditor.mount();
     const title = document.getElementById("title") as HTMLElement;
@@ -1407,7 +1551,7 @@ describe("editor runtime", () => {
     await editor.exportSelectedPages();
 
     expect(download).not.toHaveBeenCalled();
-    expect(editor.controls.exportStatus.textContent).toContain("第 2 页资源无法读取");
+    expect(editor.controls.exportStatus.textContent).toContain("第 2 页图片加载失败");
     expect(editor.presentation.currentSlide).toBe(0);
     expect(document.body.classList.contains("editing")).toBe(true);
     expect(editor.selected).toBe(title);
