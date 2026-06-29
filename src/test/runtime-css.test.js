@@ -10,6 +10,7 @@ describe("editor runtime css", () => {
     expect(editorCss).toContain(`${activeSlideSelector} .editor-anim-rise`);
     expect(editorCss).toContain(`${activeSlideSelector} .edit-moved.editor-anim-rise`);
     expect(editorCss).toContain(`${activeSlideSelector} .editor-motion-parent-stable`);
+    expect(editorCss).toContain("[data-html-deck-editor-motion-hold]:not(.editor-motion-preview):not(.editor-motion-running)");
   });
 
   it("keeps the export page picker scrollable inside the modal", () => {

@@ -2364,6 +2364,7 @@
 
       updateInspector() {
         const element = this.selected;
+        const motionElement = this.motionTargetFor(element);
         const hasSelection = Boolean(element);
         const canUseImage = hasSelection && this.isImageElement(element);
         const canDelete = this.canDeleteElement(element);
@@ -2390,11 +2391,11 @@
         this.controls.bringForward.disabled = !hasSelection;
         this.controls.sendBackward.disabled = !hasSelection;
         this.controls.anim.disabled = !hasSelection;
-        this.controls.order.disabled = !hasSelection || !this.usesCustomMotion(element);
-        this.controls.delay.disabled = !hasSelection || !this.usesCustomMotion(element);
-        this.controls.duration.disabled = !hasSelection || !this.usesCustomMotion(element);
+        this.controls.order.disabled = !hasSelection || !this.usesCustomMotion(motionElement);
+        this.controls.delay.disabled = !hasSelection || !this.usesCustomMotion(motionElement);
+        this.controls.duration.disabled = !hasSelection || !this.usesCustomMotion(motionElement);
         this.controls.previewMotion.disabled = !hasSelection;
-        this.controls.restoreMotion.disabled = !hasSelection || !this.hasStoredOriginalMotion(element);
+        this.controls.restoreMotion.disabled = !hasSelection || !this.hasStoredOriginalMotion(motionElement);
         this.controls.delete.disabled = !canDelete;
         this.controls.formatBrush.disabled = !hasSelection && !this.formatBrush;
         this.controls.image.disabled = false;
@@ -2432,15 +2433,15 @@
         this.controls.y.value = Math.round(box.y);
         this.controls.width.value = Math.round(box.width);
         this.controls.height.value = Math.round(box.height);
-        this.controls.anim.value = this.getMotionSelectValue(element);
-        this.controls.order.value = element.dataset.editOrder || "";
-        this.controls.delay.value = Number.parseInt(element.dataset.editDelay || "0", 10);
-        this.controls.duration.value = Number.parseInt(element.dataset.editDuration || "640", 10);
-        this.controls.order.disabled = !this.usesCustomMotion(element);
-        this.controls.delay.disabled = !this.usesCustomMotion(element);
-        this.controls.duration.disabled = !this.usesCustomMotion(element);
-        this.controls.restoreMotion.disabled = !this.hasStoredOriginalMotion(element);
-        this.controls.motionStatus.textContent = this.getMotionStatus(element);
+        this.controls.anim.value = this.getMotionSelectValue(motionElement);
+        this.controls.order.value = motionElement.dataset.editOrder || "";
+        this.controls.delay.value = Number.parseInt(motionElement.dataset.editDelay || "0", 10);
+        this.controls.duration.value = Number.parseInt(motionElement.dataset.editDuration || "640", 10);
+        this.controls.order.disabled = !this.usesCustomMotion(motionElement);
+        this.controls.delay.disabled = !this.usesCustomMotion(motionElement);
+        this.controls.duration.disabled = !this.usesCustomMotion(motionElement);
+        this.controls.restoreMotion.disabled = !this.hasStoredOriginalMotion(motionElement);
+        this.controls.motionStatus.textContent = this.getMotionStatus(motionElement);
         this.controls.image.value = "";
       }
 
@@ -3347,31 +3348,35 @@
           this.setStagePosition(element, x, y, width, height);
         }
         if (name === "anim") {
-          this.rememberMotionStableBox(element, this.reconcileStoredStagePosition(element, { mode: "sync" }) || this.getStableStageBox(element));
-          this.applyAnimation(element, this.controls.anim.value, true);
-          this.syncMotionControls(element);
+          const motionElement = this.motionTargetFor(element);
+          this.rememberMotionStableBox(motionElement, this.reconcileStoredStagePosition(motionElement, { mode: "sync" }) || this.getStableStageBox(motionElement));
+          this.applyAnimation(motionElement, this.controls.anim.value, true);
+          this.syncMotionControls(motionElement);
           this.saveDraft(false, recordHistory);
           return;
         }
         if (name === "order") {
-          if (!this.usesCustomMotion(element)) return;
-          const order = this.setMotionOrder(element, this.controls.order.value, true);
+          const motionElement = this.motionTargetFor(element);
+          if (!this.usesCustomMotion(motionElement)) return;
+          const order = this.setMotionOrder(motionElement, this.controls.order.value, true);
           this.controls.order.value = order;
           this.scheduleMotionPreview();
         }
         if (name === "delay") {
-          if (!this.usesCustomMotion(element)) return;
+          const motionElement = this.motionTargetFor(element);
+          if (!this.usesCustomMotion(motionElement)) return;
           const delay = this.clampNumber(this.controls.delay.value, 0, 0, 20000);
-          element.dataset.editDelay = String(delay);
-          element.style.setProperty("--edit-delay", `${element.dataset.editDelay}ms`);
+          motionElement.dataset.editDelay = String(delay);
+          motionElement.style.setProperty("--edit-delay", `${motionElement.dataset.editDelay}ms`);
           this.controls.delay.value = String(delay);
           this.scheduleMotionPreview();
         }
         if (name === "duration") {
-          if (!this.usesCustomMotion(element)) return;
+          const motionElement = this.motionTargetFor(element);
+          if (!this.usesCustomMotion(motionElement)) return;
           const duration = this.clampNumber(this.controls.duration.value, 640, 100, 10000);
-          element.dataset.editDuration = String(duration);
-          element.style.setProperty("--edit-duration", `${element.dataset.editDuration}ms`);
+          motionElement.dataset.editDuration = String(duration);
+          motionElement.style.setProperty("--edit-duration", `${motionElement.dataset.editDuration}ms`);
           this.controls.duration.value = String(duration);
           this.scheduleMotionPreview();
         }
@@ -4760,6 +4765,25 @@
         return ["editor-anim-none", "editor-anim-fade", "editor-anim-rise", "editor-anim-drop", "editor-anim-left", "editor-anim-right", "editor-anim-scale", "editor-anim-zoom", "editor-anim-pop", "editor-anim-rotate", "editor-anim-blur", "editor-anim-flip"];
       }
 
+      motionTargetFor(element) {
+        if (!element) return null;
+        const slide = this.closestSlide(element);
+        if (!slide) return element;
+        const ownsMotion = (node) => Boolean(
+          node.dataset.editAnim ||
+          this.editorMotionClasses().some((className) => node.classList.contains(className)) ||
+          this.motionClasses().some((className) => node.classList.contains(className)) ||
+          this.shouldHoldMotionNode(node)
+        );
+        if (ownsMotion(element)) return element;
+        let node = element.parentElement;
+        while (node && node !== slide) {
+          if (ownsMotion(node)) return node;
+          node = node.parentElement;
+        }
+        return element;
+      }
+
       ensureOriginalMotion(element) {
         if (!element || element.dataset.originalMotionClasses !== undefined) return;
         element.dataset.originalMotionClasses = this.motionClasses().filter((className) => element.classList.contains(className)).join(" ");
@@ -4808,16 +4832,17 @@
       }
 
       syncMotionControls(element) {
-        if (!element) return;
-        this.controls.anim.value = this.getMotionSelectValue(element);
-        this.controls.order.value = element.dataset.editOrder || "";
-        this.controls.delay.value = Number.parseInt(element.dataset.editDelay || "0", 10);
-        this.controls.duration.value = Number.parseInt(element.dataset.editDuration || "640", 10);
-        this.controls.order.disabled = !this.usesCustomMotion(element);
-        this.controls.delay.disabled = !this.usesCustomMotion(element);
-        this.controls.duration.disabled = !this.usesCustomMotion(element);
-        this.controls.restoreMotion.disabled = !this.hasStoredOriginalMotion(element);
-        this.controls.motionStatus.textContent = this.getMotionStatus(element);
+        const motionElement = this.motionTargetFor(element);
+        if (!motionElement) return;
+        this.controls.anim.value = this.getMotionSelectValue(motionElement);
+        this.controls.order.value = motionElement.dataset.editOrder || "";
+        this.controls.delay.value = Number.parseInt(motionElement.dataset.editDelay || "0", 10);
+        this.controls.duration.value = Number.parseInt(motionElement.dataset.editDuration || "640", 10);
+        this.controls.order.disabled = !this.usesCustomMotion(motionElement);
+        this.controls.delay.disabled = !this.usesCustomMotion(motionElement);
+        this.controls.duration.disabled = !this.usesCustomMotion(motionElement);
+        this.controls.restoreMotion.disabled = !this.hasStoredOriginalMotion(motionElement);
+        this.controls.motionStatus.textContent = this.getMotionStatus(motionElement);
       }
 
       motionLabel(value) {
@@ -4924,25 +4949,26 @@
       }
 
       restoreOriginalMotion(element, shouldSave = true) {
-        if (!element) return;
-        const original = (element.dataset.originalMotionClasses || "").split(/\s+/).filter(Boolean);
-        this.clearMotionCleanupTimer(element);
-        element.classList.remove("editor-motion-preview", "editor-motion-running");
-        this.editorMotionClasses().forEach((className) => element.classList.remove(className));
-        this.motionClasses().forEach((className) => element.classList.remove(className));
-        original.forEach((className) => element.classList.add(className));
-        delete element.dataset.editAnim;
-        delete element.dataset.editOrder;
-        delete element.dataset.editDelay;
-        delete element.dataset.editDuration;
-        delete element.dataset.originalMotionClasses;
-        element.style.removeProperty("--edit-order");
-        element.style.removeProperty("--edit-delay");
-        element.style.removeProperty("--edit-duration");
+        const motionElement = this.motionTargetFor(element);
+        if (!motionElement) return;
+        const original = (motionElement.dataset.originalMotionClasses || "").split(/\s+/).filter(Boolean);
+        this.clearMotionCleanupTimer(motionElement);
+        motionElement.classList.remove("editor-motion-preview", "editor-motion-running");
+        this.editorMotionClasses().forEach((className) => motionElement.classList.remove(className));
+        this.motionClasses().forEach((className) => motionElement.classList.remove(className));
+        original.forEach((className) => motionElement.classList.add(className));
+        delete motionElement.dataset.editAnim;
+        delete motionElement.dataset.editOrder;
+        delete motionElement.dataset.editDelay;
+        delete motionElement.dataset.editDuration;
+        delete motionElement.dataset.originalMotionClasses;
+        motionElement.style.removeProperty("--edit-order");
+        motionElement.style.removeProperty("--edit-delay");
+        motionElement.style.removeProperty("--edit-duration");
         this.updateInspector();
         if (shouldSave) {
           this.saveDraft();
-          this.previewMotion(element);
+          this.previewMotion(motionElement);
         }
       }
 
@@ -5069,7 +5095,7 @@
       }
 
       previewMotion(element = this.selected) {
-        if (!this.restartElementMotion(element, "editor-motion-preview")) {
+        if (!this.restartElementMotion(this.motionTargetFor(element), "editor-motion-preview")) {
           this.toastMessage("当前元素没有可预览的入场动效");
         }
       }

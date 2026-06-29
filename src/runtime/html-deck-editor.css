@@ -1270,7 +1270,7 @@
       transform: translate(var(--edit-x, 0px), var(--edit-y, 0px)) scale(var(--edit-scale-x, var(--edit-scale, 1)), var(--edit-scale-y, var(--edit-scale, 1))) var(--edit-base-transform, matrix(1, 0, 0, 1, 0, 0)) !important;
     }
 
-    body.editing .slide[data-html-deck-editor-current] [data-html-deck-editor-motion-hold] {
+    body.editing .slide[data-html-deck-editor-current] [data-html-deck-editor-motion-hold]:not(.editor-motion-preview):not(.editor-motion-running) {
       opacity: var(--html-deck-editor-edit-opacity, 1) !important;
       filter: none !important;
       animation: none !important;

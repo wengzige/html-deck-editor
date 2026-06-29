@@ -655,6 +655,54 @@ describe("editor runtime", () => {
     expect(box.classList.contains("editor-anim-rise")).toBe(true);
   });
 
+  it("applies entrance changes to an imported animation wrapper around selected text", () => {
+    document.body.innerHTML = `
+      <div id="slidesWrapper" data-html-deck-editor-stage="preserve">
+        <div class="slide active" data-html-deck-editor-current>
+          <div id="wrapper" data-anim="line" style="opacity:0">
+            <h2 id="headline">Animated title</h2>
+          </div>
+        </div>
+      </div>
+    `;
+    const slide = document.querySelector(".slide") as HTMLElement;
+    const wrapper = document.getElementById("wrapper") as HTMLElement;
+    const headline = document.getElementById("headline") as HTMLElement;
+    slide.getBoundingClientRect = () => rect({ left: 0, top: 0, width: 1440, height: 900 });
+    wrapper.getBoundingClientRect = () => rect({ left: 120, top: 140, width: 720, height: 120 });
+    headline.getBoundingClientRect = () => rect({ left: 120, top: 140, width: 720, height: 96 });
+
+    installRuntime();
+    const editor = (window as any).FrontendSlidesEditor.mount();
+    editor.toggleEditMode(true);
+    editor.select(headline);
+
+    const anim = document.getElementById("animSelect") as HTMLSelectElement;
+    anim.value = "left";
+    anim.dispatchEvent(new Event("change", { bubbles: true }));
+
+    expect(headline.dataset.editAnim).toBeUndefined();
+    expect(wrapper.dataset.editAnim).toBe("left");
+    expect(wrapper.classList.contains("editor-anim-left")).toBe(true);
+    expect((document.getElementById("motionStatus") as HTMLElement).textContent).toContain("左侧滑入");
+
+    const delay = document.getElementById("delayInput") as HTMLInputElement;
+    delay.value = "350";
+    delay.dispatchEvent(new Event("change", { bubbles: true }));
+    expect(wrapper.dataset.editDelay).toBe("350");
+
+    const savedStage = document.createElement("div");
+    savedStage.innerHTML = editor.serialize().stage;
+    expect((savedStage.querySelector("#wrapper") as HTMLElement).dataset.editAnim).toBe("left");
+    expect((savedStage.querySelector("#headline") as HTMLElement).dataset.editAnim).toBeUndefined();
+    expect(savedStage.querySelector("[data-html-deck-editor-motion-hold]")).toBeNull();
+
+    (document.getElementById("restoreMotionBtn") as HTMLButtonElement).click();
+    expect(wrapper.dataset.editAnim).toBeUndefined();
+    expect(wrapper.classList.contains("editor-anim-left")).toBe(false);
+    expect(wrapper.dataset.anim).toBe("line");
+  });
+
   it("keeps preserved host navigation in sync after exiting edit mode", () => {
     document.body.innerHTML = `
       <button id="prevBtn" type="button">Prev</button>
