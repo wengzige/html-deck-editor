@@ -1504,7 +1504,10 @@ describe("editor runtime", () => {
       file(): void {}
       async generateAsync(): Promise<Blob> {
         expect(editor.controls.exportProgress.value).toBe(2);
+        expect(editor.controls.exportProgress.getAttribute("value")).toBe("2");
         expect(editor.controls.exportProgressLabel.textContent).toBe("正在生成 PNG 压缩包");
+        expect(editor.controls.exportTitle.textContent).toBe("正在导出");
+        expect(editor.controls.exportIntro.textContent).toContain("请勿关闭当前页面");
         return new Blob(["zip"]);
       }
     }
@@ -1521,6 +1524,7 @@ describe("editor runtime", () => {
     expect(editor.controls.exportProgress.max).toBe(3);
     expect(editor.controls.exportProgress.hidden).toBe(true);
     expect(editor.controls.exportModal.getAttribute("aria-busy")).toBe("false");
+    expect(editor.controls.exportTitle.textContent).toBe("导出 PDF / 图片");
   });
 
   it("inlines already loaded slide images before canvas export without CORS preflight", async () => {

@@ -205,7 +205,7 @@
         <div class="editor-help-header">
           <div>
             <h2 class="editor-help-title" id="exportTitle">导出 PDF / 图片</h2>
-            <p class="editor-export-intro">按原页面顺序导出；图片为 2 倍分辨率，多页图片会自动打包 ZIP。</p>
+            <p class="editor-export-intro" id="exportIntro">按原页面顺序导出；图片为 2 倍分辨率，多页图片会自动打包 ZIP。</p>
           </div>
           <button class="editor-help-close" id="exportCloseBtn" type="button" aria-label="关闭">×</button>
         </div>
@@ -226,7 +226,8 @@
           </div>
           <div class="editor-export-pages" id="exportPageList" aria-label="选择导出页面"></div>
           <p class="editor-export-status" id="exportStatus" aria-live="polite">已选择全部页面</p>
-          <div class="editor-export-progress-panel" id="exportProgressPanel" hidden>
+          <div class="editor-export-progress-panel" id="exportProgressPanel" role="status" aria-live="polite" hidden>
+            <span class="editor-export-progress-kicker">正在导出，请稍候</span>
             <div class="editor-export-progress-copy">
               <strong id="exportProgressLabel">正在准备导出</strong>
               <span id="exportProgressCount">0 / 0 页</span>
@@ -968,6 +969,8 @@
           exportNone: this.control("exportNoneBtn"),
           exportPageList: this.control("exportPageList"),
           exportStatus: this.control("exportStatus"),
+          exportTitle: this.control("exportTitle"),
+          exportIntro: this.control("exportIntro"),
           exportProgressPanel: this.control("exportProgressPanel"),
           exportProgress: this.control("exportProgress"),
           exportProgressLabel: this.control("exportProgressLabel"),
@@ -5859,6 +5862,10 @@
       setExportBusy(busy, total = this.selectedExportPageIndexes().length) {
         this.isExporting = busy;
         this.controls.exportModal.setAttribute("aria-busy", String(busy));
+        this.controls.exportTitle.textContent = busy ? "正在导出" : "导出 PDF / 图片";
+        this.controls.exportIntro.textContent = busy
+          ? "文件正在浏览器本地生成，请勿关闭当前页面。"
+          : "按原页面顺序导出；图片为 2 倍分辨率，多页图片会自动打包 ZIP。";
         this.controls.exportProgressPanel.hidden = !busy;
         this.controls.exportProgress.hidden = !busy;
         if (busy) {
@@ -5877,7 +5884,7 @@
       updateExportProgress(label, completed, total) {
         this.controls.exportProgressLabel.textContent = label;
         this.controls.exportProgress.max = Math.max(1, total + 1);
-        if (Number.isFinite(completed)) this.controls.exportProgress.value = Math.max(0, Math.min(completed, total + 1));
+        if (Number.isFinite(completed)) this.controls.exportProgress.setAttribute("value", String(Math.max(0, Math.min(completed, total + 1))));
         else this.controls.exportProgress.removeAttribute("value");
         this.controls.exportProgressCount.textContent = `${Math.max(0, Math.min(completed || 0, total))} / ${total} 页`;
         this.controls.exportStatus.textContent = label;
