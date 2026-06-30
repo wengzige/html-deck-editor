@@ -1065,6 +1065,35 @@ describe("editor runtime", () => {
     expect(keySpy).not.toHaveBeenCalled();
   });
 
+  it("handles the physical E shortcut before host capture handlers can swallow it", () => {
+    document.body.innerHTML = `
+      <div id="deckStage" class="deck-stage">
+        <section class="slide active"><h1>快捷键</h1></section>
+      </div>
+    `;
+    const hostHandler = (event: KeyboardEvent) => event.stopImmediatePropagation();
+    document.addEventListener("keydown", hostHandler, true);
+
+    try {
+      installRuntime();
+      const editor = (window as any).FrontendSlidesEditor.mount();
+      const event = new KeyboardEvent("keydown", {
+        bubbles: true,
+        cancelable: true,
+        code: "KeyE",
+        key: "Process"
+      });
+
+      document.body.dispatchEvent(event);
+
+      expect(event.defaultPrevented).toBe(true);
+      expect(editor.isActive).toBe(true);
+      expect(document.body.classList.contains("editing")).toBe(true);
+    } finally {
+      document.removeEventListener("keydown", hostHandler, true);
+    }
+  });
+
   it("applies text styles to a selected range instead of the whole text element", () => {
     document.body.innerHTML = `
       <div id="deckStage" class="deck-stage">
@@ -1418,6 +1447,80 @@ describe("editor runtime", () => {
     expect(document.body.classList.contains("editing")).toBe(true);
     expect(editor.selected).toBe(title);
     expect(title.classList.contains("editor-selected")).toBe(true);
+  });
+
+  it("freezes rendered single-line text during capture and restores its inline styles", async () => {
+    document.body.innerHTML = `
+      <div id="deckStage" class="deck-stage">
+        <section class="slide active">
+          <footer id="footer" data-editable style="font-size:14px;line-height:20px">户外午餐</footer>
+          <p id="multiline" data-editable style="font-size:14px;line-height:20px">第一行<br>第二行</p>
+        </section>
+      </div>
+    `;
+    const footer = document.getElementById("footer") as HTMLElement;
+    const multiline = document.getElementById("multiline") as HTMLElement;
+    footer.getBoundingClientRect = () => rect({ left: 60, top: 820, width: 60, height: 20 });
+    multiline.getBoundingClientRect = () => rect({ left: 180, top: 800, width: 80, height: 40 });
+
+    installRuntime();
+    const editor = (window as any).FrontendSlidesEditor.mount();
+    vi.stubGlobal("htmlToImage", {
+      toCanvas: vi.fn(async () => {
+        expect(footer.style.whiteSpace).toBe("nowrap");
+        expect(multiline.style.whiteSpace).toBe("");
+        return { width: 2880, height: 1800 };
+      })
+    });
+
+    await editor.captureExportSlide(editor.presentation.slides[0], 0);
+
+    expect(footer.style.whiteSpace).toBe("");
+    expect(multiline.style.whiteSpace).toBe("");
+  });
+
+  it("reuses embedded font CSS across pages and reports real export progress", async () => {
+    document.body.innerHTML = `
+      <div id="deckStage" class="deck-stage">
+        <section class="slide active"><h1>One</h1></section>
+        <section class="slide"><h1>Two</h1></section>
+      </div>
+    `;
+    installRuntime();
+    const editor = (window as any).FrontendSlidesEditor.mount();
+    const fontEmbedCSS = "@font-face{font-family:Test;src:url(data:font/woff2;base64,AA)}";
+    const getFontEmbedCSS = vi.fn(async () => fontEmbedCSS);
+    const toCanvas = vi.fn(async (_slide: HTMLElement, options: any) => {
+      expect(options.fontEmbedCSS).toBe(fontEmbedCSS);
+      expect(options.cacheBust).toBe(false);
+      return {
+        width: 2880,
+        height: 1800,
+        toBlob: (callback: (blob: Blob) => void) => callback(new Blob(["png"], { type: "image/png" }))
+      };
+    });
+    vi.stubGlobal("htmlToImage", { getFontEmbedCSS, toCanvas });
+    class ZipStub {
+      file(): void {}
+      async generateAsync(): Promise<Blob> {
+        expect(editor.controls.exportProgress.value).toBe(2);
+        expect(editor.controls.exportProgressLabel.textContent).toBe("正在生成 PNG 压缩包");
+        return new Blob(["zip"]);
+      }
+    }
+    vi.stubGlobal("JSZip", ZipStub);
+    vi.stubGlobal("requestAnimationFrame", (callback: FrameRequestCallback) => { callback(0); return 1; });
+    vi.spyOn(editor, "downloadBlob").mockImplementation(() => undefined);
+
+    editor.openExportModal();
+    (editor.controls.exportModal.querySelector("input[value='png']") as HTMLInputElement).checked = true;
+    await editor.exportSelectedPages();
+
+    expect(getFontEmbedCSS).toHaveBeenCalledOnce();
+    expect(toCanvas).toHaveBeenCalledTimes(2);
+    expect(editor.controls.exportProgress.max).toBe(3);
+    expect(editor.controls.exportProgress.hidden).toBe(true);
+    expect(editor.controls.exportModal.getAttribute("aria-busy")).toBe("false");
   });
 
   it("inlines already loaded slide images before canvas export without CORS preflight", async () => {
@@ -1835,6 +1938,8 @@ describe("editor runtime", () => {
     expect(document.body.classList.contains("editing")).toBe(true);
     expect(editor.selected).toBe(title);
     expect(editor.controls.exportModal.hidden).toBe(false);
+    expect(editor.controls.exportModal.getAttribute("aria-busy")).toBe("false");
+    expect(editor.controls.exportProgressPanel.hidden).toBe(true);
   });
 
   it("stops export when a managed online font is marked as failed", async () => {

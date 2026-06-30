@@ -226,6 +226,14 @@
           </div>
           <div class="editor-export-pages" id="exportPageList" aria-label="选择导出页面"></div>
           <p class="editor-export-status" id="exportStatus" aria-live="polite">已选择全部页面</p>
+          <div class="editor-export-progress-panel" id="exportProgressPanel" hidden>
+            <div class="editor-export-progress-copy">
+              <strong id="exportProgressLabel">正在准备导出</strong>
+              <span id="exportProgressCount">0 / 0 页</span>
+            </div>
+            <progress class="editor-export-progress" id="exportProgress" max="1" hidden></progress>
+            <p>导出过程中请保持当前页面打开</p>
+          </div>
           <div class="editor-export-actions">
             <button class="editor-button" id="exportCancelBtn" type="button">取消</button>
             <button class="editor-button primary" id="exportStartBtn" type="button">开始导出</button>
@@ -909,6 +917,8 @@
         this.exportAssetEntries = Array.from(this.exportAssetMap.entries());
         this.exportPseudoCounter = 0;
         this.exportPseudoImageSelectors = this.collectPseudoImageSelectors();
+        this.exportFontEmbedCss = null;
+        this.exportResourceCache = null;
         this.importedFontCounter = 0;
         this.onlineFontPromises = new Map();
         this.toggle = editorUiElement("editToggle");
@@ -958,6 +968,10 @@
           exportNone: this.control("exportNoneBtn"),
           exportPageList: this.control("exportPageList"),
           exportStatus: this.control("exportStatus"),
+          exportProgressPanel: this.control("exportProgressPanel"),
+          exportProgress: this.control("exportProgress"),
+          exportProgressLabel: this.control("exportProgressLabel"),
+          exportProgressCount: this.control("exportProgressCount"),
           save: this.control("saveBtn"),
           exit: this.control("exitEditBtn"),
           selectionName: this.control("selectionName"),
@@ -1846,6 +1860,7 @@
         this.addGlobalListener(document, "touchmove", (event) => this.stopEditorUiEventLeak(event), { capture: true, passive: true });
         this.addGlobalListener(document, "touchend", (event) => this.stopEditorUiEventLeak(event), true);
         this.addGlobalListener(document, "keydown", (event) => this.stopEditorUiShortcutLeak(event), true);
+        this.addGlobalListener(window, "keydown", (event) => this.handleEarlyKeydown(event), true);
         this.addGlobalListener(document, "keydown", (event) => this.handleKeydown(event));
         this.addGlobalListener(document, "selectionchange", () => this.captureTextSelection());
         this.addGlobalListener(document, "slidechange", (event) => this.handleSlideChange(event));
@@ -2094,10 +2109,11 @@
           this.undo();
           return;
         }
-        if ((event.key === "e" || event.key === "E") && !formTarget) {
+        if (this.isEditShortcut(event) && !formTarget) {
           event.preventDefault();
           event.stopPropagation();
           this.toggleEditMode();
+          return;
         }
         if ((event.metaKey || event.ctrlKey) && event.key.toLowerCase() === "s") {
           event.preventDefault();
@@ -2131,6 +2147,15 @@
           event.preventDefault();
           event.stopPropagation();
         }
+      }
+
+      isEditShortcut(event) {
+        return !event.isComposing && !event.repeat && !event.metaKey && !event.ctrlKey && !event.altKey &&
+          (event.key?.toLowerCase?.() === "e" || event.code === "KeyE");
+      }
+
+      handleEarlyKeydown(event) {
+        if (!this.isFormTarget(event.target) && this.isEditShortcut(event)) this.handleKeydown(event);
       }
 
       openHelp() {
@@ -5831,13 +5856,37 @@
         return this.controls.exportModal.querySelector("input[name='editorExportFormat']:checked")?.value || "pdf";
       }
 
-      setExportBusy(busy) {
+      setExportBusy(busy, total = this.selectedExportPageIndexes().length) {
         this.isExporting = busy;
+        this.controls.exportModal.setAttribute("aria-busy", String(busy));
+        this.controls.exportProgressPanel.hidden = !busy;
+        this.controls.exportProgress.hidden = !busy;
+        if (busy) {
+          this.controls.exportProgress.max = Math.max(1, total + 1);
+          this.controls.exportProgress.removeAttribute("value");
+          this.controls.exportProgressLabel.textContent = "正在准备字体与页面";
+          this.controls.exportProgressCount.textContent = `0 / ${total} 页`;
+        }
         [this.controls.exportClose, this.controls.exportCancel, this.controls.exportCurrent, this.controls.exportAll, this.controls.exportNone]
           .forEach((control) => { control.disabled = busy; });
         this.controls.exportModal.querySelectorAll("input").forEach((input) => { input.disabled = busy; });
         this.controls.exportStart.disabled = busy || this.selectedExportPageIndexes().length === 0;
         this.controls.exportStart.textContent = busy ? "正在导出…" : "开始导出";
+      }
+
+      updateExportProgress(label, completed, total) {
+        this.controls.exportProgressLabel.textContent = label;
+        this.controls.exportProgress.max = Math.max(1, total + 1);
+        if (Number.isFinite(completed)) this.controls.exportProgress.value = Math.max(0, Math.min(completed, total + 1));
+        else this.controls.exportProgress.removeAttribute("value");
+        this.controls.exportProgressCount.textContent = `${Math.max(0, Math.min(completed || 0, total))} / ${total} 页`;
+        this.controls.exportStatus.textContent = label;
+      }
+
+      exportFinalizingLabel(format, pageCount) {
+        if (format === "pdf") return "正在生成 PDF 文件";
+        if (pageCount > 1) return `正在生成 ${format.toUpperCase()} 压缩包`;
+        return `正在生成 ${format.toUpperCase()} 图片`;
       }
 
       async exportSelectedPages() {
@@ -5850,15 +5899,16 @@
         const format = this.selectedExportFormat();
         let exportState = null;
         let succeeded = false;
-        this.setExportBusy(true);
+        this.setExportBusy(true, indexes.length);
         try {
           this.assertExportDependencies(format, indexes.length);
           exportState = this.beginExportState();
           await this.waitForExportFonts();
+          this.exportFontEmbedCss = await this.prepareExportFontCss();
           const captures = [];
           for (let position = 0; position < indexes.length; position += 1) {
             const index = indexes[position];
-            this.controls.exportStatus.textContent = `正在渲染第 ${index + 1} 页（${position + 1} / ${indexes.length}）`;
+            this.updateExportProgress(`正在渲染第 ${index + 1} 页`, position, indexes.length);
             this.presentation.showSlide(index);
             this.refreshEditableElements();
             await this.waitForAnimationFrames(2);
@@ -5866,13 +5916,14 @@
             const slide = this.presentation.slides[index];
             captures.push(await this.captureExportSlide(slide, index));
           }
-          this.controls.exportStatus.textContent = "正在生成下载文件…";
+          this.updateExportProgress(this.exportFinalizingLabel(format, captures.length), captures.length, captures.length);
           if (format === "pdf") {
             await this.exportCapturesAsPdf(captures);
           } else {
             await this.exportCapturesAsImages(captures, format);
           }
           succeeded = true;
+          this.updateExportProgress("导出完成", captures.length + 1, captures.length);
           this.controls.exportStatus.textContent = `已导出 ${captures.length} 页`;
           this.toastMessage(`已导出 ${captures.length} 页 ${format.toUpperCase()}`);
         } catch (error) {
@@ -5904,6 +5955,7 @@
         this.selected = null;
         this.enforceCleanExportState();
         this.exportPseudoImageSelectors = this.collectPseudoImageSelectors();
+        this.exportResourceCache = new Map();
         this.presentation.setEditorInsets?.(zeroInsets());
         return state;
       }
@@ -5926,6 +5978,18 @@
         this.stage.querySelectorAll(".editor-selected").forEach((element) => element.classList.remove("editor-selected"));
         if (state.selected?.isConnected) this.select(state.selected);
         else this.clearSelection();
+        this.exportFontEmbedCss = null;
+        this.exportResourceCache = null;
+      }
+
+      async prepareExportFontCss() {
+        if (typeof window.htmlToImage?.getFontEmbedCSS !== "function") return null;
+        try {
+          return await window.htmlToImage.getFontEmbedCSS(this.stage, { cacheBust: false });
+        } catch (error) {
+          console.warn("HtmlDeckEditor could not precompute export fonts.", error);
+          return null;
+        }
       }
 
       async waitForExportFonts() {
@@ -5990,12 +6054,54 @@
         try {
           this.clearMotionRunState(slide);
           this.prepareExportVisibility(slide, restore);
+          this.freezeSingleLineTextForExport(slide, restore);
           await this.inlineSlideResourcesForExport(slide, index, restore);
           return cleanup;
         } catch (error) {
           cleanup();
           throw error;
         }
+      }
+
+      freezeSingleLineTextForExport(slide, restore) {
+        this.getEditableElements()
+          .filter((element) => this.closestSlide(element) === slide && this.isTextElement(element))
+          .forEach((element) => {
+            if (!this.isRenderedSingleLineText(element)) return;
+            this.rememberInlineStyle(element, "white-space", restore);
+            element.style.setProperty("white-space", "nowrap", "important");
+          });
+      }
+
+      isRenderedSingleLineText(element) {
+        if (!element?.textContent?.trim() || element.matches("svg, svg *") || element.querySelector("br, wbr")) return false;
+        const hasBlockChild = Array.from(element.children).some((child) => {
+          const display = getComputedStyle(child).display;
+          return display && !display.startsWith("inline") && display !== "contents";
+        });
+        if (hasBlockChild) return false;
+        try {
+          const range = document.createRange();
+          range.selectNodeContents(element);
+          if (typeof range.getClientRects === "function") {
+            const tops = [];
+            Array.from(range.getClientRects()).forEach((rect) => {
+              if ((!rect.width && !rect.height) || tops.some((top) => Math.abs(top - rect.top) < 1)) return;
+              tops.push(rect.top);
+            });
+            range.detach?.();
+            if (tops.length) return tops.length === 1;
+          }
+        } catch (error) {
+          // Fall back to element metrics when Range geometry is unavailable.
+        }
+        const style = getComputedStyle(element);
+        const fontSize = Number.parseFloat(style.fontSize || "") || 16;
+        const parsedLineHeight = Number.parseFloat(style.lineHeight || "");
+        const lineHeight = Number.isFinite(parsedLineHeight) ? parsedLineHeight : fontSize * 1.2;
+        const rect = element.getBoundingClientRect();
+        const height = element.clientHeight || rect.height;
+        return rect.width > 0 && height > 0 && height <= lineHeight * 1.5 + 0.5;
       }
 
       prepareExportVisibility(slide, restore) {
@@ -6019,7 +6125,7 @@
       }
 
       async inlineSlideResourcesForExport(slide, index, restore) {
-        const cache = new Map();
+        const cache = this.exportResourceCache || new Map();
         for (const image of Array.from(slide.querySelectorAll("img"))) {
           await this.inlineHtmlImageForExport(image, index, restore, cache);
         }
@@ -6334,17 +6440,19 @@
         let imageError = false;
         let canvas;
         try {
-          canvas = await window.htmlToImage.toCanvas(slide, {
+          const options = {
             pixelRatio: 2,
             width: Math.round(size.width),
             height: Math.round(size.height),
             backgroundColor: this.exportBackgroundColor(slide),
-            cacheBust: true,
+            cacheBust: false,
             skipAutoScale: true,
             style: { transform: "none", transformOrigin: "top left", margin: "0" },
             filter: (node) => !(node instanceof Element && node.matches("[data-html-deck-editor-ui], .editor-frame, .editor-guide")),
             onImageErrorHandler: () => { imageError = true; }
-          });
+          };
+          if (this.exportFontEmbedCss !== null) options.fontEmbedCSS = this.exportFontEmbedCss;
+          canvas = await window.htmlToImage.toCanvas(slide, options);
         } catch (error) {
           throw new Error(`第 ${index + 1} 页渲染失败：${error?.message || "未知错误"}`);
         } finally {

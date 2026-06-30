@@ -53,6 +53,16 @@
       opacity: 1;
     }
 
+    body.html-deck-editor-exporting .editor-shell[data-html-deck-editor-ui] {
+      visibility: visible;
+      opacity: 1;
+    }
+
+    body.html-deck-editor-exporting .editor-shell[data-html-deck-editor-ui] > :not(.editor-export-modal) {
+      visibility: hidden !important;
+      pointer-events: none !important;
+    }
+
     body.editing:not(.html-deck-editor-exporting) [data-html-deck-editor-stage="preserve"] {
       transform: translate(var(--html-deck-editor-stage-x, 0px), var(--html-deck-editor-stage-y, 0px)) scale(var(--html-deck-editor-stage-scale, 1)) translateX(calc(var(--html-deck-editor-slide-offset-x, 0px) * -1)) !important;
       transform-origin: top left;
@@ -929,6 +939,65 @@
       margin: 0;
       color: rgba(17, 17, 17, 0.64);
       font: 600 12px/1.5 var(--font-body, system-ui, -apple-system, BlinkMacSystemFont, "Segoe UI", sans-serif);
+    }
+
+    .editor-shell[data-html-deck-editor-ui] .editor-export-progress-panel {
+      display: grid;
+      gap: 9px;
+      padding: 12px 14px;
+      border: 1px solid rgba(31, 43, 224, 0.18);
+      border-radius: 6px;
+      background: rgba(31, 43, 224, 0.05);
+    }
+
+    .editor-shell[data-html-deck-editor-ui] .editor-export-progress-panel[hidden] {
+      display: none;
+    }
+
+    .editor-shell[data-html-deck-editor-ui] .editor-export-progress-copy {
+      display: flex;
+      gap: 12px;
+      align-items: center;
+      justify-content: space-between;
+      color: #111111;
+      font: 700 13px/1.35 var(--font-body, system-ui, -apple-system, BlinkMacSystemFont, "Segoe UI", sans-serif);
+    }
+
+    .editor-shell[data-html-deck-editor-ui] .editor-export-progress-copy span {
+      color: rgba(17, 17, 17, 0.58);
+      font: 650 12px/1 var(--font-mono, ui-monospace, SFMono-Regular, Menlo, Monaco, Consolas, "Liberation Mono", monospace);
+      white-space: nowrap;
+    }
+
+    .editor-shell[data-html-deck-editor-ui] .editor-export-progress {
+      width: 100%;
+      height: 8px;
+      overflow: hidden;
+      border: 0;
+      border-radius: 999px;
+      background: rgba(31, 43, 224, 0.12);
+      accent-color: #1f2be0;
+    }
+
+    .editor-shell[data-html-deck-editor-ui] .editor-export-progress::-webkit-progress-bar {
+      border-radius: 999px;
+      background: rgba(31, 43, 224, 0.12);
+    }
+
+    .editor-shell[data-html-deck-editor-ui] .editor-export-progress::-webkit-progress-value {
+      border-radius: 999px;
+      background: #1f2be0;
+    }
+
+    .editor-shell[data-html-deck-editor-ui] .editor-export-progress::-moz-progress-bar {
+      border-radius: 999px;
+      background: #1f2be0;
+    }
+
+    .editor-shell[data-html-deck-editor-ui] .editor-export-progress-panel p {
+      margin: 0;
+      color: rgba(17, 17, 17, 0.56);
+      font: 500 12px/1.4 var(--font-body, system-ui, -apple-system, BlinkMacSystemFont, "Segoe UI", sans-serif);
     }
 
     .editor-shell[data-html-deck-editor-ui] .editor-export-actions {
