@@ -85,7 +85,10 @@
         <button class="toolbar-help-button" id="aiExportHelpBtn" type="button" title="for-ai.md 使用说明" aria-label="for-ai.md 使用说明">?</button>
       </div>
       <button class="editor-button" id="exportBtn" type="button">导出 PDF / 图片</button>
-      <button class="editor-button primary" id="saveBtn" type="button" title="覆盖当前 index.html；不支持覆盖时下载替换文件">保存 HTML</button>
+      <div class="toolbar-action-group save-action-group">
+        <button class="editor-button primary" id="saveBtn" type="button" title="覆盖当前 index.html；不支持覆盖时下载替换文件">保存 HTML</button>
+        <button class="toolbar-help-button" id="saveHelpBtn" type="button" title="保存 HTML 说明" aria-label="保存 HTML 说明">?</button>
+      </div>
       <button class="editor-button danger" id="exitEditBtn" type="button">退出编辑</button>
     </div>
     <div class="editor-help-modal" id="editorHelp" role="dialog" aria-modal="true" aria-labelledby="editorHelpTitle" hidden>
@@ -158,6 +161,36 @@
               <li>AI 会按文件里的要求保留现有图片和资源路径，并返回完整的 index.html；不需要再补充提示。</li>
               <li>收到 index.html 后，用它替换原项目中的同名文件，并保留原来的 assets 文件夹和目录结构，否则图片可能无法显示。</li>
               <li>“保存 HTML”只保存当前页面，不会把批注或 anchor 写进正式 HTML。</li>
+            </ul>
+          </section>
+        </div>
+      </div>
+    </div>
+    <div class="editor-help-modal" id="saveHtmlHelp" role="dialog" aria-modal="true" aria-labelledby="saveHtmlHelpTitle" hidden>
+      <div class="editor-help-card">
+        <div class="editor-help-header">
+          <h2 class="editor-help-title" id="saveHtmlHelpTitle">保存 HTML 说明</h2>
+          <button class="editor-help-close" id="saveHtmlHelpCloseBtn" type="button" aria-label="关闭">×</button>
+        </div>
+        <div class="editor-help-body">
+          <section class="editor-help-section">
+            <h3>它会保存什么</h3>
+            <p>“保存 HTML”会把当前画面写入 index.html。浏览器允许覆盖时会直接写回你授权的文件；不支持覆盖时会下载新的 index.html。</p>
+          </section>
+          <section class="editor-help-section">
+            <h3>图片和目录怎么处理</h3>
+            <ul>
+              <li>原项目已有图片、背景图和 runtime 文件仍按 HTML 里的相对路径读取。</li>
+              <li>下载得到的 index.html 请放回原项目目录替换同名文件，并保留原来的 assets、runtime 和目录结构，否则图片或编辑器脚本可能无法显示。</li>
+              <li>你在编辑器里新增或替换的图片会写成内嵌 Data URL，通常不依赖外部图片文件。</li>
+            </ul>
+          </section>
+          <section class="editor-help-section">
+            <h3>怎么用</h3>
+            <ul>
+              <li>想继续编辑原项目：用保存或下载的 index.html 替换原项目里的同名文件。</li>
+              <li>想转发或搬走：请连同整个项目文件夹一起复制，不要只拿单个 HTML。</li>
+              <li>“导出 for-ai.md”只是给 AI 的交接文件；“保存 HTML”不会把批注或 anchor 写进正式 HTML。</li>
             </ul>
           </section>
         </div>
@@ -947,6 +980,9 @@
           aiExportHelp: this.control("aiExportHelpBtn"),
           aiExportHelpModal: this.control("aiExportHelp"),
           aiExportHelpClose: this.control("aiExportHelpCloseBtn"),
+          saveHelp: this.control("saveHelpBtn"),
+          saveHelpModal: this.control("saveHtmlHelp"),
+          saveHelpClose: this.control("saveHtmlHelpCloseBtn"),
           resetHelp: this.control("resetHelpBtn"),
           resetHelpModal: this.control("resetHelp"),
           resetHelpClose: this.control("resetHelpCloseBtn"),
@@ -1744,6 +1780,11 @@
         this.controls.aiExportHelpModal.addEventListener("click", (event) => {
           if (event.target === this.controls.aiExportHelpModal) this.closeAiExportHelp();
         });
+        this.controls.saveHelp.addEventListener("click", () => this.openSaveHelp());
+        this.controls.saveHelpClose.addEventListener("click", () => this.closeSaveHelp());
+        this.controls.saveHelpModal.addEventListener("click", (event) => {
+          if (event.target === this.controls.saveHelpModal) this.closeSaveHelp();
+        });
         this.controls.resetHelp.addEventListener("click", () => this.openResetHelp());
         this.controls.resetHelpClose.addEventListener("click", () => this.closeResetHelp());
         this.controls.resetHelpModal.addEventListener("click", (event) => {
@@ -2084,6 +2125,12 @@
           this.closeAiExportHelp();
           return;
         }
+        if (event.key === "Escape" && !this.controls.saveHelpModal.hidden) {
+          event.preventDefault();
+          event.stopPropagation();
+          this.closeSaveHelp();
+          return;
+        }
         if (event.key === "Escape" && !this.controls.helpModal.hidden) {
           event.preventDefault();
           event.stopPropagation();
@@ -2183,6 +2230,14 @@
 
       closeAiExportHelp() {
         this.controls.aiExportHelpModal.hidden = true;
+      }
+
+      openSaveHelp() {
+        this.controls.saveHelpModal.hidden = false;
+      }
+
+      closeSaveHelp() {
+        this.controls.saveHelpModal.hidden = true;
       }
 
       openResetHelp() {

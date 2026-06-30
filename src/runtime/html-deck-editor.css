@@ -223,7 +223,8 @@
       min-width: 0;
     }
 
-    .editor-shell[data-html-deck-editor-ui] .ai-export-group #aiExportBtn {
+    .editor-shell[data-html-deck-editor-ui] .ai-export-group #aiExportBtn,
+    .editor-shell[data-html-deck-editor-ui] .save-action-group #saveBtn {
       padding-right: 36px;
     }
 
@@ -765,6 +766,19 @@
       background: rgba(17, 17, 17, 0.08);
       color: rgba(17, 17, 17, 0.78);
       outline: none;
+    }
+
+    .editor-shell[data-html-deck-editor-ui] .save-action-group .toolbar-help-button {
+      border-color: rgba(255, 255, 255, 0.32);
+      background: rgba(255, 255, 255, 0.1);
+      color: rgba(255, 255, 255, 0.7);
+    }
+
+    .editor-shell[data-html-deck-editor-ui] .save-action-group .toolbar-help-button:hover,
+    .editor-shell[data-html-deck-editor-ui] .save-action-group .toolbar-help-button:focus-visible {
+      border-color: rgba(255, 255, 255, 0.56);
+      background: rgba(255, 255, 255, 0.16);
+      color: rgba(255, 255, 255, 0.92);
     }
 
     .editor-shell[data-html-deck-editor-ui] .editor-confirm-message {

@@ -2896,6 +2896,40 @@ describe("editor runtime", () => {
     expect(modal.hidden).toBe(true);
   });
 
+  it("opens save HTML help from the toolbar", () => {
+    document.body.innerHTML = `
+      <div id="deckStage" class="deck-stage">
+        <section class="slide active">
+          <h1 id="title" style="font-size:96px">Original title</h1>
+        </section>
+      </div>
+    `;
+    const title = document.getElementById("title") as HTMLElement;
+    title.getBoundingClientRect = () => rect({ left: 100, top: 120, width: 720, height: 120 });
+
+    installRuntime();
+    const editor = (window as any).FrontendSlidesEditor.mount();
+    editor.toggleEditMode(true);
+
+    expect(document.querySelector(".save-action-group #saveBtn")).toBeTruthy();
+    expect(document.querySelector(".save-action-group #saveHelpBtn")).toBeTruthy();
+
+    const modal = document.getElementById("saveHtmlHelp") as HTMLElement;
+    expect(modal.hidden).toBe(true);
+
+    (document.getElementById("saveHelpBtn") as HTMLButtonElement).click();
+    expect(modal.hidden).toBe(false);
+    expect(modal.textContent).toContain("保存 HTML 说明");
+    expect(modal.textContent).toContain("相对路径读取");
+    expect(modal.textContent).toContain("assets、runtime");
+    expect(modal.textContent).toContain("内嵌 Data URL");
+    expect(modal.textContent).toContain("不要只拿单个 HTML");
+    expect(modal.textContent).toContain("不会把批注或 anchor 写进正式 HTML");
+
+    (document.getElementById("saveHtmlHelpCloseBtn") as HTMLButtonElement).click();
+    expect(modal.hidden).toBe(true);
+  });
+
   it("describes format brush and right-side AI comments in the editor help", () => {
     document.body.innerHTML = `
       <div id="deckStage" class="deck-stage">
