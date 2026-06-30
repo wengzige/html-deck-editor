@@ -13,7 +13,7 @@ import jsZipJs from "../runtime/vendor/jszip.min.js?raw";
 import jsZipLicense from "../runtime/vendor/jszip.LICENSE.md?raw";
 import fontLicenses from "../runtime/vendor/FONT-LICENSES.md?raw";
 
-export const RUNTIME_VERSION = "0.1.6";
+export const RUNTIME_VERSION = "0.1.7";
 
 export const runtimeAssets = {
   "runtime/deck-stage.js": deckStage,

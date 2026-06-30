@@ -13,6 +13,9 @@
   const FONT_DISPLAY_STACK = '"DIN Alternate", "Arial Narrow", Impact, sans-serif';
   const MAX_IMPORTED_FONT_BYTES = 20 * 1024 * 1024;
   const IMPORTED_FONT_STYLE_SELECTOR = "style[data-html-deck-editor-font]";
+  const FONT_LIBRARY_DB_NAME = "html-deck-editor-font-library";
+  const FONT_LIBRARY_DB_VERSION = 1;
+  const FONT_LIBRARY_STORE = "fonts";
   const ONLINE_FONTS = [
     { id: "noto-sans-sc", label: "思源黑体", family: "Noto Sans SC", value: '"Noto Sans SC", sans-serif', cssUrl: "https://cdn.jsdelivr.net/npm/@fontsource/noto-sans-sc@5.2.9/400.css", source: "Fontsource / OFL 1.1" },
     { id: "noto-serif-sc", label: "思源宋体", family: "Noto Serif SC", value: '"Noto Serif SC", serif', cssUrl: "https://cdn.jsdelivr.net/npm/@fontsource/noto-serif-sc@5.2.9/400.css", source: "Fontsource / OFL 1.1" },
@@ -112,7 +115,7 @@
             <h3>字体和导出</h3>
             <ul>
               <li>字体菜单提供本机常用字体、需联网的开源字体和已导入字体；本地字体支持 WOFF2、WOFF、TTF、OTF，单文件不超过 20MB。</li>
-              <li>导入字体后请点“保存 HTML”，否则刷新页面后需要重新导入；联网字体会访问外部 CDN。</li>
+              <li>导入字体会保存在当前浏览器中供下次复用；保存 HTML 后也会写入当前文件。联网字体会访问外部 CDN。</li>
               <li>“导出 PDF / 图片”可逐页勾选。单页图片直接下载，多页图片打包 ZIP；资源读取失败时会提示具体页码并停止导出。</li>
             </ul>
           </section>
@@ -1015,6 +1018,7 @@
         this.prepareEditableElements();
         this.prepareEditableIds();
         this.restoreManagedFonts();
+        this.fontLibraryReady = this.restoreReusableFonts();
         this.renderTextColorPalette();
         this.renderBackgroundPalette();
         this.initColorPickers();
@@ -3675,6 +3679,94 @@
         });
       }
 
+      openFontLibraryDb() {
+        return new Promise((resolve, reject) => {
+          const indexedDb = window.indexedDB;
+          if (!indexedDb?.open) {
+            reject(new Error("当前浏览器不支持字体库"));
+            return;
+          }
+          const request = indexedDb.open(FONT_LIBRARY_DB_NAME, FONT_LIBRARY_DB_VERSION);
+          request.onupgradeneeded = () => {
+            const database = request.result;
+            if (!database.objectStoreNames.contains(FONT_LIBRARY_STORE)) {
+              database.createObjectStore(FONT_LIBRARY_STORE, { keyPath: "family" });
+            }
+          };
+          request.onsuccess = () => resolve(request.result);
+          request.onerror = () => reject(request.error || new Error("无法打开浏览器字体库"));
+        });
+      }
+
+      reusableFontRecord(record) {
+        const family = String(record?.family || "");
+        const format = String(record?.format || "");
+        const dataUrl = String(record?.dataUrl || "");
+        if (!/^HtmlDeckImported_[A-Za-z0-9_]+$/.test(family)) return null;
+        if (!["woff2", "woff", "truetype", "opentype"].includes(format)) return null;
+        if (!/^data:[^;,]+;base64,/i.test(dataUrl) || dataUrl.length > MAX_IMPORTED_FONT_BYTES * 1.5) return null;
+        return {
+          family,
+          label: String(record?.label || family).slice(0, 120),
+          fileName: String(record?.fileName || "").slice(0, 180),
+          format,
+          dataUrl
+        };
+      }
+
+      async readReusableFonts() {
+        const database = await this.openFontLibraryDb();
+        try {
+          return await new Promise((resolve, reject) => {
+            const request = database.transaction(FONT_LIBRARY_STORE, "readonly").objectStore(FONT_LIBRARY_STORE).getAll();
+            request.onsuccess = () => resolve(Array.isArray(request.result) ? request.result : []);
+            request.onerror = () => reject(request.error || new Error("无法读取浏览器字体库"));
+          });
+        } finally {
+          database.close();
+        }
+      }
+
+      async saveReusableFont(record) {
+        const database = await this.openFontLibraryDb();
+        try {
+          await new Promise((resolve, reject) => {
+            const request = database.transaction(FONT_LIBRARY_STORE, "readwrite").objectStore(FONT_LIBRARY_STORE).put(record);
+            request.onsuccess = () => resolve();
+            request.onerror = () => reject(request.error || new Error("无法保存到浏览器字体库"));
+          });
+        } finally {
+          database.close();
+        }
+      }
+
+      installReusableFont(record) {
+        const font = this.reusableFontRecord(record);
+        if (!font) return "";
+        const existing = Array.from(document.querySelectorAll(IMPORTED_FONT_STYLE_SELECTOR))
+          .find((style) => style.dataset.fontFamily === font.family);
+        if (!existing) {
+          const style = document.createElement("style");
+          style.dataset.htmlDeckEditorFont = "imported";
+          style.dataset.fontFamily = font.family;
+          style.dataset.fontLabel = font.label;
+          style.dataset.fontFile = font.fileName;
+          style.textContent = `@font-face { font-family: "${font.family}"; src: url("${font.dataUrl}") format("${font.format}"); font-style: normal; font-weight: 400; font-display: swap; }`;
+          document.head.appendChild(style);
+        }
+        return this.registerImportedFontOption(font.family, font.label);
+      }
+
+      async restoreReusableFonts() {
+        try {
+          const records = await this.readReusableFonts();
+          records.forEach((record) => this.installReusableFont(record));
+          return records.length;
+        } catch (error) {
+          return 0;
+        }
+      }
+
       registerImportedFontOption(family, label) {
         if (!this.controls.importedFontGroup || !family) return "";
         const value = `"${family}", sans-serif`;
@@ -3700,17 +3792,25 @@
           const family = `HtmlDeckImported_${Date.now().toString(36)}_${++this.importedFontCounter}`;
           const label = file.name.replace(/\.[^.]+$/, "") || "导入字体";
           const safeFamily = family.replace(/["\\\r\n]/g, "");
-          const style = document.createElement("style");
-          style.dataset.htmlDeckEditorFont = "imported";
-          style.dataset.fontFamily = safeFamily;
-          style.dataset.fontLabel = label.slice(0, 120);
-          style.dataset.fontFile = file.name.slice(0, 180);
-          style.textContent = `@font-face { font-family: "${safeFamily}"; src: url("${dataUrl}") format("${this.fontFormatForExtension(extension)}"); font-style: normal; font-weight: 400; font-display: swap; }`;
-          document.head.appendChild(style);
-          const value = this.registerImportedFontOption(safeFamily, label);
+          const record = {
+            family: safeFamily,
+            label: label.slice(0, 120),
+            fileName: file.name.slice(0, 180),
+            format: this.fontFormatForExtension(extension),
+            dataUrl
+          };
+          const value = this.installReusableFont(record);
           this.controls.fontFamily.value = value;
           if (this.selected && this.isTextElement(this.selected)) this.applyInspectorValue("fontFamily", { recordHistory: true });
-          this.controls.fontImportStatus.textContent = `已导入“${label}”。刷新前请点“保存 HTML”，否则需要重新导入。`;
+          let stored = true;
+          try {
+            await this.saveReusableFont(record);
+          } catch (error) {
+            stored = false;
+          }
+          this.controls.fontImportStatus.textContent = stored
+            ? `已导入“${label}”，并保存到此浏览器字体库；保存 HTML 后也会写入当前文件。`
+            : `已导入“${label}”。浏览器字体库不可用；保存 HTML 后仍会写入当前文件。`;
           this.toastMessage(`已导入字体：${label}`);
         } catch (error) {
           const message = error?.message || "字体导入失败";
@@ -5731,6 +5831,7 @@
             this.presentation.showSlide(index);
             this.refreshEditableElements();
             await this.waitForAnimationFrames(2);
+            this.enforceCleanExportState();
             const slide = this.presentation.slides[index];
             captures.push(await this.captureExportSlide(slide, index));
           }
@@ -5770,12 +5871,17 @@
         };
         this.selected?.classList.remove("editor-selected");
         this.selected = null;
-        this.frame.classList.remove("active");
-        document.body.classList.add("html-deck-editor-exporting");
-        document.body.classList.remove("editing", "editor-on");
+        this.enforceCleanExportState();
         this.exportPseudoImageSelectors = this.collectPseudoImageSelectors();
         this.presentation.setEditorInsets?.(zeroInsets());
         return state;
+      }
+
+      enforceCleanExportState() {
+        document.body.classList.add("html-deck-editor-exporting");
+        document.body.classList.remove("editing", "editor-on");
+        this.frame.classList.remove("active");
+        this.stage.querySelectorAll(".editor-selected").forEach((element) => element.classList.remove("editor-selected"));
       }
 
       async restoreExportState(state) {
@@ -5791,6 +5897,7 @@
       }
 
       async waitForExportFonts() {
+        await this.fontLibraryReady;
         const pending = Array.from(this.onlineFontPromises.values());
         if (pending.length) await Promise.all(pending);
         const failed = document.querySelector("link[data-html-deck-editor-online-font][data-html-deck-editor-font-state='error']");
@@ -6191,6 +6298,7 @@
         if (!slide) throw new Error(`第 ${index + 1} 页不存在`);
         const size = elementDesignSize(slide, stageDesignSize(this.stage));
         const restore = await this.prepareSlideForExport(slide, index);
+        this.enforceCleanExportState();
         let imageError = false;
         let canvas;
         try {

@@ -594,7 +594,7 @@ describe("runtime injection", () => {
     expect(html).toContain('src="runtime/html-to-image.js"');
     expect(html).toContain('src="runtime/jspdf.umd.min.js"');
     expect(html).toContain('src="runtime/jszip.min.js"');
-    expect(html).toContain('data-html-deck-editor-runtime="0.1.6"');
+    expect(html).toContain('data-html-deck-editor-runtime="0.1.7"');
   });
 
   it("adds local image assets to the export manifest", async () => {

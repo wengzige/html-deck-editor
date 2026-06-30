@@ -63,6 +63,45 @@ function installPickerStub(): any[] {
   return instances;
 }
 
+function installFontLibraryIndexedDbStub(): Map<string, any> {
+  const records = new Map<string, any>();
+  let storeCreated = false;
+  const requestWithResult = (result: any): any => {
+    const request: any = {};
+    queueMicrotask(() => {
+      request.result = result;
+      request.onsuccess?.({ target: request });
+    });
+    return request;
+  };
+  const database: any = {
+    objectStoreNames: { contains: () => storeCreated },
+    createObjectStore: () => { storeCreated = true; },
+    transaction: () => ({
+      objectStore: () => ({
+        getAll: () => requestWithResult(Array.from(records.values())),
+        put: (record: any) => {
+          records.set(record.family, structuredClone(record));
+          return requestWithResult(record.family);
+        }
+      })
+    }),
+    close: vi.fn()
+  };
+  vi.stubGlobal("indexedDB", {
+    open: vi.fn(() => {
+      const request: any = {};
+      queueMicrotask(() => {
+        request.result = database;
+        if (!storeCreated) request.onupgradeneeded?.({ target: request });
+        request.onsuccess?.({ target: request });
+      });
+      return request;
+    })
+  });
+  return records;
+}
+
 function pickerColor(hex: string): any {
   return { hex, rgbString: hex, rgbaString: hex };
 }
@@ -1199,6 +1238,7 @@ describe("editor runtime", () => {
   });
 
   it("validates and embeds imported font files, then restores their option on remount", async () => {
+    const fontLibrary = installFontLibraryIndexedDbStub();
     document.body.innerHTML = `
       <div id="deckStage" class="deck-stage">
         <section class="slide active"><h1 id="title" data-editable>导入字体</h1></section>
@@ -1220,15 +1260,69 @@ describe("editor runtime", () => {
     const style = document.querySelector("style[data-html-deck-editor-font]") as HTMLStyleElement;
     expect(style.textContent).toContain("data:font/woff2;base64");
     expect(title.style.fontFamily).toContain("HtmlDeckImported_");
-    expect((document.getElementById("fontImportStatus") as HTMLElement).textContent).toContain("保存 HTML");
+    expect((document.getElementById("fontImportStatus") as HTMLElement).textContent).toContain("浏览器字体库");
     expect(editor.buildExportHtml()).toContain("data-html-deck-editor-font=\"imported\"");
     expect((document.getElementById("importedFontGroup") as HTMLOptGroupElement).hidden).toBe(false);
+    expect(fontLibrary.size).toBe(1);
 
     editor.destroy();
     document.querySelectorAll("[data-html-deck-editor-ui]").forEach((node) => node.remove());
+    document.querySelectorAll("style[data-html-deck-editor-font]").forEach((node) => node.remove());
     const remounted = (window as any).FrontendSlidesEditor.mount();
+    await remounted.fontLibraryReady;
     expect(remounted.controls.importedFontGroup.querySelectorAll("option")).toHaveLength(1);
     expect(remounted.controls.importedFontGroup.textContent).toContain("演示字体");
+    expect(document.querySelector("style[data-html-deck-editor-font]")?.textContent).toContain("data:font/woff2;base64");
+  });
+
+  it("keeps all six batch-export captures free of editor selection state", async () => {
+    document.title = "六页导出";
+    document.body.innerHTML = `
+      <div id="deckStage" class="deck-stage">
+        ${Array.from({ length: 6 }, (_, index) => `<section class="slide${index === 0 ? " active" : ""}"><h1 data-editable>Page ${index + 1}</h1></section>`).join("")}
+      </div>
+    `;
+    installRuntime();
+    const editor = (window as any).FrontendSlidesEditor.mount();
+    const firstTitle = document.querySelector("h1") as HTMLElement;
+    editor.toggleEditMode(true);
+    editor.select(firstTitle);
+
+    const reapplyHostEditingState = () => {
+      document.body.classList.add("editing", "editor-on");
+      document.querySelectorAll("h1").forEach((title) => title.classList.add("editor-selected"));
+    };
+    document.addEventListener("slidechange", reapplyHostEditingState);
+
+    const toCanvas = vi.fn(async (slide: HTMLElement) => {
+      expect(document.body.classList.contains("editing")).toBe(false);
+      expect(document.body.classList.contains("editor-on")).toBe(false);
+      expect(slide.querySelector(".editor-selected")).toBeNull();
+      return {
+        width: 3840,
+        height: 2160,
+        toBlob: (callback: (blob: Blob) => void) => callback(new Blob([slide.textContent || ""])),
+        toDataURL: () => "data:image/png;base64,AA=="
+      };
+    });
+    vi.stubGlobal("htmlToImage", { toCanvas });
+    class ZipStub {
+      file(): void {}
+      async generateAsync(): Promise<Blob> { return new Blob(["zip"]); }
+    }
+    vi.stubGlobal("JSZip", ZipStub);
+    vi.stubGlobal("requestAnimationFrame", (callback: FrameRequestCallback) => { callback(0); return 1; });
+    vi.spyOn(editor, "downloadBlob").mockImplementation(() => undefined);
+
+    try {
+      editor.openExportModal();
+      editor.selectExportPages("all");
+      (editor.controls.exportModal.querySelector("input[value='png']") as HTMLInputElement).checked = true;
+      await editor.exportSelectedPages();
+      expect(toCanvas).toHaveBeenCalledTimes(6);
+    } finally {
+      document.removeEventListener("slidechange", reapplyHostEditingState);
+    }
   });
 
   it("lists only top-level slides and supports current, all, and empty export selections", () => {
