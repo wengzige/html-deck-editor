@@ -1033,6 +1033,25 @@
       font: 500 12px/1.4 var(--font-body, system-ui, -apple-system, BlinkMacSystemFont, "Segoe UI", sans-serif);
     }
 
+    .editor-shell[data-html-deck-editor-ui] .editor-export-progress-footer {
+      display: flex;
+      gap: 12px;
+      align-items: center;
+      justify-content: space-between;
+    }
+
+    .editor-shell[data-html-deck-editor-ui] .editor-export-pause {
+      flex: 0 0 auto;
+      min-width: 88px;
+      border-color: rgba(31, 43, 224, 0.28);
+      color: #1f2be0;
+    }
+
+    .editor-shell[data-html-deck-editor-ui] .editor-export-modal[data-export-pause="paused"] .editor-export-progress-panel {
+      border-color: rgba(31, 43, 224, 0.34);
+      background: rgba(31, 43, 224, 0.08);
+    }
+
     .editor-shell[data-html-deck-editor-ui] .editor-export-actions {
       justify-content: flex-end;
       padding-top: 4px;

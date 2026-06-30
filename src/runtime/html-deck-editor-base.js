@@ -226,14 +226,17 @@
           </div>
           <div class="editor-export-pages" id="exportPageList" aria-label="选择导出页面"></div>
           <p class="editor-export-status" id="exportStatus" aria-live="polite">已选择全部页面</p>
-          <div class="editor-export-progress-panel" id="exportProgressPanel" role="status" aria-live="polite" hidden>
-            <span class="editor-export-progress-kicker">正在导出，请稍候</span>
-            <div class="editor-export-progress-copy">
+          <div class="editor-export-progress-panel" id="exportProgressPanel" hidden>
+            <span class="editor-export-progress-kicker" id="exportProgressKicker">正在导出，请稍候</span>
+            <div class="editor-export-progress-copy" role="status" aria-live="polite">
               <strong id="exportProgressLabel">正在准备导出</strong>
               <span id="exportProgressCount">0 / 0 页</span>
             </div>
             <progress class="editor-export-progress" id="exportProgress" max="1" hidden></progress>
-            <p>导出过程中请保持当前页面打开</p>
+            <div class="editor-export-progress-footer">
+              <p>导出过程中请保持当前页面打开</p>
+              <button class="editor-button editor-export-pause" id="exportPauseBtn" type="button" aria-pressed="false">暂停导出</button>
+            </div>
           </div>
           <div class="editor-export-actions">
             <button class="editor-button" id="exportCancelBtn" type="button">取消</button>
@@ -914,6 +917,9 @@
         this.commentInputAnchor = "";
         this.formatBrush = null;
         this.isExporting = false;
+        this.isExportPaused = false;
+        this.exportPauseResolver = null;
+        this.exportProgressState = null;
         this.exportAssetMap = this.loadExportAssetMap();
         this.exportAssetEntries = Array.from(this.exportAssetMap.entries());
         this.exportPseudoCounter = 0;
@@ -972,9 +978,11 @@
           exportTitle: this.control("exportTitle"),
           exportIntro: this.control("exportIntro"),
           exportProgressPanel: this.control("exportProgressPanel"),
+          exportProgressKicker: this.control("exportProgressKicker"),
           exportProgress: this.control("exportProgress"),
           exportProgressLabel: this.control("exportProgressLabel"),
           exportProgressCount: this.control("exportProgressCount"),
+          exportPause: this.control("exportPauseBtn"),
           save: this.control("saveBtn"),
           exit: this.control("exitEditBtn"),
           selectionName: this.control("selectionName"),
@@ -1781,6 +1789,7 @@
         this.controls.exportAll.addEventListener("click", () => this.selectExportPages("all"));
         this.controls.exportNone.addEventListener("click", () => this.selectExportPages("none"));
         this.controls.exportStart.addEventListener("click", () => this.exportSelectedPages());
+        this.controls.exportPause.addEventListener("click", () => this.toggleExportPause());
         this.controls.saveComment.addEventListener("click", () => this.saveCommentForSelected());
         this.controls.clearComment.addEventListener("click", () => this.clearCommentForSelected());
         this.controls.save.addEventListener("click", () => this.exportHtml());
@@ -5861,6 +5870,13 @@
 
       setExportBusy(busy, total = this.selectedExportPageIndexes().length) {
         this.isExporting = busy;
+        if (!busy && this.exportPauseResolver) this.exportPauseResolver();
+        this.exportPauseResolver = null;
+        this.isExportPaused = false;
+        this.controls.exportPause.disabled = false;
+        this.controls.exportPause.textContent = "暂停导出";
+        this.controls.exportPause.setAttribute("aria-pressed", "false");
+        this.controls.exportModal.removeAttribute("data-export-pause");
         this.controls.exportModal.setAttribute("aria-busy", String(busy));
         this.controls.exportTitle.textContent = busy ? "正在导出" : "导出 PDF / 图片";
         this.controls.exportIntro.textContent = busy
@@ -5869,10 +5885,8 @@
         this.controls.exportProgressPanel.hidden = !busy;
         this.controls.exportProgress.hidden = !busy;
         if (busy) {
-          this.controls.exportProgress.max = Math.max(1, total + 1);
-          this.controls.exportProgress.removeAttribute("value");
-          this.controls.exportProgressLabel.textContent = "正在准备字体与页面";
-          this.controls.exportProgressCount.textContent = `0 / ${total} 页`;
+          this.controls.exportProgressKicker.textContent = "正在导出，请稍候";
+          this.updateExportProgress("正在准备字体与页面", null, total);
         }
         [this.controls.exportClose, this.controls.exportCancel, this.controls.exportCurrent, this.controls.exportAll, this.controls.exportNone]
           .forEach((control) => { control.disabled = busy; });
@@ -5882,12 +5896,54 @@
       }
 
       updateExportProgress(label, completed, total) {
+        this.exportProgressState = { label, completed, total };
         this.controls.exportProgressLabel.textContent = label;
         this.controls.exportProgress.max = Math.max(1, total + 1);
         if (Number.isFinite(completed)) this.controls.exportProgress.setAttribute("value", String(Math.max(0, Math.min(completed, total + 1))));
         else this.controls.exportProgress.removeAttribute("value");
         this.controls.exportProgressCount.textContent = `${Math.max(0, Math.min(completed || 0, total))} / ${total} 页`;
         this.controls.exportStatus.textContent = label;
+      }
+
+      restoreExportProgressUi() {
+        this.controls.exportTitle.textContent = "正在导出";
+        this.controls.exportIntro.textContent = "文件正在浏览器本地生成，请勿关闭当前页面。";
+        this.controls.exportProgressKicker.textContent = "正在导出，请稍候";
+        if (this.exportProgressState) {
+          const { label, completed, total } = this.exportProgressState;
+          this.updateExportProgress(label, completed, total);
+        }
+      }
+
+      toggleExportPause() {
+        if (!this.isExporting || this.controls.exportPause.disabled) return;
+        this.isExportPaused = !this.isExportPaused;
+        this.controls.exportPause.textContent = this.isExportPaused ? "继续导出" : "暂停导出";
+        this.controls.exportPause.setAttribute("aria-pressed", String(this.isExportPaused));
+        if (this.isExportPaused) {
+          this.controls.exportModal.setAttribute("data-export-pause", "pending");
+          this.controls.exportTitle.textContent = "正在暂停…";
+          this.controls.exportIntro.textContent = "当前页完成后会暂停，请勿关闭当前页面。";
+          this.controls.exportProgressKicker.textContent = "暂停请求已收到";
+          this.controls.exportStatus.textContent = "当前页完成后暂停";
+          return;
+        }
+        this.controls.exportModal.removeAttribute("data-export-pause");
+        this.restoreExportProgressUi();
+        const resume = this.exportPauseResolver;
+        this.exportPauseResolver = null;
+        if (resume) resume();
+      }
+
+      async waitWhileExportPaused() {
+        if (!this.isExportPaused) return;
+        this.controls.exportModal.setAttribute("data-export-pause", "paused");
+        this.controls.exportTitle.textContent = "导出已暂停";
+        this.controls.exportIntro.textContent = "点击“继续导出”后，将从下一步继续。";
+        this.controls.exportProgressKicker.textContent = "导出已暂停";
+        this.controls.exportProgressLabel.textContent = "等待继续";
+        this.controls.exportStatus.textContent = "导出已暂停";
+        await new Promise((resolve) => { this.exportPauseResolver = resolve; });
       }
 
       exportFinalizingLabel(format, pageCount) {
@@ -5912,6 +5968,7 @@
           exportState = this.beginExportState();
           await this.waitForExportFonts();
           this.exportFontEmbedCss = await this.prepareExportFontCss();
+          await this.waitWhileExportPaused();
           const captures = [];
           for (let position = 0; position < indexes.length; position += 1) {
             const index = indexes[position];
@@ -5922,7 +5979,11 @@
             this.enforceCleanExportState();
             const slide = this.presentation.slides[index];
             captures.push(await this.captureExportSlide(slide, index));
+            this.updateExportProgress(`已完成第 ${index + 1} 页`, position + 1, indexes.length);
+            await this.waitWhileExportPaused();
           }
+          this.controls.exportPause.disabled = true;
+          this.controls.exportPause.textContent = "正在生成文件";
           this.updateExportProgress(this.exportFinalizingLabel(format, captures.length), captures.length, captures.length);
           if (format === "pdf") {
             await this.exportCapturesAsPdf(captures);
