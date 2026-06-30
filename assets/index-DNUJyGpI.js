@@ -6786,19 +6786,36 @@ ${s.documentElement.outerHTML}`,plan:c,preview:jf(s,c)}}function Pf(o,h){const s
       async waitForSlideAnimations(slide) {
         await this.waitForAnimationFrames(2);
         if (!slide || typeof slide.getAnimations !== "function") return [];
-        const animations = slide.getAnimations({ subtree: true }).filter((animation) => animation.playState !== "idle");
-        const pending = animations.filter((animation) => {
-          const endTime = Number(animation.effect?.getComputedTiming?.().endTime);
-          return animation.playState !== "finished" && Number.isFinite(endTime);
-        });
-        if (pending.length) {
+        const animations = new Set();
+        const startedAt = performance.now();
+        const minimumWaitMs = 800;
+        const quietWindowMs = 400;
+        const deadline = startedAt + 15000;
+        let quietSince = null;
+        while (performance.now() < deadline) {
+          const current = slide.getAnimations({ subtree: true }).filter((animation) => animation.playState !== "idle");
+          current.forEach((animation) => animations.add(animation));
+          const pending = current.filter((animation) => {
+            const endTime = Number(animation.effect?.getComputedTiming?.().endTime);
+            return animation.playState !== "finished" && Number.isFinite(endTime);
+          });
+          if (!pending.length) {
+            if (quietSince === null) quietSince = performance.now();
+            const waited = performance.now() - startedAt;
+            const quietFor = performance.now() - quietSince;
+            if (waited >= minimumWaitMs && quietFor >= quietWindowMs) break;
+            await new Promise((resolve) => window.setTimeout(resolve, 50));
+            await this.waitForAnimationFrames(1);
+            continue;
+          }
+          quietSince = null;
           const remaining = pending.reduce((max, animation) => {
             const endTime = Number(animation.effect?.getComputedTiming?.().endTime) || 0;
             const currentTime = Number(animation.currentTime) || 0;
             const playbackRate = Math.abs(Number(animation.playbackRate)) || 1;
             return Math.max(max, (endTime - currentTime) / playbackRate);
           }, 0);
-          const timeoutMs = Math.min(8000, Math.max(250, remaining + 160));
+          const timeoutMs = Math.min(deadline - performance.now(), Math.max(250, remaining + 160));
           const result = await new Promise((resolve) => {
             const timeout = window.setTimeout(() => resolve("timeout"), timeoutMs);
             Promise.allSettled(pending.map((animation) => animation.finished)).then(() => {
@@ -6815,9 +6832,10 @@ ${s.documentElement.outerHTML}`,plan:c,preview:jf(s,c)}}function Pf(o,h){const s
               }
             });
           }
+          await this.waitForAnimationFrames(2);
         }
         await this.waitForAnimationFrames(1);
-        return animations;
+        return Array.from(animations);
       }
 
       freezeSlideAnimationsForExport(slide, animations = []) {
