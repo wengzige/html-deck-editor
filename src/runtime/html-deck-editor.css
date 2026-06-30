@@ -1040,16 +1040,15 @@
       justify-content: space-between;
     }
 
-    .editor-shell[data-html-deck-editor-ui] .editor-export-pause {
+    .editor-shell[data-html-deck-editor-ui] .editor-export-cancel-running {
       flex: 0 0 auto;
       min-width: 88px;
       border-color: rgba(31, 43, 224, 0.28);
-      color: #1f2be0;
     }
 
-    .editor-shell[data-html-deck-editor-ui] .editor-export-modal[data-export-pause="paused"] .editor-export-progress-panel {
-      border-color: rgba(31, 43, 224, 0.34);
-      background: rgba(31, 43, 224, 0.08);
+    .editor-shell[data-html-deck-editor-ui] .editor-export-modal[data-export-cancel="pending"] .editor-export-progress-panel {
+      border-color: rgba(180, 35, 24, 0.28);
+      background: rgba(180, 35, 24, 0.05);
     }
 
     .editor-shell[data-html-deck-editor-ui] .editor-export-actions {

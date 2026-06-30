@@ -1506,8 +1506,8 @@ describe("editor runtime", () => {
         expect(editor.controls.exportProgress.value).toBe(2);
         expect(editor.controls.exportProgress.getAttribute("value")).toBe("2");
         expect(editor.controls.exportProgressLabel.textContent).toBe("正在生成 PNG 压缩包");
-        expect(editor.controls.exportPause.disabled).toBe(true);
-        expect(editor.controls.exportPause.textContent).toBe("正在生成文件");
+        expect(editor.controls.exportRunningCancel.disabled).toBe(true);
+        expect(editor.controls.exportRunningCancel.textContent).toBe("正在生成文件");
         expect(editor.controls.exportTitle.textContent).toBe("正在导出");
         expect(editor.controls.exportIntro.textContent).toContain("请勿关闭当前页面");
         return new Blob(["zip"]);
@@ -1529,15 +1529,18 @@ describe("editor runtime", () => {
     expect(editor.controls.exportTitle.textContent).toBe("导出 PDF / 图片");
   });
 
-  it("pauses after the active page finishes and resumes before rendering the next page", async () => {
+  it("cancels after the active page finishes, discards captures, and returns to editing", async () => {
     document.body.innerHTML = `
       <div id="deckStage" class="deck-stage">
-        <section class="slide active"><h1>One</h1></section>
+        <section class="slide active"><h1 id="title">One</h1></section>
         <section class="slide"><h1>Two</h1></section>
       </div>
     `;
     installRuntime();
     const editor = (window as any).FrontendSlidesEditor.mount();
+    const title = document.getElementById("title") as HTMLElement;
+    editor.toggleEditMode(true);
+    editor.select(title);
     let finishFirstCapture!: (canvas: any) => void;
     const firstCapture = new Promise<any>((resolve) => { finishFirstCapture = resolve; });
     const canvas = {
@@ -1549,33 +1552,33 @@ describe("editor runtime", () => {
     vi.stubGlobal("htmlToImage", { toCanvas });
     class ZipStub {
       file(): void {}
-      async generateAsync(): Promise<Blob> { return new Blob(["zip"]); }
+      async generateAsync(): Promise<Blob> { throw new Error("ZIP should not be generated after cancel"); }
     }
     vi.stubGlobal("JSZip", ZipStub);
     vi.stubGlobal("requestAnimationFrame", (callback: FrameRequestCallback) => { callback(0); return 1; });
-    vi.spyOn(editor, "downloadBlob").mockImplementation(() => undefined);
+    const download = vi.spyOn(editor, "downloadBlob").mockImplementation(() => undefined);
 
     editor.openExportModal();
     (editor.controls.exportModal.querySelector("input[value='png']") as HTMLInputElement).checked = true;
     const exportPromise = editor.exportSelectedPages();
 
     await vi.waitFor(() => expect(toCanvas).toHaveBeenCalledOnce());
-    editor.controls.exportPause.click();
-    expect(editor.controls.exportPause.textContent).toBe("继续导出");
-    expect(editor.controls.exportTitle.textContent).toBe("正在暂停…");
-    expect(editor.controls.exportStatus.textContent).toBe("当前页完成后暂停");
+    editor.controls.exportRunningCancel.click();
+    expect(editor.controls.exportRunningCancel.textContent).toBe("正在取消…");
+    expect(editor.controls.exportTitle.textContent).toBe("正在取消导出…");
+    expect(editor.controls.exportStatus.textContent).toBe("当前页完成后取消");
 
     finishFirstCapture(canvas);
-    await vi.waitFor(() => expect(editor.controls.exportTitle.textContent).toBe("导出已暂停"));
-    expect(toCanvas).toHaveBeenCalledOnce();
-    expect(editor.controls.exportProgressLabel.textContent).toBe("等待继续");
-
-    editor.controls.exportPause.click();
     await exportPromise;
 
-    expect(toCanvas).toHaveBeenCalledTimes(2);
-    expect(editor.controls.exportPause.textContent).toBe("暂停导出");
+    expect(toCanvas).toHaveBeenCalledOnce();
+    expect(download).not.toHaveBeenCalled();
+    expect(editor.controls.exportRunningCancel.textContent).toBe("取消导出");
     expect(editor.controls.exportProgressPanel.hidden).toBe(true);
+    expect(editor.controls.exportModal.hidden).toBe(true);
+    expect(editor.controls.exportModal.getAttribute("aria-busy")).toBe("false");
+    expect(document.body.classList.contains("editing")).toBe(true);
+    expect(editor.selected).toBe(title);
   });
 
   it("inlines already loaded slide images before canvas export without CORS preflight", async () => {
