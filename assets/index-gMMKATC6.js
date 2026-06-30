@@ -804,7 +804,8 @@ ${s.documentElement.outerHTML}`,plan:c,preview:jf(s,c)}}function Pf(o,h){const s
             <ul>
               <li>先选中画面里的文字、图片或块，在右侧 AI 批注里写清楚想让 AI 怎么改。</li>
               <li>点“导出 for-ai.md”，把下载的文件内容发给你使用的 AI。</li>
-              <li>让 AI 按批注返回完整 HTML 或明确的修改建议。</li>
+              <li>AI 会按文件里的要求保留现有图片和资源路径，并返回完整的 index.html；不需要再补充提示。</li>
+              <li>收到 index.html 后，用它替换原项目中的同名文件，并保留原来的 assets 文件夹和目录结构，否则图片可能无法显示。</li>
               <li>“保存 HTML”只保存当前页面，不会把批注或 anchor 写进正式 HTML。</li>
             </ul>
           </section>
@@ -6228,6 +6229,8 @@ ${s.documentElement.outerHTML}`,plan:c,preview:jf(s,c)}}function Pf(o,h){const s
             "根据用户批注修改当前 HTML。",
             "保持 deck-stage 结构；每一页 slide 仍应是 deck-stage 的直接子元素。",
             "保留可编辑 HTML，不要把整页或整块内容改成截图。",
+            "保留现有图片和其他资源路径；不要重命名、移动或删除资源文件，除非用户批注明确要求。",
+            "完成修改后直接返回完整、可保存为 index.html 的 HTML，不要只返回代码片段或修改建议。",
             "尽量保留 data-ai-anchor；若删除被批注元素，请在回复中说明。"
           ],
           comments: this.sortedComments().map((comment) => {
