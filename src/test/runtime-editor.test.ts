@@ -1680,37 +1680,61 @@ describe("editor runtime", () => {
     expect(hero.getAttribute("srcset")).toBe("assets/3.webp 1x");
   });
 
-  it("waits for finite slide animations before capturing the page", async () => {
+  it("waits for chained slide animations before capturing the page", async () => {
     document.body.innerHTML = `
       <div id="deckStage" class="deck-stage">
-        <section class="slide active"><div id="animated" style="opacity:1">动画内容</div></section>
+        <section class="slide active">
+          <div id="animated-first" style="opacity:1">第一段动画</div>
+          <div id="animated-second" style="opacity:1">第二段动画</div>
+        </section>
       </div>
     `;
     installRuntime();
     const editor = (window as any).FrontendSlidesEditor.mount();
     const slide = editor.presentation.slides[0] as HTMLElement;
-    const animated = document.getElementById("animated") as HTMLElement;
-    let finishAnimation!: () => void;
-    let animationFinished = false;
-    const finished = new Promise<void>((resolve) => {
-      finishAnimation = () => {
-        animationFinished = true;
+    const firstTarget = document.getElementById("animated-first") as HTMLElement;
+    const secondTarget = document.getElementById("animated-second") as HTMLElement;
+    let finishFirst!: () => void;
+    let finishSecond!: () => void;
+    let firstFinished = false;
+    let secondFinished = false;
+    const firstFinishedPromise = new Promise<void>((resolve) => {
+      finishFirst = () => {
+        firstFinished = true;
         resolve();
       };
     });
+    const secondFinishedPromise = new Promise<void>((resolve) => {
+      finishSecond = () => {
+        secondFinished = true;
+        resolve();
+      };
+    });
+    const firstAnimation = {
+      currentTime: 0,
+      playbackRate: 1,
+      get playState() { return firstFinished ? "finished" : "running"; },
+      finished: firstFinishedPromise,
+      effect: {
+        target: firstTarget,
+        getComputedTiming: () => ({ endTime: 1200 }),
+        getKeyframes: () => [{ opacity: "0" }, { opacity: "1" }]
+      }
+    };
+    const secondAnimation = {
+      currentTime: 0,
+      playbackRate: 1,
+      get playState() { return secondFinished ? "finished" : "running"; },
+      finished: secondFinishedPromise,
+      effect: {
+        target: secondTarget,
+        getComputedTiming: () => ({ endTime: 800 }),
+        getKeyframes: () => [{ transform: "translateY(20px)" }, { transform: "none" }]
+      }
+    };
     Object.defineProperty(slide, "getAnimations", {
       configurable: true,
-      value: vi.fn(() => [{
-        currentTime: 0,
-        playbackRate: 1,
-        playState: animationFinished ? "finished" : "running",
-        finished,
-        effect: {
-          target: animated,
-          getComputedTiming: () => ({ endTime: 1200 }),
-          getKeyframes: () => [{ opacity: "0" }, { opacity: "1" }]
-        }
-      }])
+      value: vi.fn(() => firstFinished ? [firstAnimation, secondAnimation] : [firstAnimation])
     });
     const captureCanvas = {
       width: 3840,
@@ -1719,7 +1743,8 @@ describe("editor runtime", () => {
       toDataURL: vi.fn(() => "data:image/png;base64,AA==")
     };
     const toCanvas = vi.fn(async () => {
-      expect(animationFinished).toBe(true);
+      expect(firstFinished).toBe(true);
+      expect(secondFinished).toBe(true);
       expect(document.body.classList.contains("html-deck-editor-export-capturing")).toBe(true);
       return captureCanvas;
     });
@@ -1735,7 +1760,11 @@ describe("editor runtime", () => {
     expect(document.body.classList.contains("html-deck-editor-exporting")).toBe(true);
     expect(toCanvas).not.toHaveBeenCalled();
 
-    finishAnimation();
+    finishFirst();
+    await new Promise((resolve) => window.setTimeout(resolve, 0));
+    expect(toCanvas).not.toHaveBeenCalled();
+
+    finishSecond();
     await exportPromise;
 
     expect(toCanvas).toHaveBeenCalledOnce();
