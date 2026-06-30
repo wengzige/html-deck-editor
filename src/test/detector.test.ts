@@ -700,16 +700,18 @@ describe("runtime injection", () => {
   it("removes old editor chrome and runtime files when upgrading an editable deck", async () => {
     const result = await convertInput(input([
       file("index.html", `
-        <deck-stage id="deckStage">
-          <section class="slide active"><h1>One</h1></section>
-          <section class="slide"><h1>Two</h1></section>
-        </deck-stage>
-        <button class="edit-toggle" id="editToggle" title="编辑模式 (E)">DONE</button>
-        <button class="save-html">SAVE HTML</button>
-        <script src="visual-editor/editor-runtime.js"></script>
-        <link rel="stylesheet" href="visual-editor/editor-runtime.css">
-        <style>.edit-toggle { width: 84px; }</style>
-        <script>window.FrontendSlidesEditor.mount({});</script>
+        <html><body class="editing editor-on html-deck-editor-exporting">
+          <deck-stage id="deckStage">
+            <section class="slide active"><h1 class="editor-selected">One</h1></section>
+            <section class="slide"><h1>Two</h1></section>
+          </deck-stage>
+          <button class="edit-toggle" id="editToggle" title="编辑模式 (E)">DONE</button>
+          <button class="save-html">SAVE HTML</button>
+          <script src="visual-editor/editor-runtime.js"></script>
+          <link rel="stylesheet" href="visual-editor/editor-runtime.css">
+          <style>.edit-toggle { width: 84px; }</style>
+          <script>window.FrontendSlidesEditor.mount({});</script>
+        </body></html>
       `),
       file("visual-editor/editor-runtime.js", "old editor js"),
       file("visual-editor/editor-runtime.css", "old editor css"),
@@ -725,6 +727,11 @@ describe("runtime injection", () => {
     expect(html).not.toContain("visual-editor/editor-runtime");
     expect(html).not.toContain("window.FrontendSlidesEditor.mount({});");
     expect(html).toContain("runtime/html-deck-editor.js");
+    const converted = new DOMParser().parseFromString(html, "text/html");
+    expect(converted.body.classList.contains("editing")).toBe(false);
+    expect(converted.body.classList.contains("editor-on")).toBe(false);
+    expect(converted.body.classList.contains("html-deck-editor-exporting")).toBe(false);
+    expect(converted.querySelector(".editor-selected")).toBeNull();
     expect(zip.file("visual-editor/editor-runtime.js")).toBeNull();
     expect(zip.file("visual-editor/editor-runtime.css")).toBeNull();
     expect(zip.file("assets/style.css")).toBeTruthy();

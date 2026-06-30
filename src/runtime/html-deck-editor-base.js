@@ -1017,8 +1017,8 @@
         });
         this.prepareEditableElements();
         this.prepareEditableIds();
-        this.restoreManagedFonts();
-        this.fontLibraryReady = this.restoreReusableFonts();
+        const embeddedFonts = this.restoreManagedFonts();
+        this.fontLibraryReady = this.restoreReusableFonts(embeddedFonts);
         this.renderTextColorPalette();
         this.renderBackgroundPalette();
         this.initColorPickers();
@@ -3668,14 +3668,32 @@
       }
 
       restoreManagedFonts() {
+        const embeddedFonts = [];
         document.querySelectorAll(IMPORTED_FONT_STYLE_SELECTOR).forEach((style) => {
           const family = style.dataset.fontFamily || "";
           if (!family) return;
           this.registerImportedFontOption(family, style.dataset.fontLabel || family);
+          const record = this.embeddedReusableFontRecord(style);
+          if (record) embeddedFonts.push(record);
         });
         document.querySelectorAll("link[data-html-deck-editor-online-font]").forEach((link) => {
           const id = link.dataset.htmlDeckEditorOnlineFont;
           if (id && ONLINE_FONTS.some((font) => font.id === id)) this.trackOnlineFontLink(link, id).catch(() => {});
+        });
+        return embeddedFonts;
+      }
+
+      embeddedReusableFontRecord(style) {
+        const source = String(style?.textContent || "");
+        const urlMatch = source.match(/src\s*:\s*url\(\s*(["']?)(data:[^"')\s]+)\1\s*\)/i);
+        const formatMatch = source.match(/format\(\s*["']?(woff2|woff|truetype|opentype)["']?\s*\)/i);
+        if (!urlMatch || !formatMatch) return null;
+        return this.reusableFontRecord({
+          family: style.dataset.fontFamily,
+          label: style.dataset.fontLabel,
+          fileName: style.dataset.fontFile,
+          format: formatMatch[1].toLowerCase(),
+          dataUrl: urlMatch[2]
         });
       }
 
@@ -3757,9 +3775,22 @@
         return this.registerImportedFontOption(font.family, font.label);
       }
 
-      async restoreReusableFonts() {
+      async restoreReusableFonts(embeddedFonts = []) {
         try {
-          const records = await this.readReusableFonts();
+          const records = (await this.readReusableFonts())
+            .map((record) => this.reusableFontRecord(record))
+            .filter(Boolean);
+          const knownFamilies = new Set(records.map((record) => record?.family).filter(Boolean));
+          for (const record of embeddedFonts) {
+            if (knownFamilies.has(record.family)) continue;
+            try {
+              await this.saveReusableFont(record);
+              records.push(record);
+              knownFamilies.add(record.family);
+            } catch (error) {
+              // The embedded font still works in this file when browser storage is unavailable.
+            }
+          }
           records.forEach((record) => this.installReusableFont(record));
           return records.length;
         } catch (error) {
@@ -5892,6 +5923,7 @@
         document.body.classList.toggle("editor-on", state.bodyEditorOn);
         this.renderSlideRail();
         await this.waitForAnimationFrames(1);
+        this.stage.querySelectorAll(".editor-selected").forEach((element) => element.classList.remove("editor-selected"));
         if (state.selected?.isConnected) this.select(state.selected);
         else this.clearSelection();
       }

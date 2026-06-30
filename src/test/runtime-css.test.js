@@ -21,4 +21,11 @@ describe("editor runtime css", () => {
     expect(editorCss).toContain("max-height: min(320px, 38dvh);");
     expect(editorCss).toContain("overscroll-behavior: contain;");
   });
+
+  it("keeps edit outlines normally but disables every editing-only rule during export", () => {
+    expect(editorCss).toContain("body.editing:not(.html-deck-editor-exporting) [data-editable]");
+    expect(editorCss).toContain("outline: 1px dashed rgba(31, 43, 224, 0.92);");
+    const unguardedEditingSelectors = editorCss.match(/body\.editing(?!:not\(\.html-deck-editor-exporting\))/g) || [];
+    expect(unguardedEditingSelectors).toEqual([]);
+  });
 });

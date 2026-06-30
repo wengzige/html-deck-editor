@@ -48,22 +48,22 @@
       box-sizing: border-box;
     }
 
-    body.editing .editor-shell[data-html-deck-editor-ui] {
+    body.editing:not(.html-deck-editor-exporting) .editor-shell[data-html-deck-editor-ui] {
       visibility: visible;
       opacity: 1;
     }
 
-    body.editing [data-html-deck-editor-stage="preserve"] {
+    body.editing:not(.html-deck-editor-exporting) [data-html-deck-editor-stage="preserve"] {
       transform: translate(var(--html-deck-editor-stage-x, 0px), var(--html-deck-editor-stage-y, 0px)) scale(var(--html-deck-editor-stage-scale, 1)) translateX(calc(var(--html-deck-editor-slide-offset-x, 0px) * -1)) !important;
       transform-origin: top left;
     }
 
-    body.editing [data-html-deck-editor-stage="preserve"] [data-html-deck-editor-page]:not([data-html-deck-editor-current]) {
+    body.editing:not(.html-deck-editor-exporting) [data-html-deck-editor-stage="preserve"] [data-html-deck-editor-page]:not([data-html-deck-editor-current]) {
       visibility: hidden;
       pointer-events: none;
     }
 
-    body.editing [data-html-deck-editor-stage="preserve"] [data-html-deck-editor-page][data-html-deck-editor-current] {
+    body.editing:not(.html-deck-editor-exporting) [data-html-deck-editor-stage="preserve"] [data-html-deck-editor-page][data-html-deck-editor-current] {
       visibility: visible !important;
       pointer-events: auto;
       outline-style: dashed;
@@ -1252,17 +1252,17 @@
       transform: translate(var(--edit-x, 0px), var(--edit-y, 0px)) scale(var(--edit-scale-x, var(--edit-scale, 1)), var(--edit-scale-y, var(--edit-scale, 1))) var(--edit-base-transform, matrix(1, 0, 0, 1, 0, 0));
     }
 
-    body.editing .editor-anim-fade:not(.editor-motion-preview):not(.editor-motion-running),
-    body.editing .editor-anim-rise:not(.editor-motion-preview):not(.editor-motion-running),
-    body.editing .editor-anim-drop:not(.editor-motion-preview):not(.editor-motion-running),
-    body.editing .editor-anim-left:not(.editor-motion-preview):not(.editor-motion-running),
-    body.editing .editor-anim-right:not(.editor-motion-preview):not(.editor-motion-running),
-    body.editing .editor-anim-scale:not(.editor-motion-preview):not(.editor-motion-running),
-    body.editing .editor-anim-zoom:not(.editor-motion-preview):not(.editor-motion-running),
-    body.editing .editor-anim-pop:not(.editor-motion-preview):not(.editor-motion-running),
-    body.editing .editor-anim-rotate:not(.editor-motion-preview):not(.editor-motion-running),
-    body.editing .editor-anim-blur:not(.editor-motion-preview):not(.editor-motion-running),
-    body.editing .editor-anim-flip:not(.editor-motion-preview):not(.editor-motion-running) {
+    body.editing:not(.html-deck-editor-exporting) .editor-anim-fade:not(.editor-motion-preview):not(.editor-motion-running),
+    body.editing:not(.html-deck-editor-exporting) .editor-anim-rise:not(.editor-motion-preview):not(.editor-motion-running),
+    body.editing:not(.html-deck-editor-exporting) .editor-anim-drop:not(.editor-motion-preview):not(.editor-motion-running),
+    body.editing:not(.html-deck-editor-exporting) .editor-anim-left:not(.editor-motion-preview):not(.editor-motion-running),
+    body.editing:not(.html-deck-editor-exporting) .editor-anim-right:not(.editor-motion-preview):not(.editor-motion-running),
+    body.editing:not(.html-deck-editor-exporting) .editor-anim-scale:not(.editor-motion-preview):not(.editor-motion-running),
+    body.editing:not(.html-deck-editor-exporting) .editor-anim-zoom:not(.editor-motion-preview):not(.editor-motion-running),
+    body.editing:not(.html-deck-editor-exporting) .editor-anim-pop:not(.editor-motion-preview):not(.editor-motion-running),
+    body.editing:not(.html-deck-editor-exporting) .editor-anim-rotate:not(.editor-motion-preview):not(.editor-motion-running),
+    body.editing:not(.html-deck-editor-exporting) .editor-anim-blur:not(.editor-motion-preview):not(.editor-motion-running),
+    body.editing:not(.html-deck-editor-exporting) .editor-anim-flip:not(.editor-motion-preview):not(.editor-motion-running) {
       opacity: 1 !important;
       filter: none !important;
       animation: none !important;
@@ -1270,14 +1270,14 @@
       transform: translate(var(--edit-x, 0px), var(--edit-y, 0px)) scale(var(--edit-scale-x, var(--edit-scale, 1)), var(--edit-scale-y, var(--edit-scale, 1))) var(--edit-base-transform, matrix(1, 0, 0, 1, 0, 0)) !important;
     }
 
-    body.editing .slide[data-html-deck-editor-current] [data-html-deck-editor-motion-hold]:not(.editor-motion-preview):not(.editor-motion-running) {
+    body.editing:not(.html-deck-editor-exporting) .slide[data-html-deck-editor-current] [data-html-deck-editor-motion-hold]:not(.editor-motion-preview):not(.editor-motion-running) {
       opacity: var(--html-deck-editor-edit-opacity, 1) !important;
       filter: none !important;
       animation: none !important;
       transition: none !important;
     }
 
-    body.editing .slide[data-html-deck-editor-current] .edit-moved:not(.editor-motion-preview):not(.editor-motion-running) {
+    body.editing:not(.html-deck-editor-exporting) .slide[data-html-deck-editor-current] .edit-moved:not(.editor-motion-preview):not(.editor-motion-running) {
       animation: none !important;
       transition: none !important;
       transform: translate(var(--edit-x, 0px), var(--edit-y, 0px)) scale(var(--edit-scale-x, var(--edit-scale, 1)), var(--edit-scale-y, var(--edit-scale, 1))) var(--edit-base-transform, matrix(1, 0, 0, 1, 0, 0)) !important;
@@ -1604,8 +1604,8 @@
       pointer-events: auto;
     }
 
-    body.editing [data-editable],
-    body.editing [data-editor-kind="text"] {
+    body.editing:not(.html-deck-editor-exporting) [data-editable],
+    body.editing:not(.html-deck-editor-exporting) [data-editor-kind="text"] {
       outline: 1px dashed rgba(31, 43, 224, 0.92);
       outline-offset: 4px;
       box-shadow:
@@ -1616,17 +1616,17 @@
       -webkit-user-select: text;
     }
 
-    body.editing [data-editable] *,
-    body.editing [data-editor-kind="text"] * {
+    body.editing:not(.html-deck-editor-exporting) [data-editable] *,
+    body.editing:not(.html-deck-editor-exporting) [data-editor-kind="text"] * {
       user-select: text;
       -webkit-user-select: text;
     }
 
-    body.editing [data-editable-media],
-    body.editing [data-editable-box],
-    body.editing [data-editor-kind="media"],
-    body.editing [data-editor-kind="box"],
-    body.editing .editor-layer {
+    body.editing:not(.html-deck-editor-exporting) [data-editable-media],
+    body.editing:not(.html-deck-editor-exporting) [data-editable-box],
+    body.editing:not(.html-deck-editor-exporting) [data-editor-kind="media"],
+    body.editing:not(.html-deck-editor-exporting) [data-editor-kind="box"],
+    body.editing:not(.html-deck-editor-exporting) .editor-layer {
       outline: 1px dashed rgba(31, 43, 224, 0.92);
       outline-offset: 4px;
       box-shadow:
@@ -1635,31 +1635,31 @@
       cursor: pointer;
     }
 
-    body.editing [data-editor-small="true"] {
+    body.editing:not(.html-deck-editor-exporting) [data-editor-small="true"] {
       outline-offset: 7px;
     }
 
-    body.editing .editor-selected {
+    body.editing:not(.html-deck-editor-exporting) .editor-selected {
       outline: none !important;
       box-shadow: none !important;
     }
 
-    body.editing.commenting [data-editable],
-    body.editing.commenting [data-editable-media],
-    body.editing.commenting [data-editable-box],
-    body.editing.commenting [data-editor-kind],
-    body.editing.commenting .editor-layer {
+    body.editing:not(.html-deck-editor-exporting).commenting [data-editable],
+    body.editing:not(.html-deck-editor-exporting).commenting [data-editable-media],
+    body.editing:not(.html-deck-editor-exporting).commenting [data-editable-box],
+    body.editing:not(.html-deck-editor-exporting).commenting [data-editor-kind],
+    body.editing:not(.html-deck-editor-exporting).commenting .editor-layer {
       cursor: copy;
     }
 
-    body.editing [data-ai-commented]:not(.editor-selected) {
+    body.editing:not(.html-deck-editor-exporting) [data-ai-commented]:not(.editor-selected) {
       outline-color: rgba(255, 61, 139, 0.92);
       box-shadow:
         0 0 0 2px rgba(255, 255, 255, 0.92),
         0 0 0 4px rgba(255, 61, 139, 0.22);
     }
 
-    body.editing.dragging-file .slide.active {
+    body.editing:not(.html-deck-editor-exporting).dragging-file .slide.active {
       box-shadow: inset 0 0 0 12px rgba(31, 43, 224, 0.14);
     }
 

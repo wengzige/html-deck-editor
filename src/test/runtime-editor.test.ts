@@ -1275,6 +1275,40 @@ describe("editor runtime", () => {
     expect(document.querySelector("style[data-html-deck-editor-font]")?.textContent).toContain("data:font/woff2;base64");
   });
 
+  it("migrates a font embedded by an older runtime into the reusable browser library", async () => {
+    const fontLibrary = installFontLibraryIndexedDbStub();
+    document.head.innerHTML = `
+      <style
+        data-html-deck-editor-font="imported"
+        data-font-family="HtmlDeckImported_Legacy"
+        data-font-label="旧记录字体"
+        data-font-file="legacy.woff2"
+      >@font-face { font-family: "HtmlDeckImported_Legacy"; src: url("data:font/woff2;base64,d09GMgABAAAA") format("woff2"); font-style: normal; font-weight: 400; }</style>
+    `;
+    document.body.innerHTML = `
+      <div id="deckStage" class="deck-stage">
+        <section class="slide active"><h1 data-editable>旧字体记录</h1></section>
+      </div>
+    `;
+    installRuntime();
+    const editor = (window as any).FrontendSlidesEditor.mount();
+    await editor.fontLibraryReady;
+
+    expect(fontLibrary.get("HtmlDeckImported_Legacy")).toMatchObject({
+      label: "旧记录字体",
+      fileName: "legacy.woff2",
+      format: "woff2"
+    });
+
+    editor.destroy();
+    document.querySelectorAll("[data-html-deck-editor-ui]").forEach((node) => node.remove());
+    document.querySelectorAll("style[data-html-deck-editor-font]").forEach((node) => node.remove());
+    const remounted = (window as any).FrontendSlidesEditor.mount();
+    await remounted.fontLibraryReady;
+    expect(remounted.controls.importedFontGroup.textContent).toContain("旧记录字体");
+    expect(document.querySelector("style[data-font-family='HtmlDeckImported_Legacy']")).toBeTruthy();
+  });
+
   it("keeps all six batch-export captures free of editor selection state", async () => {
     document.title = "六页导出";
     document.body.innerHTML = `
@@ -1298,6 +1332,9 @@ describe("editor runtime", () => {
       expect(document.body.classList.contains("editing")).toBe(false);
       expect(document.body.classList.contains("editor-on")).toBe(false);
       expect(slide.querySelector(".editor-selected")).toBeNull();
+      document.body.classList.add("editing", "editor-on");
+      slide.querySelectorAll("h1").forEach((title) => title.classList.add("editor-selected"));
+      expect(document.body.classList.contains("html-deck-editor-exporting")).toBe(true);
       return {
         width: 3840,
         height: 2160,
@@ -1320,6 +1357,9 @@ describe("editor runtime", () => {
       (editor.controls.exportModal.querySelector("input[value='png']") as HTMLInputElement).checked = true;
       await editor.exportSelectedPages();
       expect(toCanvas).toHaveBeenCalledTimes(6);
+      expect(document.body.classList.contains("editing")).toBe(true);
+      expect(editor.selected).toBe(firstTitle);
+      expect(Array.from(document.querySelectorAll(".editor-selected"))).toEqual([firstTitle]);
     } finally {
       document.removeEventListener("slidechange", reapplyHostEditingState);
     }

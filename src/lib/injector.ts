@@ -594,7 +594,10 @@ function removeLegacyEditorArtifacts(doc: Document, options: { upgradeExistingEd
     }
   });
 
-  doc.body.classList.remove("editing", "editor-on", "dragging-file");
+  doc.body.classList.remove("editing", "editor-on", "dragging-file", "html-deck-editor-exporting");
+  if (options.upgradeExistingEditor) {
+    doc.querySelectorAll(".editor-selected").forEach((node) => node.classList.remove("editor-selected"));
+  }
 }
 
 function cleanupLegacyEditorScript(source: string): string | null {
