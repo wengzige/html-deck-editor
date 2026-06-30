@@ -737,7 +737,10 @@ ${s.documentElement.outerHTML}`,plan:c,preview:jf(s,c)}}function Pf(o,h){const s
         <button class="toolbar-help-button" id="aiExportHelpBtn" type="button" title="for-ai.md 使用说明" aria-label="for-ai.md 使用说明">?</button>
       </div>
       <button class="editor-button" id="exportBtn" type="button">导出 PDF / 图片</button>
-      <button class="editor-button primary" id="saveBtn" type="button" title="覆盖当前 index.html；不支持覆盖时下载替换文件">保存 HTML</button>
+      <div class="toolbar-action-group save-action-group">
+        <button class="editor-button primary" id="saveBtn" type="button" title="覆盖当前 index.html；不支持覆盖时下载替换文件">保存 HTML</button>
+        <button class="toolbar-help-button" id="saveHelpBtn" type="button" title="保存 HTML 说明" aria-label="保存 HTML 说明">?</button>
+      </div>
       <button class="editor-button danger" id="exitEditBtn" type="button">退出编辑</button>
     </div>
     <div class="editor-help-modal" id="editorHelp" role="dialog" aria-modal="true" aria-labelledby="editorHelpTitle" hidden>
@@ -810,6 +813,36 @@ ${s.documentElement.outerHTML}`,plan:c,preview:jf(s,c)}}function Pf(o,h){const s
               <li>AI 会按文件里的要求保留现有图片和资源路径，并返回完整的 index.html；不需要再补充提示。</li>
               <li>收到 index.html 后，用它替换原项目中的同名文件，并保留原来的 assets 文件夹和目录结构，否则图片可能无法显示。</li>
               <li>“保存 HTML”只保存当前页面，不会把批注或 anchor 写进正式 HTML。</li>
+            </ul>
+          </section>
+        </div>
+      </div>
+    </div>
+    <div class="editor-help-modal" id="saveHtmlHelp" role="dialog" aria-modal="true" aria-labelledby="saveHtmlHelpTitle" hidden>
+      <div class="editor-help-card">
+        <div class="editor-help-header">
+          <h2 class="editor-help-title" id="saveHtmlHelpTitle">保存 HTML 说明</h2>
+          <button class="editor-help-close" id="saveHtmlHelpCloseBtn" type="button" aria-label="关闭">×</button>
+        </div>
+        <div class="editor-help-body">
+          <section class="editor-help-section">
+            <h3>它会保存什么</h3>
+            <p>“保存 HTML”会把当前画面写入 index.html。浏览器允许覆盖时会直接写回你授权的文件；不支持覆盖时会下载新的 index.html。</p>
+          </section>
+          <section class="editor-help-section">
+            <h3>图片和目录怎么处理</h3>
+            <ul>
+              <li>原项目已有图片、背景图和 runtime 文件仍按 HTML 里的相对路径读取。</li>
+              <li>下载得到的 index.html 请放回原项目目录替换同名文件，并保留原来的 assets、runtime 和目录结构，否则图片或编辑器脚本可能无法显示。</li>
+              <li>你在编辑器里新增或替换的图片会写成内嵌 Data URL，通常不依赖外部图片文件。</li>
+            </ul>
+          </section>
+          <section class="editor-help-section">
+            <h3>怎么用</h3>
+            <ul>
+              <li>想继续编辑原项目：用保存或下载的 index.html 替换原项目里的同名文件。</li>
+              <li>想转发或搬走：请连同整个项目文件夹一起复制，不要只拿单个 HTML。</li>
+              <li>“导出 for-ai.md”只是给 AI 的交接文件；“保存 HTML”不会把批注或 anchor 写进正式 HTML。</li>
             </ul>
           </section>
         </div>
@@ -1599,6 +1632,9 @@ ${s.documentElement.outerHTML}`,plan:c,preview:jf(s,c)}}function Pf(o,h){const s
           aiExportHelp: this.control("aiExportHelpBtn"),
           aiExportHelpModal: this.control("aiExportHelp"),
           aiExportHelpClose: this.control("aiExportHelpCloseBtn"),
+          saveHelp: this.control("saveHelpBtn"),
+          saveHelpModal: this.control("saveHtmlHelp"),
+          saveHelpClose: this.control("saveHtmlHelpCloseBtn"),
           resetHelp: this.control("resetHelpBtn"),
           resetHelpModal: this.control("resetHelp"),
           resetHelpClose: this.control("resetHelpCloseBtn"),
@@ -2396,6 +2432,11 @@ ${s.documentElement.outerHTML}`,plan:c,preview:jf(s,c)}}function Pf(o,h){const s
         this.controls.aiExportHelpModal.addEventListener("click", (event) => {
           if (event.target === this.controls.aiExportHelpModal) this.closeAiExportHelp();
         });
+        this.controls.saveHelp.addEventListener("click", () => this.openSaveHelp());
+        this.controls.saveHelpClose.addEventListener("click", () => this.closeSaveHelp());
+        this.controls.saveHelpModal.addEventListener("click", (event) => {
+          if (event.target === this.controls.saveHelpModal) this.closeSaveHelp();
+        });
         this.controls.resetHelp.addEventListener("click", () => this.openResetHelp());
         this.controls.resetHelpClose.addEventListener("click", () => this.closeResetHelp());
         this.controls.resetHelpModal.addEventListener("click", (event) => {
@@ -2736,6 +2777,12 @@ ${s.documentElement.outerHTML}`,plan:c,preview:jf(s,c)}}function Pf(o,h){const s
           this.closeAiExportHelp();
           return;
         }
+        if (event.key === "Escape" && !this.controls.saveHelpModal.hidden) {
+          event.preventDefault();
+          event.stopPropagation();
+          this.closeSaveHelp();
+          return;
+        }
         if (event.key === "Escape" && !this.controls.helpModal.hidden) {
           event.preventDefault();
           event.stopPropagation();
@@ -2835,6 +2882,14 @@ ${s.documentElement.outerHTML}`,plan:c,preview:jf(s,c)}}function Pf(o,h){const s
 
       closeAiExportHelp() {
         this.controls.aiExportHelpModal.hidden = true;
+      }
+
+      openSaveHelp() {
+        this.controls.saveHelpModal.hidden = false;
+      }
+
+      closeSaveHelp() {
+        this.controls.saveHelpModal.hidden = true;
       }
 
       openResetHelp() {
@@ -6603,11 +6658,12 @@ ${s.documentElement.outerHTML}`,plan:c,preview:jf(s,c)}}function Pf(o,h){const s
             this.updateExportProgress(\`正在渲染第 \${index + 1} 页\`, position, indexes.length);
             this.presentation.showSlide(index);
             this.refreshEditableElements();
-            await this.waitForAnimationFrames(2);
+            const slide = this.presentation.slides[index];
+            this.replayActiveSlideMotion(false);
+            const animations = await this.waitForSlideAnimations(slide);
             this.throwIfExportCanceled();
             this.enforceCleanExportState();
-            const slide = this.presentation.slides[index];
-            captures.push(await this.captureExportSlide(slide, index));
+            captures.push(await this.captureExportSlide(slide, index, animations));
             this.updateExportProgress(\`已完成第 \${index + 1} 页\`, position + 1, indexes.length);
             this.throwIfExportCanceled();
           }
@@ -6673,6 +6729,7 @@ ${s.documentElement.outerHTML}`,plan:c,preview:jf(s,c)}}function Pf(o,h){const s
       async restoreExportState(state) {
         this.presentation.showSlide(state.currentSlide);
         this.presentation.setEditorInsets?.(state.editorInsets);
+        document.body.classList.remove("html-deck-editor-export-capturing");
         document.body.classList.remove("html-deck-editor-exporting");
         document.body.classList.toggle("editing", state.bodyEditing);
         document.body.classList.toggle("editor-on", state.bodyEditorOn);
@@ -6724,6 +6781,79 @@ ${s.documentElement.outerHTML}`,plan:c,preview:jf(s,c)}}function Pf(o,h){const s
           };
           next();
         });
+      }
+
+      async waitForSlideAnimations(slide) {
+        await this.waitForAnimationFrames(2);
+        if (!slide || typeof slide.getAnimations !== "function") return [];
+        const animations = slide.getAnimations({ subtree: true }).filter((animation) => animation.playState !== "idle");
+        const pending = animations.filter((animation) => {
+          const endTime = Number(animation.effect?.getComputedTiming?.().endTime);
+          return animation.playState !== "finished" && Number.isFinite(endTime);
+        });
+        if (pending.length) {
+          const remaining = pending.reduce((max, animation) => {
+            const endTime = Number(animation.effect?.getComputedTiming?.().endTime) || 0;
+            const currentTime = Number(animation.currentTime) || 0;
+            const playbackRate = Math.abs(Number(animation.playbackRate)) || 1;
+            return Math.max(max, (endTime - currentTime) / playbackRate);
+          }, 0);
+          const timeoutMs = Math.min(8000, Math.max(250, remaining + 160));
+          const result = await new Promise((resolve) => {
+            const timeout = window.setTimeout(() => resolve("timeout"), timeoutMs);
+            Promise.allSettled(pending.map((animation) => animation.finished)).then(() => {
+              window.clearTimeout(timeout);
+              resolve("finished");
+            });
+          });
+          if (result === "timeout") {
+            pending.forEach((animation) => {
+              try {
+                animation.finish();
+              } catch (error) {
+                // Some host animations cannot be finished programmatically.
+              }
+            });
+          }
+        }
+        await this.waitForAnimationFrames(1);
+        return animations;
+      }
+
+      freezeSlideAnimationsForExport(slide, animations = []) {
+        const restore = [];
+        const propertiesByTarget = new Map();
+        animations.forEach((animation) => {
+          const target = animation.effect?.target;
+          if (!(target instanceof Element) || (target !== slide && !slide.contains(target))) return;
+          const properties = propertiesByTarget.get(target) || new Set();
+          let keyframes = [];
+          try {
+            keyframes = animation.effect?.getKeyframes?.() || [];
+          } catch (error) {
+            keyframes = [];
+          }
+          keyframes.forEach((keyframe) => {
+            Object.keys(keyframe).forEach((property) => {
+              if (["offset", "computedOffset", "easing", "composite"].includes(property)) return;
+              properties.add(property.startsWith("--") ? property : property.replace(/[A-Z]/g, (letter) => \`-\${letter.toLowerCase()}\`));
+            });
+          });
+          if (!properties.size) ["opacity", "visibility", "filter", "transform"].forEach((property) => properties.add(property));
+          propertiesByTarget.set(target, properties);
+        });
+        propertiesByTarget.forEach((properties, target) => {
+          const computed = getComputedStyle(target);
+          properties.forEach((property) => {
+            const value = computed.getPropertyValue(property);
+            if (!value) return;
+            this.rememberInlineStyle(target, property, restore);
+            target.style.setProperty(property, value, "important");
+          });
+        });
+        return () => {
+          for (let index = restore.length - 1; index >= 0; index -= 1) restore[index]();
+        };
       }
 
       shortResourceUrl(value) {
@@ -7135,14 +7265,17 @@ ${s.documentElement.outerHTML}`,plan:c,preview:jf(s,c)}}function Pf(o,h){const s
         return "#ffffff";
       }
 
-      async captureExportSlide(slide, index) {
+      async captureExportSlide(slide, index, animations = []) {
         if (!slide) throw new Error(\`第 \${index + 1} 页不存在\`);
         const size = elementDesignSize(slide, stageDesignSize(this.stage));
-        const restore = await this.prepareSlideForExport(slide, index);
-        this.enforceCleanExportState();
+        const restoreAnimations = this.freezeSlideAnimationsForExport(slide, animations);
+        document.body.classList.add("html-deck-editor-export-capturing");
+        let restore = () => {};
         let imageError = false;
         let canvas;
         try {
+          restore = await this.prepareSlideForExport(slide, index);
+          this.enforceCleanExportState();
           const options = {
             pixelRatio: 2,
             width: Math.round(size.width),
@@ -7160,6 +7293,8 @@ ${s.documentElement.outerHTML}`,plan:c,preview:jf(s,c)}}function Pf(o,h){const s
           throw new Error(\`第 \${index + 1} 页渲染失败：\${error?.message || "未知错误"}\`);
         } finally {
           restore();
+          document.body.classList.remove("html-deck-editor-export-capturing");
+          restoreAnimations();
         }
         if (imageError) throw new Error(\`第 \${index + 1} 页包含无法读取的图片，已停止导出\`);
         if (!canvas?.width || !canvas?.height) throw new Error(\`第 \${index + 1} 页渲染结果为空\`);
@@ -7542,7 +7677,8 @@ ${s.documentElement.outerHTML}`,plan:c,preview:jf(s,c)}}function Pf(o,h){const s
       min-width: 0;
     }
 
-    .editor-shell[data-html-deck-editor-ui] .ai-export-group #aiExportBtn {
+    .editor-shell[data-html-deck-editor-ui] .ai-export-group #aiExportBtn,
+    .editor-shell[data-html-deck-editor-ui] .save-action-group #saveBtn {
       padding-right: 36px;
     }
 
@@ -8086,6 +8222,19 @@ ${s.documentElement.outerHTML}`,plan:c,preview:jf(s,c)}}function Pf(o,h){const s
       outline: none;
     }
 
+    .editor-shell[data-html-deck-editor-ui] .save-action-group .toolbar-help-button {
+      border-color: rgba(255, 255, 255, 0.32);
+      background: rgba(255, 255, 255, 0.1);
+      color: rgba(255, 255, 255, 0.7);
+    }
+
+    .editor-shell[data-html-deck-editor-ui] .save-action-group .toolbar-help-button:hover,
+    .editor-shell[data-html-deck-editor-ui] .save-action-group .toolbar-help-button:focus-visible {
+      border-color: rgba(255, 255, 255, 0.56);
+      background: rgba(255, 255, 255, 0.16);
+      color: rgba(255, 255, 255, 0.92);
+    }
+
     .editor-shell[data-html-deck-editor-ui] .editor-confirm-message {
       margin: 0;
       color: rgba(17, 17, 17, 0.72);
@@ -8376,8 +8525,8 @@ ${s.documentElement.outerHTML}`,plan:c,preview:jf(s,c)}}function Pf(o,h){const s
       border-top: 1px solid rgba(17, 17, 17, 0.1);
     }
 
-    body.html-deck-editor-exporting .slide,
-    body.html-deck-editor-exporting .slide * {
+    body.html-deck-editor-export-capturing .slide,
+    body.html-deck-editor-export-capturing .slide * {
       animation: none !important;
       transition: none !important;
       caret-color: transparent !important;
