@@ -2531,6 +2531,9 @@ describe("editor runtime", () => {
 
     const markdown = editor.buildAiHandoffMarkdown();
     expect(markdown).toContain("保持 deck-stage 结构");
+    expect(markdown).toContain("保留现有图片和其他资源路径");
+    expect(markdown).toContain("不要重命名、移动或删除资源文件");
+    expect(markdown).toContain("返回完整、可保存为 index.html 的 HTML");
     expect(markdown).toContain(anchor);
     expect(markdown).toContain("把标题改得更具体");
     expect(markdown).toContain("Original title");
@@ -2586,6 +2589,9 @@ describe("editor runtime", () => {
     expect(modal.textContent).toContain("for-ai.md 是给外部 AI");
     expect(modal.textContent).toContain("保持 deck-stage 和 slide 层级");
     expect(modal.textContent).toContain("右侧 AI 批注");
+    expect(modal.textContent).toContain("不需要再补充提示");
+    expect(modal.textContent).toContain("替换原项目中的同名文件");
+    expect(modal.textContent).toContain("保留原来的 assets 文件夹和目录结构");
     expect(modal.textContent).not.toContain("用户自己的 API");
     expect(modal.textContent).not.toContain("这一步可以自动化");
 
