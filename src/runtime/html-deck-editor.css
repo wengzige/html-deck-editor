@@ -1071,8 +1071,8 @@
       border-top: 1px solid rgba(17, 17, 17, 0.1);
     }
 
-    body.html-deck-editor-exporting .slide,
-    body.html-deck-editor-exporting .slide * {
+    body.html-deck-editor-export-capturing .slide,
+    body.html-deck-editor-export-capturing .slide * {
       animation: none !important;
       transition: none !important;
       caret-color: transparent !important;

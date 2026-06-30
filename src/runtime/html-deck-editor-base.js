@@ -6006,11 +6006,12 @@
             this.updateExportProgress(`正在渲染第 ${index + 1} 页`, position, indexes.length);
             this.presentation.showSlide(index);
             this.refreshEditableElements();
-            await this.waitForAnimationFrames(2);
+            const slide = this.presentation.slides[index];
+            this.replayActiveSlideMotion(false);
+            const animations = await this.waitForSlideAnimations(slide);
             this.throwIfExportCanceled();
             this.enforceCleanExportState();
-            const slide = this.presentation.slides[index];
-            captures.push(await this.captureExportSlide(slide, index));
+            captures.push(await this.captureExportSlide(slide, index, animations));
             this.updateExportProgress(`已完成第 ${index + 1} 页`, position + 1, indexes.length);
             this.throwIfExportCanceled();
           }
@@ -6076,6 +6077,7 @@
       async restoreExportState(state) {
         this.presentation.showSlide(state.currentSlide);
         this.presentation.setEditorInsets?.(state.editorInsets);
+        document.body.classList.remove("html-deck-editor-export-capturing");
         document.body.classList.remove("html-deck-editor-exporting");
         document.body.classList.toggle("editing", state.bodyEditing);
         document.body.classList.toggle("editor-on", state.bodyEditorOn);
@@ -6127,6 +6129,79 @@
           };
           next();
         });
+      }
+
+      async waitForSlideAnimations(slide) {
+        await this.waitForAnimationFrames(2);
+        if (!slide || typeof slide.getAnimations !== "function") return [];
+        const animations = slide.getAnimations({ subtree: true }).filter((animation) => animation.playState !== "idle");
+        const pending = animations.filter((animation) => {
+          const endTime = Number(animation.effect?.getComputedTiming?.().endTime);
+          return animation.playState !== "finished" && Number.isFinite(endTime);
+        });
+        if (pending.length) {
+          const remaining = pending.reduce((max, animation) => {
+            const endTime = Number(animation.effect?.getComputedTiming?.().endTime) || 0;
+            const currentTime = Number(animation.currentTime) || 0;
+            const playbackRate = Math.abs(Number(animation.playbackRate)) || 1;
+            return Math.max(max, (endTime - currentTime) / playbackRate);
+          }, 0);
+          const timeoutMs = Math.min(8000, Math.max(250, remaining + 160));
+          const result = await new Promise((resolve) => {
+            const timeout = window.setTimeout(() => resolve("timeout"), timeoutMs);
+            Promise.allSettled(pending.map((animation) => animation.finished)).then(() => {
+              window.clearTimeout(timeout);
+              resolve("finished");
+            });
+          });
+          if (result === "timeout") {
+            pending.forEach((animation) => {
+              try {
+                animation.finish();
+              } catch (error) {
+                // Some host animations cannot be finished programmatically.
+              }
+            });
+          }
+        }
+        await this.waitForAnimationFrames(1);
+        return animations;
+      }
+
+      freezeSlideAnimationsForExport(slide, animations = []) {
+        const restore = [];
+        const propertiesByTarget = new Map();
+        animations.forEach((animation) => {
+          const target = animation.effect?.target;
+          if (!(target instanceof Element) || (target !== slide && !slide.contains(target))) return;
+          const properties = propertiesByTarget.get(target) || new Set();
+          let keyframes = [];
+          try {
+            keyframes = animation.effect?.getKeyframes?.() || [];
+          } catch (error) {
+            keyframes = [];
+          }
+          keyframes.forEach((keyframe) => {
+            Object.keys(keyframe).forEach((property) => {
+              if (["offset", "computedOffset", "easing", "composite"].includes(property)) return;
+              properties.add(property.startsWith("--") ? property : property.replace(/[A-Z]/g, (letter) => `-${letter.toLowerCase()}`));
+            });
+          });
+          if (!properties.size) ["opacity", "visibility", "filter", "transform"].forEach((property) => properties.add(property));
+          propertiesByTarget.set(target, properties);
+        });
+        propertiesByTarget.forEach((properties, target) => {
+          const computed = getComputedStyle(target);
+          properties.forEach((property) => {
+            const value = computed.getPropertyValue(property);
+            if (!value) return;
+            this.rememberInlineStyle(target, property, restore);
+            target.style.setProperty(property, value, "important");
+          });
+        });
+        return () => {
+          for (let index = restore.length - 1; index >= 0; index -= 1) restore[index]();
+        };
       }
 
       shortResourceUrl(value) {
@@ -6538,14 +6613,17 @@
         return "#ffffff";
       }
 
-      async captureExportSlide(slide, index) {
+      async captureExportSlide(slide, index, animations = []) {
         if (!slide) throw new Error(`第 ${index + 1} 页不存在`);
         const size = elementDesignSize(slide, stageDesignSize(this.stage));
-        const restore = await this.prepareSlideForExport(slide, index);
-        this.enforceCleanExportState();
+        const restoreAnimations = this.freezeSlideAnimationsForExport(slide, animations);
+        document.body.classList.add("html-deck-editor-export-capturing");
+        let restore = () => {};
         let imageError = false;
         let canvas;
         try {
+          restore = await this.prepareSlideForExport(slide, index);
+          this.enforceCleanExportState();
           const options = {
             pixelRatio: 2,
             width: Math.round(size.width),
@@ -6563,6 +6641,8 @@
           throw new Error(`第 ${index + 1} 页渲染失败：${error?.message || "未知错误"}`);
         } finally {
           restore();
+          document.body.classList.remove("html-deck-editor-export-capturing");
+          restoreAnimations();
         }
         if (imageError) throw new Error(`第 ${index + 1} 页包含无法读取的图片，已停止导出`);
         if (!canvas?.width || !canvas?.height) throw new Error(`第 ${index + 1} 页渲染结果为空`);

@@ -1680,6 +1680,68 @@ describe("editor runtime", () => {
     expect(hero.getAttribute("srcset")).toBe("assets/3.webp 1x");
   });
 
+  it("waits for finite slide animations before capturing the page", async () => {
+    document.body.innerHTML = `
+      <div id="deckStage" class="deck-stage">
+        <section class="slide active"><div id="animated" style="opacity:1">动画内容</div></section>
+      </div>
+    `;
+    installRuntime();
+    const editor = (window as any).FrontendSlidesEditor.mount();
+    const slide = editor.presentation.slides[0] as HTMLElement;
+    const animated = document.getElementById("animated") as HTMLElement;
+    let finishAnimation!: () => void;
+    let animationFinished = false;
+    const finished = new Promise<void>((resolve) => {
+      finishAnimation = () => {
+        animationFinished = true;
+        resolve();
+      };
+    });
+    Object.defineProperty(slide, "getAnimations", {
+      configurable: true,
+      value: vi.fn(() => [{
+        currentTime: 0,
+        playbackRate: 1,
+        playState: animationFinished ? "finished" : "running",
+        finished,
+        effect: {
+          target: animated,
+          getComputedTiming: () => ({ endTime: 1200 }),
+          getKeyframes: () => [{ opacity: "0" }, { opacity: "1" }]
+        }
+      }])
+    });
+    const captureCanvas = {
+      width: 3840,
+      height: 2160,
+      toBlob: vi.fn((callback: (blob: Blob) => void) => callback(new Blob(["png"], { type: "image/png" }))),
+      toDataURL: vi.fn(() => "data:image/png;base64,AA==")
+    };
+    const toCanvas = vi.fn(async () => {
+      expect(animationFinished).toBe(true);
+      expect(document.body.classList.contains("html-deck-editor-export-capturing")).toBe(true);
+      return captureCanvas;
+    });
+    vi.stubGlobal("htmlToImage", { toCanvas });
+    vi.stubGlobal("requestAnimationFrame", (callback: FrameRequestCallback) => { callback(0); return 1; });
+    vi.spyOn(editor, "downloadBlob").mockImplementation(() => undefined);
+
+    editor.openExportModal();
+    (editor.controls.exportModal.querySelector("input[value='png']") as HTMLInputElement).checked = true;
+    const exportPromise = editor.exportSelectedPages();
+    await new Promise((resolve) => window.setTimeout(resolve, 0));
+
+    expect(document.body.classList.contains("html-deck-editor-exporting")).toBe(true);
+    expect(toCanvas).not.toHaveBeenCalled();
+
+    finishAnimation();
+    await exportPromise;
+
+    expect(toCanvas).toHaveBeenCalledOnce();
+    expect(document.body.classList.contains("html-deck-editor-export-capturing")).toBe(false);
+  });
+
   it("makes animation-hidden text ancestors visible only while exporting", async () => {
     document.title = "动画导出";
     document.body.innerHTML = [
