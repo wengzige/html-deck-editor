@@ -1340,6 +1340,51 @@ describe("editor runtime", () => {
     }
   });
 
+  it("uses srcset candidates when an image has no src during export", async () => {
+    document.title = "Srcset 导出";
+    document.body.innerHTML = [
+      "<script id=\"html-deck-editor-export-assets\" type=\"application/json\">",
+      "{\"assets\":[{\"path\":\"assets/3.webp\",\"keys\":[\"assets/3.webp\",\"3.webp\"],\"dataUrl\":\"data:image/webp;base64,SRCSET\"}]}",
+      "</script>",
+      "<div id=\"deckStage\" class=\"deck-stage\">",
+      "  <section class=\"slide active\">",
+      "    <picture><source srcset=\"assets/3.webp 1x\"><img id=\"hero\" srcset=\"assets/3.webp 1x\" alt=\"srcset image\"></picture>",
+      "  </section>",
+      "</div>"
+    ].join("");
+    const hero = document.getElementById("hero") as HTMLImageElement;
+    hero.getBoundingClientRect = () => rect({ left: 80, top: 160, width: 800, height: 520 });
+
+    installRuntime();
+    const editor = (window as any).FrontendSlidesEditor.mount();
+    const captureCanvas = {
+      width: 3840,
+      height: 2160,
+      toBlob: vi.fn((callback: (blob: Blob) => void) => callback(new Blob(["png"], { type: "image/png" }))),
+      toDataURL: vi.fn(() => "data:image/png;base64,AA==")
+    };
+    vi.stubGlobal("htmlToImage", {
+      toCanvas: vi.fn(async () => {
+        expect(hero.getAttribute("src")).toBe("data:image/webp;base64,SRCSET");
+        expect(hero.getAttribute("srcset") || "").toBe("");
+        expect(document.querySelector("source")?.getAttribute("srcset")).toBe("data:image/webp;base64,SRCSET");
+        return captureCanvas;
+      })
+    });
+    vi.stubGlobal("fetch", vi.fn(async () => { throw new Error("should not fetch manifest assets"); }));
+    vi.stubGlobal("requestAnimationFrame", (callback: FrameRequestCallback) => { callback(0); return 1; });
+    const download = vi.spyOn(editor, "downloadBlob").mockImplementation(() => undefined);
+
+    editor.openExportModal();
+    (editor.controls.exportModal.querySelector("input[value='png']") as HTMLInputElement).checked = true;
+    await editor.exportSelectedPages();
+
+    expect(window.fetch).not.toHaveBeenCalled();
+    expect(download).toHaveBeenCalledWith(expect.any(Blob), "Srcset-导出-page-01.png");
+    expect(hero.getAttribute("src")).toBeNull();
+    expect(hero.getAttribute("srcset")).toBe("assets/3.webp 1x");
+  });
+
   it("makes animation-hidden text ancestors visible only while exporting", async () => {
     document.title = "动画导出";
     document.body.innerHTML = [
@@ -1425,6 +1470,106 @@ describe("editor runtime", () => {
     expect(download).toHaveBeenCalledWith(expect.any(Blob), "背景图导出-page-01.png");
     expect(panel.getAttribute("style")).toContain("assets/2.webp");
     expect(panel.getAttribute("style")).not.toContain("data:image/webp;base64,WEBP");
+  });
+
+  it("uses the export asset manifest for video poster images", async () => {
+    document.title = "视频封面导出";
+    document.body.innerHTML = [
+      "<script id=\"html-deck-editor-export-assets\" type=\"application/json\">",
+      "{\"assets\":[{\"path\":\"assets/poster.jpg\",\"keys\":[\"assets/poster.jpg\",\"poster.jpg\"],\"dataUrl\":\"data:image/jpeg;base64,POSTER\"}]}",
+      "</script>",
+      "<div id=\"deckStage\" class=\"deck-stage\">",
+      "  <section class=\"slide active\">",
+      "    <video id=\"video\" poster=\"assets/poster.jpg\"></video>",
+      "  </section>",
+      "</div>"
+    ].join("");
+    const video = document.getElementById("video") as HTMLVideoElement;
+    video.getBoundingClientRect = () => rect({ left: 80, top: 120, width: 640, height: 360 });
+
+    installRuntime();
+    const editor = (window as any).FrontendSlidesEditor.mount();
+    const captureCanvas = {
+      width: 3840,
+      height: 2160,
+      toBlob: vi.fn((callback: (blob: Blob) => void) => callback(new Blob(["png"], { type: "image/png" }))),
+      toDataURL: vi.fn(() => "data:image/png;base64,AA==")
+    };
+    vi.stubGlobal("htmlToImage", {
+      toCanvas: vi.fn(async () => {
+        expect(video.getAttribute("poster")).toBe("data:image/jpeg;base64,POSTER");
+        return captureCanvas;
+      })
+    });
+    vi.stubGlobal("fetch", vi.fn(async () => { throw new Error("should not fetch manifest assets"); }));
+    vi.stubGlobal("requestAnimationFrame", (callback: FrameRequestCallback) => { callback(0); return 1; });
+    const download = vi.spyOn(editor, "downloadBlob").mockImplementation(() => undefined);
+
+    editor.openExportModal();
+    (editor.controls.exportModal.querySelector("input[value='png']") as HTMLInputElement).checked = true;
+    await editor.exportSelectedPages();
+
+    expect(window.fetch).not.toHaveBeenCalled();
+    expect(download).toHaveBeenCalledWith(expect.any(Blob), "视频封面导出-page-01.png");
+    expect(video.getAttribute("poster")).toBe("assets/poster.jpg");
+  });
+
+  it("uses the export asset manifest for pseudo-element background images", async () => {
+    document.title = "伪元素图导出";
+    document.body.innerHTML = [
+      "<script id=\"html-deck-editor-export-assets\" type=\"application/json\">",
+      "{\"assets\":[{\"path\":\"assets/pseudo.png\",\"keys\":[\"assets/pseudo.png\",\"pseudo.png\"],\"dataUrl\":\"data:image/png;base64,PSEUDO\"}]}",
+      "</script>",
+      "<div id=\"deckStage\" class=\"deck-stage\">",
+      "  <section class=\"slide active\">",
+      "    <div id=\"badge\">Badge</div>",
+      "  </section>",
+      "</div>"
+    ].join("");
+    const badge = document.getElementById("badge") as HTMLElement;
+    badge.getBoundingClientRect = () => rect({ left: 80, top: 120, width: 240, height: 80 });
+
+    installRuntime();
+    const editor = (window as any).FrontendSlidesEditor.mount();
+    const style = document.createElement("style");
+    style.textContent = "#badge::before{content:'';background-image:url('assets/pseudo.png')}";
+    document.head.appendChild(style);
+    const originalGetComputedStyle = window.getComputedStyle;
+    vi.spyOn(window, "getComputedStyle").mockImplementation((element: Element, pseudo?: string | null) => {
+      if (element === badge && pseudo === "::before") {
+        return {
+          backgroundImage: "url(\"assets/pseudo.png\")",
+          maskImage: "none",
+          webkitMaskImage: "none"
+        } as CSSStyleDeclaration;
+      }
+      return originalGetComputedStyle(element, pseudo);
+    });
+    const captureCanvas = {
+      width: 3840,
+      height: 2160,
+      toBlob: vi.fn((callback: (blob: Blob) => void) => callback(new Blob(["png"], { type: "image/png" }))),
+      toDataURL: vi.fn(() => "data:image/png;base64,AA==")
+    };
+    vi.stubGlobal("htmlToImage", {
+      toCanvas: vi.fn(async () => {
+        expect(badge.getAttribute("data-html-deck-editor-export-pseudo")).toBeTruthy();
+        expect(document.querySelector("style[data-html-deck-editor-export-pseudo-style]")?.textContent).toContain("data:image/png;base64,PSEUDO");
+        return captureCanvas;
+      })
+    });
+    vi.stubGlobal("fetch", vi.fn(async () => { throw new Error("should not fetch manifest assets"); }));
+    vi.stubGlobal("requestAnimationFrame", (callback: FrameRequestCallback) => { callback(0); return 1; });
+    const download = vi.spyOn(editor, "downloadBlob").mockImplementation(() => undefined);
+
+    editor.openExportModal();
+    (editor.controls.exportModal.querySelector("input[value='png']") as HTMLInputElement).checked = true;
+    await editor.exportSelectedPages();
+
+    expect(window.fetch).not.toHaveBeenCalled();
+    expect(download).toHaveBeenCalledWith(expect.any(Blob), "伪元素图导出-page-01.png");
+    expect(badge.hasAttribute("data-html-deck-editor-export-pseudo")).toBe(false);
+    expect(document.querySelector("style[data-html-deck-editor-export-pseudo-style]")).toBeNull();
   });
 
   it("packages selected JPG pages in original order with quality 0.92", async () => {
@@ -2393,6 +2538,29 @@ describe("editor runtime", () => {
     const html = editor.buildExportHtml();
     expect(html).not.toContain("data-ai-anchor");
     expect(html).not.toContain("data-ai-commented");
+  });
+
+  it("keeps export assets in saved HTML but strips them from AI handoff", () => {
+    document.body.innerHTML = [
+      "<script id=\"html-deck-editor-export-assets\" type=\"application/json\">",
+      "{\"assets\":[{\"path\":\"assets/1.jpg\",\"keys\":[\"assets/1.jpg\"],\"dataUrl\":\"data:image/jpeg;base64,AI_SHOULD_NOT_SEE_THIS\"}]}",
+      "</script>",
+      "<div id=\"deckStage\" class=\"deck-stage\">",
+      "  <section class=\"slide active\"><h1 id=\"title\" style=\"font-size:96px\">Original title</h1></section>",
+      "</div>"
+    ].join("");
+    const title = document.getElementById("title") as HTMLElement;
+    title.getBoundingClientRect = () => rect({ left: 100, top: 120, width: 720, height: 120 });
+
+    installRuntime();
+    const editor = (window as any).FrontendSlidesEditor.mount();
+    const savedHtml = editor.buildExportHtml();
+    const aiHtml = editor.buildAiHandoffHtml();
+
+    expect(savedHtml).toContain("html-deck-editor-export-assets");
+    expect(savedHtml).toContain("AI_SHOULD_NOT_SEE_THIS");
+    expect(aiHtml).not.toContain("html-deck-editor-export-assets");
+    expect(aiHtml).not.toContain("AI_SHOULD_NOT_SEE_THIS");
   });
 
   it("opens for-ai handoff help from the toolbar", () => {

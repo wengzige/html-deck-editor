@@ -903,6 +903,8 @@
         this.isExporting = false;
         this.exportAssetMap = this.loadExportAssetMap();
         this.exportAssetEntries = Array.from(this.exportAssetMap.entries());
+        this.exportPseudoCounter = 0;
+        this.exportPseudoImageSelectors = this.collectPseudoImageSelectors();
         this.importedFontCounter = 0;
         this.onlineFontPromises = new Map();
         this.toggle = editorUiElement("editToggle");
@@ -1128,6 +1130,59 @@
           if (suffixMatch) return suffixMatch[1];
         }
         return "";
+      }
+
+      collectPseudoImageSelectors() {
+        const selectors = [];
+        const visitRules = (rules) => {
+          Array.from(rules || []).forEach((rule) => {
+            let nestedRules = null;
+            try {
+              nestedRules = rule.cssRules || null;
+            } catch (error) {
+              nestedRules = null;
+            }
+            if (nestedRules) {
+              try {
+                visitRules(nestedRules);
+              } catch (error) {
+                // Cross-origin stylesheets can refuse rule reads; skip them.
+              }
+              return;
+            }
+            const selectorText = rule.selectorText || "";
+            if (!/::(?:before|after)/i.test(selectorText)) return;
+            const text = rule.cssText || "";
+            const style = rule.style;
+            const hasImage = /url\(/i.test(text) || ["backgroundImage", "maskImage", "webkitMaskImage"].some((name) => /url\(/i.test(style?.[name] || ""));
+            if (!hasImage) return;
+            selectorText.split(",").forEach((selector) => {
+              const match = selector.match(/::(before|after)/i);
+              if (!match) return;
+              const base = selector.slice(0, match.index).trim() || "*";
+              selectors.push({ selector: base, pseudo: `::${match[1].toLowerCase()}` });
+            });
+          });
+        };
+        Array.from(document.styleSheets || []).forEach((sheet) => {
+          try {
+            visitRules(sheet.cssRules);
+          } catch (error) {
+            // Cross-origin stylesheets can refuse rule reads; skip them.
+          }
+        });
+        return selectors;
+      }
+
+      pseudoImageTargetsFor(element) {
+        if (!this.exportPseudoImageSelectors.length) return [];
+        return this.exportPseudoImageSelectors.filter((entry) => {
+          try {
+            return element.matches(entry.selector);
+          } catch (error) {
+            return false;
+          }
+        });
       }
 
       getEditableElements() {
@@ -5442,6 +5497,7 @@
 
       cleanCloneForExport(clone, options = {}) {
         const preserveAiAnchors = options.preserveAiAnchors === true;
+        if (options.stripExportAssets === true) clone.querySelector("#html-deck-editor-export-assets")?.remove();
         clone.querySelectorAll("[data-generated-chrome], [data-html-deck-editor-ui]").forEach((node) => node.remove());
         clone.querySelectorAll(".editor-selected").forEach((node) => node.classList.remove("editor-selected"));
         clone.querySelectorAll(".editor-motion-parent-stable").forEach((node) => node.classList.remove("editor-motion-parent-stable"));
@@ -5509,7 +5565,7 @@
 
       buildAiHandoffHtml() {
         const clone = document.documentElement.cloneNode(true);
-        this.cleanCloneForExport(clone, { preserveAiAnchors: true });
+        this.cleanCloneForExport(clone, { preserveAiAnchors: true, stripExportAssets: true });
         return "<!doctype html>\n" + clone.outerHTML;
       }
 
@@ -5714,6 +5770,7 @@
         this.frame.classList.remove("active");
         document.body.classList.add("html-deck-editor-exporting");
         document.body.classList.remove("editing", "editor-on");
+        this.exportPseudoImageSelectors = this.collectPseudoImageSelectors();
         this.presentation.setEditorInsets?.(zeroInsets());
         return state;
       }
@@ -5827,13 +5884,17 @@
         for (const image of Array.from(slide.querySelectorAll("image"))) {
           await this.inlineSvgImageForExport(image, index, restore, cache);
         }
+        for (const video of Array.from(slide.querySelectorAll("video[poster]"))) {
+          await this.inlineVideoPosterForExport(video, index, restore, cache);
+        }
         for (const element of [slide, ...slide.querySelectorAll("*")]) {
           await this.inlineCssImagesForExport(element, index, restore, cache);
+          await this.inlinePseudoCssImagesForExport(element, index, restore, cache);
         }
       }
 
       async inlineHtmlImageForExport(image, index, restore, cache) {
-        const source = image.currentSrc || image.getAttribute("src") || "";
+        const source = this.imageExportSource(image);
         if (!source) return;
         if (this.isDataResourceUrl(source)) return;
         let dataUrl = this.exportAssetDataUrl(source);
@@ -5861,6 +5922,26 @@
         }
       }
 
+      imageExportSource(image) {
+        return image.currentSrc ||
+          image.getAttribute("src") ||
+          this.firstSrcsetSource(image.getAttribute("srcset") || "") ||
+          this.firstPictureSource(image) ||
+          "";
+      }
+
+      firstPictureSource(image) {
+        const picture = image.closest?.("picture");
+        if (!picture) return "";
+        const source = Array.from(picture.querySelectorAll("source[srcset]")).find((item) => item.getAttribute("srcset"));
+        return source ? this.firstSrcsetSource(source.getAttribute("srcset") || "") : "";
+      }
+
+      firstSrcsetSource(srcset) {
+        const candidate = String(srcset || "").split(",").map((item) => item.trim()).find(Boolean);
+        return candidate ? candidate.split(/\s+/)[0] : "";
+      }
+
       async inlineSvgImageForExport(image, index, restore, cache) {
         const source = image.getAttribute("href") || image.getAttribute("xlink:href") || "";
         if (!source || this.isDataResourceUrl(source) || source.startsWith("#")) return;
@@ -5869,6 +5950,15 @@
         this.rememberAttribute(image, "xlink:href", restore);
         image.setAttribute("href", dataUrl);
         image.setAttribute("xlink:href", dataUrl);
+      }
+
+      async inlineVideoPosterForExport(video, index, restore, cache) {
+        const source = video.getAttribute("poster") || "";
+        if (!source || this.isDataResourceUrl(source)) return;
+        const dataUrl = await this.exportResourceDataUrl(source, index, cache);
+        this.rememberAttribute(video, "poster", restore);
+        video.setAttribute("poster", dataUrl);
+        if ("poster" in video) video.poster = dataUrl;
       }
 
       async inlineCssImagesForExport(element, index, restore, cache) {
@@ -5887,6 +5977,40 @@
           this.rememberInlineStyle(element, property.css, restore);
           element.style.setProperty(property.css, inlined, "important");
         }
+      }
+
+      async inlinePseudoCssImagesForExport(element, index, restore, cache) {
+        if (!element?.setAttribute) return;
+        const rules = [];
+        for (const { pseudo } of this.pseudoImageTargetsFor(element)) {
+          const computed = getComputedStyle(element, pseudo);
+          const properties = [
+            { computed: "backgroundImage", css: "background-image" },
+            { computed: "maskImage", css: "mask-image" },
+            { computed: "webkitMaskImage", css: "-webkit-mask-image" }
+          ];
+          for (const property of properties) {
+            const value = computed?.[property.computed] || "";
+            if (!this.hasCssResourceUrl(value)) continue;
+            const inlined = await this.inlineCssResourceUrls(value, index, cache);
+            if (inlined !== value) rules.push({ pseudo, css: property.css, value: inlined });
+          }
+        }
+        if (!rules.length) return;
+        const id = `pseudo-${++this.exportPseudoCounter}`;
+        this.rememberAttribute(element, "data-html-deck-editor-export-pseudo", restore);
+        element.setAttribute("data-html-deck-editor-export-pseudo", id);
+        const style = document.createElement("style");
+        style.setAttribute("data-html-deck-editor-export-pseudo-style", id);
+        const selector = `[data-html-deck-editor-export-pseudo="${this.escapeCssString(id)}"]`;
+        style.textContent = rules.map((rule) => `${selector}${rule.pseudo}{${rule.css}: ${rule.value} !important;}`).join("\n");
+        document.head.appendChild(style);
+        restore.push(() => style.remove());
+      }
+
+      escapeCssString(value) {
+        if (window.CSS?.escape) return window.CSS.escape(value);
+        return String(value).replace(/[^a-zA-Z0-9_-]/g, "\\$&");
       }
 
       hasCssResourceUrl(value) {
