@@ -796,4 +796,34 @@ describe("runtime injection", () => {
     expect(result.report.status).toBe("unsupported");
     expect(result.warnings).toContain("单文件资源可能丢失。");
   });
+
+  it("allows an explicit local single-page fallback without AI", async () => {
+    const result = await convertInput(input([
+      file("index.html", `
+        <html>
+          <head><title>Local fallback</title></head>
+          <body>
+            <article><h1>Blog</h1><p>Just one normal page.</p></article>
+            <script>window.keepOriginalScript = true;</script>
+          </body>
+        </html>
+      `)
+    ]), [], undefined, { allowSinglePageFallback: true });
+
+    expect(result.blob).toBeTruthy();
+    expect(result.report.status).toBe("adaptable");
+    expect(result.report.sourceKind).toBe("unknown");
+    expect(result.report.slideCount).toBe(1);
+    expect(result.warnings).toContain("普通检测没有识别出分页，已按你的选择把整个页面作为 1 页进行本地转换，请在编辑器中复核布局。");
+
+    const zip = await JSZip.loadAsync(result.blob!);
+    const html = await zip.file("index.html")!.async("string");
+    const doc = new DOMParser().parseFromString(html, "text/html");
+    const stage = doc.querySelector("#deckStage[data-html-deck-editor-stage='preserve']");
+    const slide = stage?.querySelector(":scope > .slide.active.visible");
+    expect(slide?.querySelector("article h1")?.textContent).toBe("Blog");
+    expect(stage?.querySelector("script")).toBeNull();
+    expect(doc.body.querySelector(":scope > script")?.textContent).toContain("keepOriginalScript");
+    expect(html).toContain("runtime/html-deck-editor.js");
+  });
 });

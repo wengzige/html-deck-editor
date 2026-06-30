@@ -71,7 +71,10 @@ type ConvertProgressCallback = (event: ConvertProgressEvent) => void;
 
 export type ConvertOptions = {
   aiAdaptationPlan?: AiAdaptationPlan;
+  allowSinglePageFallback?: boolean;
 };
+
+const singlePageFallbackWarning = "普通检测没有识别出分页，已按你的选择把整个页面作为 1 页进行本地转换，请在编辑器中复核布局。";
 
 export async function convertInput(
   input: LoadedInput,
@@ -110,7 +113,18 @@ export async function convertInput(
   }
 
   onProgress?.({ stage: "detect", percent: 0, detail: "正在检查是不是 HTML 演示稿。" });
-  const report = detectDeck(workingInput);
+  let report = detectDeck(workingInput);
+  if (options.allowSinglePageFallback && report.status === "unsupported" && report.indexPath) {
+    report = {
+      ...report,
+      status: "adaptable",
+      sourceKind: "unknown",
+      slideCount: 1,
+      confidence: 0.2,
+      messages: ["未识别出明确分页，将整个页面作为 1 页进行本地转换。"],
+      warnings: [...report.warnings, singlePageFallbackWarning]
+    };
+  }
   onProgress?.({ stage: "detect", percent: 100, detail: report.messages[0] || "检测完成。" });
   if (report.status === "unsupported" || !report.indexPath) {
     return {
@@ -223,6 +237,11 @@ function hasAuthoredDeckStageController(doc: Document): boolean {
 }
 
 function prepareAdaptableStage(doc: Document, report: DetectionReport): void {
+  if (report.sourceKind === "unknown") {
+    prepareSinglePageFallback(doc);
+    return;
+  }
+
   const existingStage = doc.querySelector("deck-stage#deckStage, #deckStage, .deck-stage, [data-html-deck-editor-stage]");
   const sourceSlides = selectSlideCandidates(doc, report);
   if (sourceSlides.length < 2) return;
@@ -254,6 +273,29 @@ function prepareAdaptableStage(doc: Document, report: DetectionReport): void {
   }
 
   wrapSlidesInPlace(doc, sourceSlides);
+}
+
+function prepareSinglePageFallback(doc: Document): void {
+  const contentNodes = Array.from(doc.body.childNodes).filter((node) => {
+    if (node.nodeType !== 1) return Boolean(node.textContent?.trim());
+    return !(node as Element).matches("script, style, link, template, noscript");
+  });
+
+  const stage = doc.createElement("div");
+  stage.id = "deckStage";
+  stage.className = "deck-stage";
+  stage.setAttribute("data-html-deck-editor-stage", "preserve");
+  stage.setAttribute("aria-label", "Presentation");
+
+  const slide = doc.createElement("section");
+  slide.className = "slide active visible";
+  slide.setAttribute("data-title", doc.title.trim() || "Page 1");
+
+  const insertionPoint = contentNodes[0] || doc.body.firstChild;
+  if (insertionPoint) doc.body.insertBefore(stage, insertionPoint);
+  else doc.body.appendChild(stage);
+  contentNodes.forEach((node) => slide.appendChild(node));
+  stage.appendChild(slide);
 }
 
 function findReusableStage(sourceSlides: Element[]): Element | null {
