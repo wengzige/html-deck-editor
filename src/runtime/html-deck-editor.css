@@ -1,0 +1,2033 @@
+/* Frontend Slides Visual Deck Editor runtime. Source baseline: 1ba9bf0. */
+/* ===========================================
+       PPT-LIKE EDITING CONTROLS
+       Visual editing layer for text, media, layout, and motion.
+       =========================================== */
+    .edit-hotzone[data-html-deck-editor-ui] {
+      position: fixed;
+      top: 0;
+      left: 0;
+      width: 82px;
+      height: 82px;
+      z-index: 10000;
+    }
+
+    .edit-toggle[data-html-deck-editor-ui] {
+      position: fixed;
+      top: 18px;
+      width: 42px;
+      height: 42px;
+      border: 1.5px solid var(--ink, #111111);
+      background: var(--paper, #f8f6ef);
+      color: var(--ink, #111111);
+      font: 500 18px/1 var(--font-mono, ui-monospace, SFMono-Regular, Menlo, Monaco, Consolas, "Liberation Mono", monospace);
+      opacity: 0;
+      pointer-events: none;
+      transition: opacity 220ms ease;
+      z-index: 10001;
+    }
+
+    .edit-toggle[data-html-deck-editor-ui] {
+      left: 18px;
+    }
+
+    .editor-shell[data-html-deck-editor-ui] {
+      position: fixed;
+      inset: 0;
+      z-index: 10010;
+      visibility: hidden;
+      opacity: 0;
+      pointer-events: none;
+      color: #111111;
+      font-family: var(--font-body, system-ui, -apple-system, BlinkMacSystemFont, "Segoe UI", sans-serif);
+      transition: opacity 180ms ease, visibility 180ms ease;
+    }
+
+    .editor-shell[data-html-deck-editor-ui],
+    .editor-shell[data-html-deck-editor-ui] * {
+      box-sizing: border-box;
+    }
+
+    body.editing:not(.html-deck-editor-exporting) .editor-shell[data-html-deck-editor-ui] {
+      visibility: visible;
+      opacity: 1;
+    }
+
+    body.html-deck-editor-exporting .editor-shell[data-html-deck-editor-ui] {
+      visibility: visible;
+      opacity: 1;
+    }
+
+    body.html-deck-editor-exporting .editor-shell[data-html-deck-editor-ui] > :not(.editor-export-modal) {
+      visibility: hidden !important;
+      pointer-events: none !important;
+    }
+
+    body.editing:not(.html-deck-editor-exporting) [data-html-deck-editor-stage="preserve"] {
+      position: fixed !important;
+      left: 0 !important;
+      top: 0 !important;
+      margin: 0 !important;
+      transform: translate(var(--html-deck-editor-stage-x, 0px), var(--html-deck-editor-stage-y, 0px)) scale(var(--html-deck-editor-stage-scale, 1)) translateX(calc(var(--html-deck-editor-slide-offset-x, 0px) * -1)) !important;
+      transform-origin: top left;
+      transition: none !important;
+    }
+
+    body.editing:not(.html-deck-editor-exporting) [data-html-deck-editor-host-chrome] {
+      visibility: hidden !important;
+      opacity: 0 !important;
+      pointer-events: none !important;
+    }
+
+    body.editing:not(.html-deck-editor-exporting) [data-html-deck-editor-stage="preserve"] [data-html-deck-editor-page]:not([data-html-deck-editor-current]) {
+      visibility: hidden;
+      pointer-events: none;
+    }
+
+    body.editing:not(.html-deck-editor-exporting) [data-html-deck-editor-stage="preserve"] [data-html-deck-editor-page][data-html-deck-editor-current] {
+      visibility: visible !important;
+      pointer-events: auto;
+      outline-style: dashed;
+      outline-width: 2px;
+      outline-color: rgba(17, 17, 17, 0.48);
+      outline-offset: 8px;
+    }
+
+    body.editing:not(.html-deck-editor-exporting).editor-canvas-zoomed .slide:is(.active, [data-deck-active], [data-html-deck-editor-current]) {
+      cursor: grab;
+    }
+
+    body.editing:not(.html-deck-editor-exporting).editor-canvas-panning,
+    body.editing:not(.html-deck-editor-exporting).editor-canvas-panning * {
+      cursor: grabbing !important;
+      user-select: none !important;
+    }
+
+    .editor-shell[data-html-deck-editor-ui] .editor-toolbar,
+    .editor-shell[data-html-deck-editor-ui] .editor-slides,
+    .editor-shell[data-html-deck-editor-ui] .editor-panel {
+      z-index: 900;
+      pointer-events: auto;
+      border: 1px solid rgba(17, 17, 17, 0.12);
+      border-radius: 8px;
+      background: rgba(248, 246, 239, 0.97);
+      box-shadow: 0 10px 26px rgba(17, 17, 17, 0.10);
+      backdrop-filter: blur(10px);
+    }
+
+    .editor-shell[data-html-deck-editor-ui] .editor-toolbar {
+      position: fixed;
+      top: 12px;
+      left: 12px;
+      right: 12px;
+      display: flex;
+      flex-wrap: nowrap;
+      gap: 8px;
+      align-items: center;
+      justify-content: flex-start;
+      max-width: none;
+      overflow-x: auto;
+      padding: 8px;
+      scrollbar-width: thin;
+    }
+
+    .editor-shell[data-html-deck-editor-ui] .editor-slides {
+      position: fixed;
+      top: 76px;
+      bottom: 14px;
+      left: 12px;
+      width: 242px;
+      padding: 12px;
+      overflow: auto;
+      scrollbar-width: thin;
+    }
+
+    .editor-shell[data-html-deck-editor-ui] .editor-panel {
+      position: fixed;
+      top: 76px;
+      right: 12px;
+      bottom: 14px;
+      width: 342px;
+      padding: 14px;
+      overflow: auto;
+      overscroll-behavior: contain;
+      scrollbar-width: thin;
+    }
+
+    .editor-shell[data-html-deck-editor-ui] .editor-title {
+      margin: 0 0 10px;
+      color: rgba(17, 17, 17, 0.58);
+      font: 600 11px/1 var(--font-mono, ui-monospace, SFMono-Regular, Menlo, Monaco, Consolas, "Liberation Mono", monospace);
+      letter-spacing: 0.12em;
+      text-transform: uppercase;
+    }
+
+    .editor-shell[data-html-deck-editor-ui] .editor-button,
+    .editor-shell[data-html-deck-editor-ui] .toolbar-select,
+    .editor-shell[data-html-deck-editor-ui] .slide-chip {
+      min-height: 34px;
+      border: 1px solid rgba(17, 17, 17, 0.14);
+      border-radius: 6px;
+      background: #ffffff;
+      color: #111111;
+      font: 600 13px/1 var(--font-body, system-ui, -apple-system, BlinkMacSystemFont, "Segoe UI", sans-serif);
+      letter-spacing: 0;
+    }
+
+    .editor-shell[data-html-deck-editor-ui] .editor-button {
+      flex: 0 0 auto;
+      padding: 0 12px;
+      white-space: nowrap;
+    }
+
+    .editor-shell[data-html-deck-editor-ui] .editor-button:hover:not(:disabled),
+    .editor-shell[data-html-deck-editor-ui] .toolbar-select:hover:not(:disabled),
+    .editor-shell[data-html-deck-editor-ui] .editor-select:hover:not(:disabled),
+    .editor-shell[data-html-deck-editor-ui] .editor-field:hover:not(:disabled),
+    .editor-shell[data-html-deck-editor-ui] .editor-textarea:hover:not(:disabled),
+    .editor-shell[data-html-deck-editor-ui] .slide-chip:hover {
+      border-color: rgba(17, 17, 17, 0.24);
+    }
+
+    .editor-shell[data-html-deck-editor-ui] .editor-button:active:not(:disabled),
+    .editor-shell[data-html-deck-editor-ui] .slide-chip:active {
+      transform: translateY(1px);
+    }
+
+    .editor-shell[data-html-deck-editor-ui] .editor-button:focus-visible,
+    .editor-shell[data-html-deck-editor-ui] .editor-select:focus-visible,
+    .editor-shell[data-html-deck-editor-ui] .editor-field:focus-visible,
+    .editor-shell[data-html-deck-editor-ui] .editor-textarea:focus-visible,
+    .editor-shell[data-html-deck-editor-ui] .slide-chip:focus-visible,
+    .editor-shell[data-html-deck-editor-ui] .reset-help-button:focus-visible,
+    .editor-shell[data-html-deck-editor-ui] .toolbar-help-button:focus-visible,
+    .editor-shell[data-html-deck-editor-ui] .frame-delete:focus-visible,
+    .editor-shell[data-html-deck-editor-ui] .shape-choice:focus-visible {
+      outline: 2px solid rgba(31, 43, 224, 0.34);
+      outline-offset: 2px;
+    }
+
+    .editor-shell[data-html-deck-editor-ui] .editor-icon-button {
+      display: inline-grid;
+      place-items: center;
+      width: 36px;
+      min-width: 36px;
+      padding: 0;
+      font-size: 19px;
+      line-height: 1;
+    }
+
+    .editor-shell[data-html-deck-editor-ui] .format-brush-button svg {
+      width: 18px;
+      height: 18px;
+      fill: none;
+      stroke: currentColor;
+      stroke-width: 2;
+      stroke-linecap: round;
+      stroke-linejoin: round;
+    }
+
+    .editor-shell[data-html-deck-editor-ui] .format-brush-button[aria-pressed="true"] {
+      border-color: rgba(31, 43, 224, 0.45);
+      background: rgba(31, 43, 224, 0.08);
+      color: #1f2be0;
+    }
+
+    .editor-shell[data-html-deck-editor-ui] .shape-picker-wrap {
+      position: relative;
+      flex: 0 0 auto;
+    }
+
+    .editor-shell[data-html-deck-editor-ui] .toolbar-action-group {
+      position: relative;
+      display: inline-flex;
+      flex: 0 0 auto;
+      min-width: 0;
+    }
+
+    .editor-shell[data-html-deck-editor-ui] .ai-export-group #aiExportBtn,
+    .editor-shell[data-html-deck-editor-ui] .save-action-group #saveBtn {
+      padding-right: 36px;
+    }
+
+    .editor-shell[data-html-deck-editor-ui] .shape-menu {
+      position: fixed;
+      top: var(--shape-menu-top, 64px);
+      left: var(--shape-menu-left, 50%);
+      display: grid;
+      grid-template-columns: 1fr 1fr;
+      gap: 6px;
+      width: 184px;
+      padding: 8px;
+      border: 1px solid rgba(17, 17, 17, 0.16);
+      border-radius: 8px;
+      background: #ffffff;
+      box-shadow: 0 18px 44px rgba(17, 17, 17, 0.18);
+      pointer-events: auto;
+      transform: translateX(-50%);
+      z-index: 10040;
+    }
+
+    .editor-shell[data-html-deck-editor-ui] .shape-menu[hidden] {
+      display: none;
+    }
+
+    .editor-shell[data-html-deck-editor-ui] .shape-choice {
+      height: 32px;
+      border: 1px solid rgba(17, 17, 17, 0.16);
+      border-radius: 6px;
+      background: #f7f7f5;
+      color: #111111;
+      font: 600 12px/1 var(--font-body, system-ui, -apple-system, BlinkMacSystemFont, "Segoe UI", sans-serif);
+      pointer-events: auto;
+    }
+
+    .editor-shell[data-html-deck-editor-ui] .shape-choice:hover {
+      border-color: rgba(17, 17, 17, 0.28);
+      background: #ffffff;
+    }
+
+    .editor-shell[data-html-deck-editor-ui] .toolbar-select {
+      flex: 0 0 auto;
+      width: 128px;
+      padding: 0 32px 0 10px;
+      white-space: nowrap;
+    }
+
+    .editor-shell[data-html-deck-editor-ui] .editor-button.primary {
+      background: var(--ink, #111111);
+      color: #ffffff;
+      border-color: var(--ink, #111111);
+    }
+
+    .editor-shell[data-html-deck-editor-ui] .editor-button.danger {
+      color: #b42318;
+    }
+
+    .editor-shell[data-html-deck-editor-ui] .editor-button:disabled,
+    .editor-shell[data-html-deck-editor-ui] .editor-field:disabled,
+    .editor-shell[data-html-deck-editor-ui] .editor-select:disabled,
+    .editor-shell[data-html-deck-editor-ui] .editor-textarea:disabled {
+      opacity: 0.48;
+      cursor: not-allowed;
+    }
+
+    .editor-shell[data-html-deck-editor-ui] .slide-rail-list {
+      display: grid;
+      gap: 8px;
+    }
+
+    .editor-shell[data-html-deck-editor-ui] .slide-chip {
+      position: relative;
+      display: grid;
+      grid-template-columns: 34px 1fr;
+      gap: 8px;
+      width: 100%;
+      min-height: 52px;
+      padding: 8px;
+      text-align: left;
+    }
+
+    .editor-shell[data-html-deck-editor-ui] .slide-chip[draggable="true"] {
+      cursor: grab;
+    }
+
+    .editor-shell[data-html-deck-editor-ui] .slide-chip.dragging {
+      opacity: 0.42;
+      cursor: grabbing;
+    }
+
+    .editor-shell[data-html-deck-editor-ui] .slide-chip.drop-before::before,
+    .editor-shell[data-html-deck-editor-ui] .slide-chip.drop-after::after {
+      content: "";
+      position: absolute;
+      left: 0;
+      right: 0;
+      height: 3px;
+      border-radius: 2px;
+      background: #1f2be0;
+      pointer-events: none;
+    }
+
+    .editor-shell[data-html-deck-editor-ui] .slide-chip.drop-before::before {
+      top: -6px;
+    }
+
+    .editor-shell[data-html-deck-editor-ui] .slide-chip.drop-after::after {
+      bottom: -6px;
+    }
+
+    .editor-shell[data-html-deck-editor-ui] .slide-chip.active {
+      border-color: var(--ink, #111111);
+      background: rgba(31, 43, 224, 0.08);
+    }
+
+    .editor-shell[data-html-deck-editor-ui] .slide-chip-num {
+      display: grid;
+      place-items: center;
+      height: 34px;
+      border-radius: 4px;
+      background: #111111;
+      color: #ffffff;
+      font: 500 12px/1 var(--font-mono, ui-monospace, SFMono-Regular, Menlo, Monaco, Consolas, "Liberation Mono", monospace);
+    }
+
+    .editor-shell[data-html-deck-editor-ui] .slide-chip-title {
+      overflow: hidden;
+      align-self: center;
+      font-size: 13px;
+      font-weight: 600;
+      line-height: 1.24;
+      text-overflow: ellipsis;
+      white-space: nowrap;
+    }
+
+    .editor-shell[data-html-deck-editor-ui] .inspector-section {
+      padding: 12px 0;
+      border-top: 1px solid rgba(17, 17, 17, 0.12);
+    }
+
+    .editor-shell[data-html-deck-editor-ui] .inspector-section.edit-attention {
+      border-radius: 8px;
+      background: rgba(255, 61, 139, 0.08);
+      box-shadow: inset 0 0 0 1px rgba(255, 61, 139, 0.18);
+    }
+
+    .editor-shell[data-html-deck-editor-ui] .inspector-section:first-child {
+      border-top: 0;
+      padding-top: 0;
+    }
+
+    .editor-shell[data-html-deck-editor-ui] .selection-name {
+      min-height: 28px;
+      font: 700 15px/1.35 var(--font-body, system-ui, -apple-system, BlinkMacSystemFont, "Segoe UI", sans-serif);
+    }
+
+    .editor-shell[data-html-deck-editor-ui] .field-label {
+      display: block;
+      margin: 10px 0 6px;
+      color: rgba(17, 17, 17, 0.58);
+      font: 600 11px/1 var(--font-mono, ui-monospace, SFMono-Regular, Menlo, Monaco, Consolas, "Liberation Mono", monospace);
+      letter-spacing: 0.08em;
+      text-transform: uppercase;
+    }
+
+    .editor-shell[data-html-deck-editor-ui] .field-help {
+      margin: -2px 0 8px;
+      color: rgba(17, 17, 17, 0.62);
+      font: 500 12px/1.38 var(--font-body, system-ui, -apple-system, BlinkMacSystemFont, "Segoe UI", sans-serif);
+    }
+
+    .editor-shell[data-html-deck-editor-ui] .motion-status {
+      min-height: 32px;
+      margin: 0 0 8px;
+      padding: 8px 10px;
+      border: 1px solid rgba(17, 17, 17, 0.12);
+      border-radius: 6px;
+      background: rgba(17, 17, 17, 0.03);
+      color: rgba(17, 17, 17, 0.72);
+      font: 600 12px/1.35 var(--font-body, system-ui, -apple-system, BlinkMacSystemFont, "Segoe UI", sans-serif);
+    }
+
+    .editor-shell[data-html-deck-editor-ui] .field-grid {
+      display: grid;
+      grid-template-columns: 1fr 1fr;
+      gap: 8px;
+    }
+
+    .editor-shell[data-html-deck-editor-ui] .font-import-row {
+      display: grid;
+      grid-template-columns: auto 1fr;
+      gap: 8px;
+      align-items: center;
+      margin-top: 8px;
+    }
+
+    .editor-shell[data-html-deck-editor-ui] .font-import-limit {
+      color: rgba(17, 17, 17, 0.55);
+      font: 500 11px/1.35 var(--font-body, system-ui, -apple-system, BlinkMacSystemFont, "Segoe UI", sans-serif);
+    }
+
+    .editor-shell[data-html-deck-editor-ui] .font-import-status {
+      margin-top: 7px;
+      margin-bottom: 0;
+    }
+
+    .editor-shell[data-html-deck-editor-ui] .text-style-controls {
+      display: flex;
+      gap: 8px;
+      margin: 8px 0 0;
+    }
+
+    .editor-shell[data-html-deck-editor-ui] .text-style-button {
+      display: inline-grid;
+      place-items: center;
+      width: 34px;
+      min-width: 34px;
+      height: 34px;
+      padding: 0;
+      font-size: 14px;
+      line-height: 1;
+    }
+
+    .editor-shell[data-html-deck-editor-ui] .text-style-button[aria-pressed="true"] {
+      border-color: var(--ink, #111111);
+      background: rgba(31, 43, 224, 0.1);
+    }
+
+    .editor-shell[data-html-deck-editor-ui] .text-style-italic {
+      font-style: italic;
+    }
+
+    .editor-shell[data-html-deck-editor-ui] .editor-field,
+    .editor-shell[data-html-deck-editor-ui] .editor-select,
+    .editor-shell[data-html-deck-editor-ui] .editor-textarea {
+      width: 100%;
+      border: 1px solid rgba(17, 17, 17, 0.14);
+      border-radius: 6px;
+      background: #ffffff;
+      color: #111111;
+      font: 500 13px/1.3 var(--font-body, system-ui, -apple-system, BlinkMacSystemFont, "Segoe UI", sans-serif);
+    }
+
+    .editor-shell[data-html-deck-editor-ui] .editor-field,
+    .editor-shell[data-html-deck-editor-ui] .editor-select {
+      height: 34px;
+      padding: 0 9px;
+    }
+
+    .editor-shell[data-html-deck-editor-ui] .color-field {
+      position: relative;
+      min-width: 0;
+    }
+
+    .editor-shell[data-html-deck-editor-ui] .color-preset-grid {
+      display: grid;
+      grid-template-columns: repeat(6, 32px);
+      gap: 6px;
+    }
+
+    .editor-shell[data-html-deck-editor-ui] .color-preset {
+      width: 100%;
+      aspect-ratio: 1;
+      min-height: 22px;
+      padding: 0;
+      border: 1px solid rgba(17, 17, 17, 0.18);
+      border-radius: 5px;
+      background: var(--choice-color, #ffffff);
+      box-shadow: inset 0 0 0 1px rgba(255, 255, 255, 0.32);
+      cursor: pointer;
+    }
+
+    .editor-shell[data-html-deck-editor-ui] .color-preset[aria-checked="true"] {
+      border-color: #111111;
+      box-shadow: 0 0 0 2px rgba(31, 43, 224, 0.18), inset 0 0 0 1px rgba(255, 255, 255, 0.42);
+    }
+
+    .editor-shell[data-html-deck-editor-ui] .background-field {
+      position: relative;
+      min-width: 0;
+    }
+
+    .editor-shell[data-html-deck-editor-ui] .color-picker-button {
+      display: flex;
+      gap: 8px;
+      align-items: center;
+      justify-content: flex-start;
+      padding: 0 9px;
+      text-align: left;
+      cursor: pointer;
+    }
+
+    .editor-shell[data-html-deck-editor-ui] .color-picker-button:disabled {
+      cursor: not-allowed;
+    }
+
+    .editor-shell[data-html-deck-editor-ui] .color-swatch {
+      position: relative;
+      display: inline-block;
+      width: 18px;
+      height: 18px;
+      flex: 0 0 18px;
+      border: 1px solid rgba(17, 17, 17, 0.22);
+      border-radius: 4px;
+      background: var(--choice-color, #ffffff);
+      overflow: hidden;
+    }
+
+    .editor-shell[data-html-deck-editor-ui] .color-swatch.no-color,
+    .editor-shell[data-html-deck-editor-ui] .color-preset.no-color {
+      background:
+        linear-gradient(135deg, transparent 45%, #b42318 47%, #b42318 53%, transparent 55%),
+        #ffffff;
+    }
+
+    .editor-shell[data-html-deck-editor-ui] .color-popover {
+      position: fixed;
+      top: var(--color-palette-top, 64px);
+      left: var(--color-palette-left, 50%);
+      z-index: 10042;
+      display: grid;
+      gap: 9px;
+      width: max-content;
+      max-width: calc(100vw - 20px);
+      padding: 9px;
+      border: 1px solid rgba(17, 17, 17, 0.18);
+      border-radius: 8px;
+      background: #ffffff;
+      box-shadow: 0 18px 44px rgba(17, 17, 17, 0.18);
+      pointer-events: auto;
+    }
+
+    .editor-shell[data-html-deck-editor-ui] .color-popover[hidden] {
+      display: none;
+    }
+
+    .editor-shell[data-html-deck-editor-ui] .bg-palette {
+      top: var(--bg-palette-top, 64px);
+      left: var(--bg-palette-left, 50%);
+    }
+
+    .editor-shell[data-html-deck-editor-ui] .color-picker-host {
+      padding-top: 8px;
+      border-top: 1px solid rgba(17, 17, 17, 0.1);
+    }
+
+    .editor-shell[data-html-deck-editor-ui] .color-picker-missing {
+      margin: 0;
+      color: rgba(17, 17, 17, 0.62);
+      font: 600 12px/1.35 var(--font-body, system-ui, -apple-system, BlinkMacSystemFont, "Segoe UI", sans-serif);
+    }
+
+    .editor-shell[data-html-deck-editor-ui] .color-picker-host .picker_wrapper {
+      width: 228px;
+      padding: 7px;
+      border-radius: 8px;
+      background: #ffffff;
+      box-shadow: none;
+      color: #111111;
+      font-family: var(--font-body, system-ui, -apple-system, BlinkMacSystemFont, "Segoe UI", sans-serif);
+    }
+
+    .editor-shell[data-html-deck-editor-ui] .color-picker-host .picker_wrapper > * {
+      margin: 5px;
+    }
+
+    .editor-shell[data-html-deck-editor-ui] .color-picker-host .picker_wrapper button,
+    .editor-shell[data-html-deck-editor-ui] .color-picker-host .picker_wrapper input {
+      border: 1px solid rgba(17, 17, 17, 0.18);
+      border-radius: 6px;
+      box-shadow: none;
+      background: #ffffff;
+      color: #111111;
+      font: 600 12px/1.2 var(--font-body, system-ui, -apple-system, BlinkMacSystemFont, "Segoe UI", sans-serif);
+    }
+
+    .editor-shell[data-html-deck-editor-ui] .color-picker-host .picker_hue,
+    .editor-shell[data-html-deck-editor-ui] .color-picker-host .picker_sl,
+    .editor-shell[data-html-deck-editor-ui] .color-picker-host .picker_sample {
+      border-radius: 6px;
+      box-shadow: inset 0 0 0 1px rgba(17, 17, 17, 0.18);
+      overflow: hidden;
+    }
+
+    .editor-shell[data-html-deck-editor-ui] .color-picker-actions {
+      display: flex;
+      justify-content: stretch;
+      padding-top: 7px;
+      border-top: 1px solid rgba(17, 17, 17, 0.1);
+    }
+
+    .editor-shell[data-html-deck-editor-ui] .color-eyedropper-button {
+      display: inline-flex;
+      align-items: center;
+      justify-content: center;
+      gap: 6px;
+      width: 100%;
+      min-width: 0;
+      height: 32px;
+      padding: 0 10px;
+      border-radius: 6px;
+      font-size: 12px;
+      line-height: 1.2;
+    }
+
+    .editor-shell[data-html-deck-editor-ui] .editor-textarea {
+      min-height: 88px;
+      padding: 9px;
+      resize: vertical;
+      line-height: 1.45;
+    }
+
+    .editor-shell[data-html-deck-editor-ui] .file-picker-row {
+      display: grid;
+      grid-template-columns: auto 1fr;
+      gap: 8px;
+      align-items: center;
+    }
+
+    .editor-shell[data-html-deck-editor-ui] .file-input-hidden {
+      position: absolute;
+      width: 1px;
+      height: 1px;
+      opacity: 0;
+      pointer-events: none;
+    }
+
+    .editor-shell[data-html-deck-editor-ui] .file-name {
+      display: flex;
+      align-items: center;
+      min-width: 0;
+      height: 34px;
+      padding: 0 10px;
+      overflow: hidden;
+      border: 1px solid rgba(17, 17, 17, 0.12);
+      border-radius: 6px;
+      background: rgba(17, 17, 17, 0.04);
+      color: rgba(17, 17, 17, 0.58);
+      font: 500 12px/1 var(--font-body, system-ui, -apple-system, BlinkMacSystemFont, "Segoe UI", sans-serif);
+      text-overflow: ellipsis;
+      white-space: nowrap;
+    }
+
+    .editor-shell[data-html-deck-editor-ui] .drop-zone {
+      display: grid;
+      place-items: center;
+      min-height: 78px;
+      padding: 12px;
+      border: 1.5px dashed rgba(31, 43, 224, 0.5);
+      border-radius: 8px;
+      background: rgba(31, 43, 224, 0.05);
+      color: rgba(17, 17, 17, 0.68);
+      font-size: 13px;
+      line-height: 1.38;
+      text-align: center;
+    }
+
+    .editor-shell[data-html-deck-editor-ui] .drop-zone.dragging {
+      border-color: var(--ink, #111111);
+      background: rgba(31, 43, 224, 0.13);
+      color: var(--ink, #111111);
+    }
+
+    .editor-shell[data-html-deck-editor-ui] .comment-section .editor-title {
+      margin-bottom: 6px;
+    }
+
+    .editor-shell[data-html-deck-editor-ui] .comment-target {
+      margin: 0 0 8px;
+      color: rgba(17, 17, 17, 0.64);
+      font: 600 12px/1.35 var(--font-body, system-ui, -apple-system, BlinkMacSystemFont, "Segoe UI", sans-serif);
+      word-break: break-word;
+    }
+
+    .editor-shell[data-html-deck-editor-ui] .comment-input {
+      min-height: 84px;
+    }
+
+    .editor-shell[data-html-deck-editor-ui] .comment-help {
+      margin: 6px 0 0;
+      color: rgba(17, 17, 17, 0.52);
+    }
+
+    .editor-shell[data-html-deck-editor-ui] .comment-list {
+      display: grid;
+      gap: 8px;
+      margin-top: 10px;
+    }
+
+    .editor-shell[data-html-deck-editor-ui] .comment-empty {
+      margin: 0;
+      color: rgba(17, 17, 17, 0.48);
+      font: 500 12px/1.35 var(--font-body, system-ui, -apple-system, BlinkMacSystemFont, "Segoe UI", sans-serif);
+    }
+
+    .editor-shell[data-html-deck-editor-ui] .comment-card {
+      display: grid;
+      gap: 4px;
+      width: 100%;
+      padding: 9px 10px;
+      border: 1px solid rgba(17, 17, 17, 0.12);
+      border-radius: 6px;
+      background: #ffffff;
+      color: #111111;
+      text-align: left;
+    }
+
+    .editor-shell[data-html-deck-editor-ui] .comment-card:hover,
+    .editor-shell[data-html-deck-editor-ui] .comment-card:focus-visible {
+      border-color: rgba(31, 43, 224, 0.34);
+      outline: none;
+    }
+
+    .editor-shell[data-html-deck-editor-ui] .comment-card-label {
+      color: rgba(17, 17, 17, 0.58);
+      font: 600 11px/1.2 var(--font-mono, ui-monospace, SFMono-Regular, Menlo, Monaco, Consolas, "Liberation Mono", monospace);
+    }
+
+    .editor-shell[data-html-deck-editor-ui] .comment-card-text {
+      overflow: hidden;
+      color: rgba(17, 17, 17, 0.82);
+      font: 500 12px/1.35 var(--font-body, system-ui, -apple-system, BlinkMacSystemFont, "Segoe UI", sans-serif);
+      text-overflow: ellipsis;
+    }
+
+    .editor-shell[data-html-deck-editor-ui] .inspector-actions {
+      display: grid;
+      grid-template-columns: 1fr 1fr;
+      gap: 8px;
+      margin-top: 10px;
+    }
+
+    .editor-shell[data-html-deck-editor-ui] .reset-action-group {
+      position: relative;
+      min-width: 0;
+    }
+
+    .editor-shell[data-html-deck-editor-ui] .reset-action-group #resetBtn {
+      width: 100%;
+      padding-right: 36px;
+    }
+
+    .editor-shell[data-html-deck-editor-ui] .reset-help-button,
+    .editor-shell[data-html-deck-editor-ui] .toolbar-help-button {
+      position: absolute;
+      top: 50%;
+      right: 10px;
+      z-index: 1;
+      display: inline-grid;
+      place-items: center;
+      width: 18px;
+      height: 18px;
+      min-width: 18px;
+      padding: 0;
+      border: 1px solid rgba(17, 17, 17, 0.3);
+      border-radius: 999px;
+      background: rgba(17, 17, 17, 0.045);
+      color: rgba(17, 17, 17, 0.56);
+      font: 700 11px/1 var(--font-body, system-ui, -apple-system, BlinkMacSystemFont, "Segoe UI", sans-serif);
+      transform: translateY(-50%);
+      cursor: help;
+    }
+
+    .editor-shell[data-html-deck-editor-ui] .reset-help-button:hover,
+    .editor-shell[data-html-deck-editor-ui] .reset-help-button:focus-visible,
+    .editor-shell[data-html-deck-editor-ui] .toolbar-help-button:hover,
+    .editor-shell[data-html-deck-editor-ui] .toolbar-help-button:focus-visible {
+      border-color: rgba(17, 17, 17, 0.48);
+      background: rgba(17, 17, 17, 0.08);
+      color: rgba(17, 17, 17, 0.78);
+      outline: none;
+    }
+
+    .editor-shell[data-html-deck-editor-ui] .save-action-group .toolbar-help-button {
+      border-color: rgba(255, 255, 255, 0.32);
+      background: rgba(255, 255, 255, 0.1);
+      color: rgba(255, 255, 255, 0.7);
+    }
+
+    .editor-shell[data-html-deck-editor-ui] .save-action-group .toolbar-help-button:hover,
+    .editor-shell[data-html-deck-editor-ui] .save-action-group .toolbar-help-button:focus-visible {
+      border-color: rgba(255, 255, 255, 0.56);
+      background: rgba(255, 255, 255, 0.16);
+      color: rgba(255, 255, 255, 0.92);
+    }
+
+    .editor-shell[data-html-deck-editor-ui] .editor-confirm-message {
+      margin: 0;
+      color: rgba(17, 17, 17, 0.72);
+      font: 500 14px/1.65 var(--font-body, system-ui, -apple-system, BlinkMacSystemFont, "Segoe UI", sans-serif);
+    }
+
+    .editor-shell[data-html-deck-editor-ui] .editor-confirm-actions {
+      display: flex;
+      justify-content: flex-end;
+      gap: 8px;
+      margin-top: 18px;
+    }
+
+    .editor-shell[data-html-deck-editor-ui] .editor-toast {
+      position: fixed;
+      left: 50%;
+      bottom: 26px;
+      z-index: 10030;
+      min-width: 180px;
+      padding: 10px 14px;
+      border-radius: 6px;
+      background: #111111;
+      color: #ffffff;
+      font: 600 13px/1 var(--font-body, system-ui, -apple-system, BlinkMacSystemFont, "Segoe UI", sans-serif);
+      text-align: center;
+      opacity: 0;
+      transform: translate(-50%, 12px);
+      pointer-events: none;
+      transition: opacity 180ms ease, transform 180ms ease;
+    }
+
+    .editor-shell[data-html-deck-editor-ui] .editor-zoom-reset {
+      position: fixed;
+      left: 50%;
+      bottom: 26px;
+      z-index: 10025;
+      min-height: 36px;
+      padding: 0 14px;
+      border: 1px solid rgba(255, 255, 255, 0.24);
+      border-radius: 6px;
+      background: #111111;
+      color: #ffffff;
+      box-shadow: 0 8px 22px rgba(17, 17, 17, 0.22);
+      font: 600 13px/1 var(--font-body, system-ui, -apple-system, BlinkMacSystemFont, "Segoe UI", sans-serif);
+      letter-spacing: 0;
+      transform: translateX(-50%);
+      pointer-events: auto;
+      cursor: pointer;
+    }
+
+    .editor-shell[data-html-deck-editor-ui] .editor-zoom-reset:hover {
+      background: #1f2be0;
+    }
+
+    .editor-shell[data-html-deck-editor-ui] .editor-zoom-reset:focus-visible {
+      outline: 2px solid rgba(31, 43, 224, 0.42);
+      outline-offset: 3px;
+    }
+
+    .editor-shell[data-html-deck-editor-ui] .editor-toast.show {
+      opacity: 1;
+      transform: translate(-50%, 0);
+    }
+
+    .editor-shell[data-html-deck-editor-ui] .editor-help-modal {
+      position: fixed;
+      inset: 0;
+      z-index: 10045;
+      display: grid;
+      place-items: center;
+      padding: 24px;
+      background: rgba(17, 17, 17, 0.36);
+      cursor: default;
+      pointer-events: auto;
+    }
+
+    .editor-shell[data-html-deck-editor-ui] .editor-help-modal[hidden] {
+      display: none;
+    }
+
+    .editor-shell[data-html-deck-editor-ui] .editor-help-card {
+      width: min(720px, calc(100vw - 32px));
+      max-height: min(720px, calc(100vh - 48px));
+      overflow: auto;
+      border: 1px solid rgba(17, 17, 17, 0.18);
+      border-radius: 8px;
+      background: #ffffff;
+      cursor: default;
+      box-shadow: 0 28px 80px rgba(17, 17, 17, 0.28);
+    }
+
+    .editor-shell[data-html-deck-editor-ui] .editor-export-card {
+      width: min(680px, calc(100vw - 32px));
+      max-height: min(720px, calc(100dvh - 48px));
+      display: flex;
+      flex-direction: column;
+      overflow: hidden;
+    }
+
+    .editor-shell[data-html-deck-editor-ui] .editor-export-modal[aria-busy="true"] .editor-export-card {
+      width: min(480px, calc(100vw - 32px));
+    }
+
+    .editor-shell[data-html-deck-editor-ui] .editor-export-modal[aria-busy="true"] .editor-help-close {
+      display: none;
+    }
+
+    .editor-shell[data-html-deck-editor-ui] .editor-export-modal[aria-busy="true"] .editor-export-body {
+      flex: 0 0 auto;
+      grid-template-rows: auto;
+      padding: 0 20px 20px;
+    }
+
+    .editor-shell[data-html-deck-editor-ui] .editor-export-modal[aria-busy="true"] .editor-export-body > :not(.editor-export-progress-panel) {
+      display: none;
+    }
+
+    .editor-shell[data-html-deck-editor-ui] .editor-export-intro {
+      margin: 5px 0 0;
+      color: rgba(17, 17, 17, 0.58);
+      font: 500 12px/1.45 var(--font-body, system-ui, -apple-system, BlinkMacSystemFont, "Segoe UI", sans-serif);
+    }
+
+    .editor-shell[data-html-deck-editor-ui] .editor-export-body {
+      gap: 14px;
+      flex: 1 1 auto;
+      grid-template-rows: auto auto minmax(0, 1fr) auto auto;
+      min-height: 0;
+      overflow: hidden;
+    }
+
+    .editor-shell[data-html-deck-editor-ui] .editor-export-format {
+      display: flex;
+      gap: 8px;
+      align-items: center;
+      margin: 0;
+      padding: 0;
+      border: 0;
+    }
+
+    .editor-shell[data-html-deck-editor-ui] .editor-export-format legend {
+      margin-right: 8px;
+      color: #111111;
+      font: 750 13px/1 var(--font-body, system-ui, -apple-system, BlinkMacSystemFont, "Segoe UI", sans-serif);
+    }
+
+    .editor-shell[data-html-deck-editor-ui] .editor-export-format label {
+      display: inline-flex;
+      gap: 6px;
+      align-items: center;
+      min-height: 34px;
+      padding: 0 11px;
+      border: 1px solid rgba(17, 17, 17, 0.14);
+      border-radius: 6px;
+      background: #ffffff;
+      color: #111111;
+      font: 650 13px/1 var(--font-body, system-ui, -apple-system, BlinkMacSystemFont, "Segoe UI", sans-serif);
+    }
+
+    .editor-shell[data-html-deck-editor-ui] .editor-export-page-header,
+    .editor-shell[data-html-deck-editor-ui] .editor-export-page-actions,
+    .editor-shell[data-html-deck-editor-ui] .editor-export-actions {
+      display: flex;
+      gap: 8px;
+      align-items: center;
+    }
+
+    .editor-shell[data-html-deck-editor-ui] .editor-export-page-header {
+      justify-content: space-between;
+    }
+
+    .editor-shell[data-html-deck-editor-ui] .editor-export-pages {
+      display: grid;
+      grid-template-columns: repeat(2, minmax(0, 1fr));
+      gap: 8px;
+      min-height: 96px;
+      max-height: min(320px, 38dvh);
+      overflow: auto;
+      overscroll-behavior: contain;
+      padding: 1px 4px 1px 1px;
+      scrollbar-gutter: stable;
+    }
+
+    .editor-shell[data-html-deck-editor-ui] .editor-export-page {
+      display: grid;
+      grid-template-columns: auto 34px minmax(0, 1fr);
+      gap: 8px;
+      align-items: center;
+      min-height: 42px;
+      padding: 7px 9px;
+      border: 1px solid rgba(17, 17, 17, 0.13);
+      border-radius: 6px;
+      background: #ffffff;
+      cursor: pointer;
+    }
+
+    .editor-shell[data-html-deck-editor-ui] .editor-export-page:has(input:checked) {
+      border-color: rgba(31, 43, 224, 0.46);
+      background: rgba(31, 43, 224, 0.055);
+    }
+
+    .editor-shell[data-html-deck-editor-ui] .editor-export-page-number {
+      color: rgba(17, 17, 17, 0.54);
+      font: 600 12px/1 var(--font-mono, ui-monospace, SFMono-Regular, Menlo, Monaco, Consolas, "Liberation Mono", monospace);
+    }
+
+    .editor-shell[data-html-deck-editor-ui] .editor-export-page-title {
+      overflow: hidden;
+      font: 650 13px/1.3 var(--font-body, system-ui, -apple-system, BlinkMacSystemFont, "Segoe UI", sans-serif);
+      text-overflow: ellipsis;
+      white-space: nowrap;
+    }
+
+    .editor-shell[data-html-deck-editor-ui] .editor-export-status {
+      min-height: 20px;
+      margin: 0;
+      color: rgba(17, 17, 17, 0.64);
+      font: 600 12px/1.5 var(--font-body, system-ui, -apple-system, BlinkMacSystemFont, "Segoe UI", sans-serif);
+    }
+
+    .editor-shell[data-html-deck-editor-ui] .editor-export-downloads {
+      display: flex;
+      flex-wrap: wrap;
+      gap: 8px;
+      align-items: center;
+    }
+
+    .editor-shell[data-html-deck-editor-ui] .editor-export-downloads[hidden] {
+      display: none;
+    }
+
+    .editor-shell[data-html-deck-editor-ui] .editor-export-download {
+      display: inline-flex;
+      align-items: center;
+      justify-content: center;
+      width: max-content;
+      min-height: 34px;
+      padding: 0 13px;
+      border: 1px solid #1f2be0;
+      border-radius: 6px;
+      background: #1f2be0;
+      color: #ffffff;
+      font: 700 13px/1 var(--font-body, system-ui, -apple-system, BlinkMacSystemFont, "Segoe UI", sans-serif);
+      text-decoration: none;
+    }
+
+    .editor-shell[data-html-deck-editor-ui] .editor-export-download.secondary {
+      border-color: rgba(31, 43, 224, 0.24);
+      background: rgba(31, 43, 224, 0.07);
+      color: #1f2be0;
+    }
+
+    .editor-shell[data-html-deck-editor-ui] .editor-export-progress-panel {
+      display: grid;
+      gap: 9px;
+      padding: 12px 14px;
+      border: 1px solid rgba(31, 43, 224, 0.18);
+      border-radius: 6px;
+      background: rgba(31, 43, 224, 0.05);
+    }
+
+    .editor-shell[data-html-deck-editor-ui] .editor-export-modal[aria-busy="true"] .editor-export-progress-panel {
+      min-height: 164px;
+      align-content: center;
+      gap: 12px;
+      padding: 24px;
+      border-color: rgba(31, 43, 224, 0.24);
+      background: rgba(31, 43, 224, 0.06);
+    }
+
+    .editor-shell[data-html-deck-editor-ui] .editor-export-progress-panel[hidden] {
+      display: none;
+    }
+
+    .editor-shell[data-html-deck-editor-ui] .editor-export-progress-copy {
+      display: flex;
+      gap: 12px;
+      align-items: center;
+      justify-content: space-between;
+      color: #111111;
+      font: 700 13px/1.35 var(--font-body, system-ui, -apple-system, BlinkMacSystemFont, "Segoe UI", sans-serif);
+    }
+
+    .editor-shell[data-html-deck-editor-ui] .editor-export-progress-kicker {
+      color: #1f2be0;
+      font: 700 12px/1.3 var(--font-body, system-ui, -apple-system, BlinkMacSystemFont, "Segoe UI", sans-serif);
+      letter-spacing: 0.04em;
+    }
+
+    .editor-shell[data-html-deck-editor-ui] .editor-export-progress-copy span {
+      color: rgba(17, 17, 17, 0.58);
+      font: 650 12px/1 var(--font-mono, ui-monospace, SFMono-Regular, Menlo, Monaco, Consolas, "Liberation Mono", monospace);
+      white-space: nowrap;
+    }
+
+    .editor-shell[data-html-deck-editor-ui] .editor-export-progress {
+      width: 100%;
+      height: 8px;
+      overflow: hidden;
+      border: 0;
+      border-radius: 999px;
+      background: rgba(31, 43, 224, 0.12);
+      accent-color: #1f2be0;
+    }
+
+    .editor-shell[data-html-deck-editor-ui] .editor-export-progress::-webkit-progress-bar {
+      border-radius: 999px;
+      background: rgba(31, 43, 224, 0.12);
+    }
+
+    .editor-shell[data-html-deck-editor-ui] .editor-export-progress::-webkit-progress-value {
+      border-radius: 999px;
+      background: #1f2be0;
+    }
+
+    .editor-shell[data-html-deck-editor-ui] .editor-export-progress::-moz-progress-bar {
+      border-radius: 999px;
+      background: #1f2be0;
+    }
+
+    .editor-shell[data-html-deck-editor-ui] .editor-export-progress-panel p {
+      margin: 0;
+      color: rgba(17, 17, 17, 0.56);
+      font: 500 12px/1.4 var(--font-body, system-ui, -apple-system, BlinkMacSystemFont, "Segoe UI", sans-serif);
+    }
+
+    .editor-shell[data-html-deck-editor-ui] .editor-export-progress-footer {
+      display: flex;
+      gap: 12px;
+      align-items: center;
+      justify-content: space-between;
+    }
+
+    .editor-shell[data-html-deck-editor-ui] .editor-export-cancel-running {
+      flex: 0 0 auto;
+      min-width: 88px;
+      border-color: rgba(31, 43, 224, 0.28);
+    }
+
+    .editor-shell[data-html-deck-editor-ui] .editor-export-modal[data-export-cancel="pending"] .editor-export-progress-panel {
+      border-color: rgba(180, 35, 24, 0.28);
+      background: rgba(180, 35, 24, 0.05);
+    }
+
+    .editor-shell[data-html-deck-editor-ui] .editor-export-actions {
+      justify-content: flex-end;
+      padding-top: 4px;
+      border-top: 1px solid rgba(17, 17, 17, 0.1);
+    }
+
+    body.html-deck-editor-export-capturing .slide,
+    body.html-deck-editor-export-capturing .slide * {
+      animation: none !important;
+      transition: none !important;
+      caret-color: transparent !important;
+    }
+
+    .editor-shell[data-html-deck-editor-ui] .editor-help-header {
+      display: flex;
+      gap: 16px;
+      align-items: center;
+      justify-content: space-between;
+      padding: 18px 20px 14px;
+      border-bottom: 1px solid rgba(17, 17, 17, 0.12);
+    }
+
+    .editor-shell[data-html-deck-editor-ui] .editor-help-title {
+      margin: 0;
+      color: #111111;
+      font: 760 22px/1.2 var(--font-body, system-ui, -apple-system, BlinkMacSystemFont, "Segoe UI", sans-serif);
+      letter-spacing: 0;
+    }
+
+    .editor-shell[data-html-deck-editor-ui] .editor-help-close {
+      display: inline-grid;
+      place-items: center;
+      width: 34px;
+      height: 34px;
+      border: 1px solid rgba(17, 17, 17, 0.18);
+      border-radius: 6px;
+      background: #ffffff;
+      color: #111111;
+      font: 700 20px/1 var(--font-body, system-ui, -apple-system, BlinkMacSystemFont, "Segoe UI", sans-serif);
+      cursor: pointer;
+    }
+
+    .editor-shell[data-html-deck-editor-ui] .editor-help-body {
+      display: grid;
+      gap: 16px;
+      padding: 18px 20px 20px;
+      color: rgba(17, 17, 17, 0.78);
+      font: 500 14px/1.55 var(--font-body, system-ui, -apple-system, BlinkMacSystemFont, "Segoe UI", sans-serif);
+    }
+
+    .editor-shell[data-html-deck-editor-ui] .editor-help-section {
+      display: grid;
+      gap: 7px;
+      padding-top: 14px;
+      border-top: 1px solid rgba(17, 17, 17, 0.10);
+    }
+
+    .editor-shell[data-html-deck-editor-ui] .editor-help-section:first-child {
+      padding-top: 0;
+      border-top: 0;
+    }
+
+    .editor-shell[data-html-deck-editor-ui] .editor-help-section h3 {
+      margin: 0;
+      color: #111111;
+      font: 750 15px/1.25 var(--font-body, system-ui, -apple-system, BlinkMacSystemFont, "Segoe UI", sans-serif);
+      letter-spacing: 0;
+    }
+
+    .editor-shell[data-html-deck-editor-ui] .editor-help-section p,
+    .editor-shell[data-html-deck-editor-ui] .editor-help-section ul {
+      margin: 0;
+    }
+
+    .editor-shell[data-html-deck-editor-ui] .editor-help-section ul {
+      padding-left: 1.2em;
+    }
+
+    .editor-shell[data-html-deck-editor-ui] .editor-help-section li + li {
+      margin-top: 4px;
+    }
+
+    .editor-layer {
+      position: absolute;
+      z-index: 20;
+    }
+
+    .text-layer {
+      min-width: 240px;
+      min-height: 64px;
+      padding: 14px 18px;
+      border: 1.5px solid var(--ink, #111111);
+      background: rgba(240, 235, 222, 0.92);
+      color: var(--ink, #111111);
+      font: 700 38px/1.16 var(--font-display-cjk);
+    }
+
+    .image-layer {
+      width: 520px;
+      height: 320px;
+      border: 1.5px solid var(--ink, #111111);
+      background: var(--paper, #f8f6ef);
+      overflow: hidden;
+    }
+
+    .image-layer img {
+      width: 100%;
+      height: 100%;
+      display: block;
+      object-fit: cover;
+    }
+
+    .shape-layer {
+      width: 280px;
+      height: 180px;
+      border: 1.5px solid var(--ink, #111111);
+      background: rgba(31, 43, 224, 0.16);
+    }
+
+    .shape-layer[data-shape="roundRect"] {
+      border-radius: 28px;
+    }
+
+    .shape-layer[data-shape="circle"] {
+      border-radius: 999px;
+    }
+
+    .shape-layer[data-shape="triangle"] {
+      border: 0;
+      clip-path: polygon(50% 0, 100% 100%, 0 100%);
+    }
+
+    .shape-layer[data-shape="line"] {
+      height: 14px;
+      border: 0;
+    }
+
+    .shape-layer[data-shape="arrow"] {
+      border: 0;
+      clip-path: polygon(0 36%, 66% 36%, 66% 14%, 100% 50%, 66% 86%, 66% 64%, 0 64%);
+    }
+
+    .edit-moved:not(.editor-motion-preview):not(.editor-motion-running) {
+      animation: none !important;
+      transition: none !important;
+      transform: translate(var(--edit-x, 0px), var(--edit-y, 0px)) scale(var(--edit-scale-x, var(--edit-scale, 1)), var(--edit-scale-y, var(--edit-scale, 1))) var(--edit-base-transform, matrix(1, 0, 0, 1, 0, 0)) !important;
+      transform-origin: top left;
+    }
+
+    .edit-moved.html-deck-editor-edit-visible:not(.editor-motion-preview):not(.editor-motion-running) {
+      opacity: var(--html-deck-editor-edit-opacity, 1) !important;
+      filter: none !important;
+    }
+
+    .slide:is(.visible, .active, [data-deck-active], [data-html-deck-editor-current]) .edit-moved.reveal:not(.editor-motion-preview):not(.editor-motion-running),
+    .slide:is(.visible, .active, [data-deck-active], [data-html-deck-editor-current]) .edit-moved.reveal-left:not(.editor-motion-preview):not(.editor-motion-running),
+    .slide:is(.visible, .active, [data-deck-active], [data-html-deck-editor-current]) .edit-moved.reveal-scale:not(.editor-motion-preview):not(.editor-motion-running),
+    .slide:is(.visible, .active, [data-deck-active], [data-html-deck-editor-current]) .edit-moved.editor-anim-rise:not(.editor-motion-preview):not(.editor-motion-running),
+    .slide:is(.visible, .active, [data-deck-active], [data-html-deck-editor-current]) .edit-moved.editor-anim-drop:not(.editor-motion-preview):not(.editor-motion-running),
+    .slide:is(.visible, .active, [data-deck-active], [data-html-deck-editor-current]) .edit-moved.editor-anim-left:not(.editor-motion-preview):not(.editor-motion-running),
+    .slide:is(.visible, .active, [data-deck-active], [data-html-deck-editor-current]) .edit-moved.editor-anim-right:not(.editor-motion-preview):not(.editor-motion-running),
+    .slide:is(.visible, .active, [data-deck-active], [data-html-deck-editor-current]) .edit-moved.editor-anim-scale:not(.editor-motion-preview):not(.editor-motion-running),
+    .slide:is(.visible, .active, [data-deck-active], [data-html-deck-editor-current]) .edit-moved.editor-anim-zoom:not(.editor-motion-preview):not(.editor-motion-running),
+    .slide:is(.visible, .active, [data-deck-active], [data-html-deck-editor-current]) .edit-moved.editor-anim-pop:not(.editor-motion-preview):not(.editor-motion-running),
+    .slide:is(.visible, .active, [data-deck-active], [data-html-deck-editor-current]) .edit-moved.editor-anim-rotate:not(.editor-motion-preview):not(.editor-motion-running),
+    .slide:is(.visible, .active, [data-deck-active], [data-html-deck-editor-current]) .edit-moved.editor-anim-blur:not(.editor-motion-preview):not(.editor-motion-running),
+    .slide:is(.visible, .active, [data-deck-active], [data-html-deck-editor-current]) .edit-moved.editor-anim-flip:not(.editor-motion-preview):not(.editor-motion-running),
+    .slide:is(.visible, .active, [data-deck-active], [data-html-deck-editor-current]) .edit-moved.editor-anim-fade:not(.editor-motion-preview):not(.editor-motion-running) {
+      opacity: 1;
+      filter: none !important;
+      transform: translate(var(--edit-x, 0px), var(--edit-y, 0px)) scale(var(--edit-scale-x, var(--edit-scale, 1)), var(--edit-scale-y, var(--edit-scale, 1))) var(--edit-base-transform, matrix(1, 0, 0, 1, 0, 0)) !important;
+    }
+
+    .slide:is(.visible, .active, [data-deck-active], [data-html-deck-editor-current]) .editor-motion-parent-stable,
+    .editor-motion-parent-stable.reveal,
+    .editor-motion-parent-stable.reveal-left,
+    .editor-motion-parent-stable.reveal-scale {
+      opacity: 1 !important;
+      filter: none !important;
+      transform: none !important;
+      transition: none !important;
+      animation: none !important;
+    }
+
+    .editor-anim-none {
+      opacity: 1 !important;
+      transform: translate(var(--edit-x, 0px), var(--edit-y, 0px)) scale(var(--edit-scale-x, var(--edit-scale, 1)), var(--edit-scale-y, var(--edit-scale, 1))) var(--edit-base-transform, matrix(1, 0, 0, 1, 0, 0)) !important;
+      transition: none !important;
+      animation: none !important;
+    }
+
+    .editor-anim-fade,
+    .editor-anim-rise,
+    .editor-anim-drop,
+    .editor-anim-left,
+    .editor-anim-right,
+    .editor-anim-scale,
+    .editor-anim-zoom,
+    .editor-anim-pop,
+    .editor-anim-rotate,
+    .editor-anim-blur,
+    .editor-anim-flip {
+      opacity: 0;
+      transform-origin: center;
+      transition:
+        opacity var(--edit-duration, 640ms) var(--ease-out-expo, cubic-bezier(0.16, 1, 0.3, 1)),
+        transform var(--edit-duration, 640ms) var(--ease-out-expo, cubic-bezier(0.16, 1, 0.3, 1)),
+        filter var(--edit-duration, 640ms) var(--ease-out-expo, cubic-bezier(0.16, 1, 0.3, 1));
+      transition-delay: var(--edit-delay, 0ms);
+    }
+
+    .edit-moved.editor-anim-none,
+    .edit-moved.editor-anim-fade,
+    .edit-moved.editor-anim-rise,
+    .edit-moved.editor-anim-drop,
+    .edit-moved.editor-anim-left,
+    .edit-moved.editor-anim-right,
+    .edit-moved.editor-anim-scale,
+    .edit-moved.editor-anim-zoom,
+    .edit-moved.editor-anim-pop,
+    .edit-moved.editor-anim-rotate,
+    .edit-moved.editor-anim-blur,
+    .edit-moved.editor-anim-flip,
+    .edit-moved.editor-motion-preview,
+    .edit-moved.editor-motion-running {
+      transform-origin: top left !important;
+    }
+
+    .edit-moved.editor-anim-fade:not(.editor-motion-preview):not(.editor-motion-running),
+    .edit-moved.editor-anim-rise:not(.editor-motion-preview):not(.editor-motion-running),
+    .edit-moved.editor-anim-drop:not(.editor-motion-preview):not(.editor-motion-running),
+    .edit-moved.editor-anim-left:not(.editor-motion-preview):not(.editor-motion-running),
+    .edit-moved.editor-anim-right:not(.editor-motion-preview):not(.editor-motion-running),
+    .edit-moved.editor-anim-scale:not(.editor-motion-preview):not(.editor-motion-running),
+    .edit-moved.editor-anim-zoom:not(.editor-motion-preview):not(.editor-motion-running),
+    .edit-moved.editor-anim-pop:not(.editor-motion-preview):not(.editor-motion-running),
+    .edit-moved.editor-anim-rotate:not(.editor-motion-preview):not(.editor-motion-running),
+    .edit-moved.editor-anim-blur:not(.editor-motion-preview):not(.editor-motion-running),
+    .edit-moved.editor-anim-flip:not(.editor-motion-preview):not(.editor-motion-running) {
+      animation: none !important;
+      transition: none !important;
+      transition-delay: 0ms !important;
+    }
+
+    .editor-anim-fade {
+      transform: translate(var(--edit-x, 0px), var(--edit-y, 0px)) scale(var(--edit-scale-x, var(--edit-scale, 1)), var(--edit-scale-y, var(--edit-scale, 1))) var(--edit-base-transform, matrix(1, 0, 0, 1, 0, 0));
+    }
+
+    .editor-anim-rise {
+      transform: translate(var(--edit-x, 0px), calc(var(--edit-y, 0px) + 34px)) scale(var(--edit-scale-x, var(--edit-scale, 1)), var(--edit-scale-y, var(--edit-scale, 1))) var(--edit-base-transform, matrix(1, 0, 0, 1, 0, 0));
+    }
+
+    .editor-anim-drop {
+      transform: translate(var(--edit-x, 0px), calc(var(--edit-y, 0px) - 42px)) scale(var(--edit-scale-x, var(--edit-scale, 1)), var(--edit-scale-y, var(--edit-scale, 1))) var(--edit-base-transform, matrix(1, 0, 0, 1, 0, 0));
+    }
+
+    .editor-anim-left {
+      transform: translate(calc(var(--edit-x, 0px) - 46px), var(--edit-y, 0px)) scale(var(--edit-scale-x, var(--edit-scale, 1)), var(--edit-scale-y, var(--edit-scale, 1))) var(--edit-base-transform, matrix(1, 0, 0, 1, 0, 0));
+    }
+
+    .editor-anim-right {
+      transform: translate(calc(var(--edit-x, 0px) + 46px), var(--edit-y, 0px)) scale(var(--edit-scale-x, var(--edit-scale, 1)), var(--edit-scale-y, var(--edit-scale, 1))) var(--edit-base-transform, matrix(1, 0, 0, 1, 0, 0));
+    }
+
+    .editor-anim-scale {
+      transform: translate(var(--edit-x, 0px), var(--edit-y, 0px)) scale(calc(var(--edit-scale-x, var(--edit-scale, 1)) * 0.92), calc(var(--edit-scale-y, var(--edit-scale, 1)) * 0.92)) var(--edit-base-transform, matrix(1, 0, 0, 1, 0, 0));
+    }
+
+    .editor-anim-zoom {
+      transform: translate(var(--edit-x, 0px), var(--edit-y, 0px)) scale(calc(var(--edit-scale-x, var(--edit-scale, 1)) * 1.14), calc(var(--edit-scale-y, var(--edit-scale, 1)) * 1.14)) var(--edit-base-transform, matrix(1, 0, 0, 1, 0, 0));
+    }
+
+    .editor-anim-pop {
+      transform: translate(var(--edit-x, 0px), var(--edit-y, 0px)) scale(calc(var(--edit-scale-x, var(--edit-scale, 1)) * 0.72), calc(var(--edit-scale-y, var(--edit-scale, 1)) * 0.72)) var(--edit-base-transform, matrix(1, 0, 0, 1, 0, 0));
+    }
+
+    .editor-anim-rotate {
+      transform: translate(var(--edit-x, 0px), var(--edit-y, 0px)) rotate(-8deg) scale(calc(var(--edit-scale-x, var(--edit-scale, 1)) * 0.96), calc(var(--edit-scale-y, var(--edit-scale, 1)) * 0.96)) var(--edit-base-transform, matrix(1, 0, 0, 1, 0, 0));
+    }
+
+    .editor-anim-blur {
+      filter: blur(14px);
+      transform: translate(var(--edit-x, 0px), var(--edit-y, 0px)) scale(calc(var(--edit-scale-x, var(--edit-scale, 1)) * 1.03), calc(var(--edit-scale-y, var(--edit-scale, 1)) * 1.03)) var(--edit-base-transform, matrix(1, 0, 0, 1, 0, 0));
+    }
+
+    .editor-anim-flip {
+      transform: translate(var(--edit-x, 0px), var(--edit-y, 0px)) perspective(760px) rotateX(70deg) scale(var(--edit-scale-x, var(--edit-scale, 1)), var(--edit-scale-y, var(--edit-scale, 1))) var(--edit-base-transform, matrix(1, 0, 0, 1, 0, 0));
+    }
+
+    .edit-moved.editor-anim-fade:not(.editor-motion-preview):not(.editor-motion-running),
+    .edit-moved.editor-anim-rise:not(.editor-motion-preview):not(.editor-motion-running),
+    .edit-moved.editor-anim-drop:not(.editor-motion-preview):not(.editor-motion-running),
+    .edit-moved.editor-anim-left:not(.editor-motion-preview):not(.editor-motion-running),
+    .edit-moved.editor-anim-right:not(.editor-motion-preview):not(.editor-motion-running),
+    .edit-moved.editor-anim-scale:not(.editor-motion-preview):not(.editor-motion-running),
+    .edit-moved.editor-anim-zoom:not(.editor-motion-preview):not(.editor-motion-running),
+    .edit-moved.editor-anim-pop:not(.editor-motion-preview):not(.editor-motion-running),
+    .edit-moved.editor-anim-rotate:not(.editor-motion-preview):not(.editor-motion-running),
+    .edit-moved.editor-anim-blur:not(.editor-motion-preview):not(.editor-motion-running),
+    .edit-moved.editor-anim-flip:not(.editor-motion-preview):not(.editor-motion-running) {
+      opacity: 1 !important;
+      filter: none !important;
+      transform: translate(var(--edit-x, 0px), var(--edit-y, 0px)) scale(var(--edit-scale-x, var(--edit-scale, 1)), var(--edit-scale-y, var(--edit-scale, 1))) var(--edit-base-transform, matrix(1, 0, 0, 1, 0, 0)) !important;
+    }
+
+    .slide:is(.visible, .active, [data-deck-active], [data-html-deck-editor-current]) .editor-anim-fade,
+    .slide:is(.visible, .active, [data-deck-active], [data-html-deck-editor-current]) .editor-anim-rise,
+    .slide:is(.visible, .active, [data-deck-active], [data-html-deck-editor-current]) .editor-anim-drop,
+    .slide:is(.visible, .active, [data-deck-active], [data-html-deck-editor-current]) .editor-anim-left,
+    .slide:is(.visible, .active, [data-deck-active], [data-html-deck-editor-current]) .editor-anim-right,
+    .slide:is(.visible, .active, [data-deck-active], [data-html-deck-editor-current]) .editor-anim-scale,
+    .slide:is(.visible, .active, [data-deck-active], [data-html-deck-editor-current]) .editor-anim-zoom,
+    .slide:is(.visible, .active, [data-deck-active], [data-html-deck-editor-current]) .editor-anim-pop,
+    .slide:is(.visible, .active, [data-deck-active], [data-html-deck-editor-current]) .editor-anim-rotate,
+    .slide:is(.visible, .active, [data-deck-active], [data-html-deck-editor-current]) .editor-anim-blur,
+    .slide:is(.visible, .active, [data-deck-active], [data-html-deck-editor-current]) .editor-anim-flip {
+      opacity: 1;
+      filter: none;
+      transform: translate(var(--edit-x, 0px), var(--edit-y, 0px)) scale(var(--edit-scale-x, var(--edit-scale, 1)), var(--edit-scale-y, var(--edit-scale, 1))) var(--edit-base-transform, matrix(1, 0, 0, 1, 0, 0));
+    }
+
+    body.editing:not(.html-deck-editor-exporting) .editor-anim-fade:not(.editor-motion-preview):not(.editor-motion-running),
+    body.editing:not(.html-deck-editor-exporting) .editor-anim-rise:not(.editor-motion-preview):not(.editor-motion-running),
+    body.editing:not(.html-deck-editor-exporting) .editor-anim-drop:not(.editor-motion-preview):not(.editor-motion-running),
+    body.editing:not(.html-deck-editor-exporting) .editor-anim-left:not(.editor-motion-preview):not(.editor-motion-running),
+    body.editing:not(.html-deck-editor-exporting) .editor-anim-right:not(.editor-motion-preview):not(.editor-motion-running),
+    body.editing:not(.html-deck-editor-exporting) .editor-anim-scale:not(.editor-motion-preview):not(.editor-motion-running),
+    body.editing:not(.html-deck-editor-exporting) .editor-anim-zoom:not(.editor-motion-preview):not(.editor-motion-running),
+    body.editing:not(.html-deck-editor-exporting) .editor-anim-pop:not(.editor-motion-preview):not(.editor-motion-running),
+    body.editing:not(.html-deck-editor-exporting) .editor-anim-rotate:not(.editor-motion-preview):not(.editor-motion-running),
+    body.editing:not(.html-deck-editor-exporting) .editor-anim-blur:not(.editor-motion-preview):not(.editor-motion-running),
+    body.editing:not(.html-deck-editor-exporting) .editor-anim-flip:not(.editor-motion-preview):not(.editor-motion-running) {
+      opacity: 1 !important;
+      filter: none !important;
+      animation: none !important;
+      transition: none !important;
+      transform: translate(var(--edit-x, 0px), var(--edit-y, 0px)) scale(var(--edit-scale-x, var(--edit-scale, 1)), var(--edit-scale-y, var(--edit-scale, 1))) var(--edit-base-transform, matrix(1, 0, 0, 1, 0, 0)) !important;
+    }
+
+    body.editing:not(.html-deck-editor-exporting) .slide[data-html-deck-editor-current] [data-html-deck-editor-motion-hold]:not(.editor-motion-preview):not(.editor-motion-running) {
+      opacity: var(--html-deck-editor-edit-opacity, 1) !important;
+      filter: none !important;
+      animation: none !important;
+      transition: none !important;
+    }
+
+    body.editing:not(.html-deck-editor-exporting) .slide[data-html-deck-editor-current] .edit-moved:not(.editor-motion-preview):not(.editor-motion-running) {
+      animation: none !important;
+      transition: none !important;
+      transform: translate(var(--edit-x, 0px), var(--edit-y, 0px)) scale(var(--edit-scale-x, var(--edit-scale, 1)), var(--edit-scale-y, var(--edit-scale, 1))) var(--edit-base-transform, matrix(1, 0, 0, 1, 0, 0)) !important;
+      transform-origin: top left !important;
+    }
+
+    .editor-motion-preview.editor-anim-fade {
+      animation: editorPreviewFade var(--edit-duration, 640ms) var(--ease-out-expo, cubic-bezier(0.16, 1, 0.3, 1)) var(--edit-delay, 0ms) both !important;
+    }
+
+    .editor-motion-running.editor-anim-fade {
+      animation: editorPreviewFade var(--edit-duration, 640ms) var(--ease-out-expo, cubic-bezier(0.16, 1, 0.3, 1)) var(--edit-delay, 0ms) both !important;
+    }
+
+    .editor-motion-preview.editor-anim-rise {
+      animation: editorPreviewRise var(--edit-duration, 640ms) var(--ease-out-expo, cubic-bezier(0.16, 1, 0.3, 1)) var(--edit-delay, 0ms) both !important;
+    }
+
+    .editor-motion-running.editor-anim-rise {
+      animation: editorPreviewRise var(--edit-duration, 640ms) var(--ease-out-expo, cubic-bezier(0.16, 1, 0.3, 1)) var(--edit-delay, 0ms) both !important;
+    }
+
+    .editor-motion-preview.editor-anim-left {
+      animation: editorPreviewLeft var(--edit-duration, 640ms) var(--ease-out-expo, cubic-bezier(0.16, 1, 0.3, 1)) var(--edit-delay, 0ms) both !important;
+    }
+
+    .editor-motion-running.editor-anim-left {
+      animation: editorPreviewLeft var(--edit-duration, 640ms) var(--ease-out-expo, cubic-bezier(0.16, 1, 0.3, 1)) var(--edit-delay, 0ms) both !important;
+    }
+
+    .editor-motion-preview.editor-anim-scale {
+      animation: editorPreviewScale var(--edit-duration, 640ms) var(--ease-out-expo, cubic-bezier(0.16, 1, 0.3, 1)) var(--edit-delay, 0ms) both !important;
+    }
+
+    .editor-motion-running.editor-anim-scale {
+      animation: editorPreviewScale var(--edit-duration, 640ms) var(--ease-out-expo, cubic-bezier(0.16, 1, 0.3, 1)) var(--edit-delay, 0ms) both !important;
+    }
+
+    .editor-motion-preview.editor-anim-drop {
+      animation: editorPreviewDrop var(--edit-duration, 640ms) var(--ease-out-expo, cubic-bezier(0.16, 1, 0.3, 1)) var(--edit-delay, 0ms) both !important;
+    }
+
+    .editor-motion-running.editor-anim-drop {
+      animation: editorPreviewDrop var(--edit-duration, 640ms) var(--ease-out-expo, cubic-bezier(0.16, 1, 0.3, 1)) var(--edit-delay, 0ms) both !important;
+    }
+
+    .editor-motion-preview.editor-anim-right {
+      animation: editorPreviewRight var(--edit-duration, 640ms) var(--ease-out-expo, cubic-bezier(0.16, 1, 0.3, 1)) var(--edit-delay, 0ms) both !important;
+    }
+
+    .editor-motion-running.editor-anim-right {
+      animation: editorPreviewRight var(--edit-duration, 640ms) var(--ease-out-expo, cubic-bezier(0.16, 1, 0.3, 1)) var(--edit-delay, 0ms) both !important;
+    }
+
+    .editor-motion-preview.editor-anim-zoom {
+      animation: editorPreviewZoom var(--edit-duration, 640ms) var(--ease-out-expo, cubic-bezier(0.16, 1, 0.3, 1)) var(--edit-delay, 0ms) both !important;
+    }
+
+    .editor-motion-running.editor-anim-zoom {
+      animation: editorPreviewZoom var(--edit-duration, 640ms) var(--ease-out-expo, cubic-bezier(0.16, 1, 0.3, 1)) var(--edit-delay, 0ms) both !important;
+    }
+
+    .editor-motion-preview.editor-anim-pop {
+      animation: editorPreviewPop var(--edit-duration, 640ms) var(--ease-out-expo, cubic-bezier(0.16, 1, 0.3, 1)) var(--edit-delay, 0ms) both !important;
+    }
+
+    .editor-motion-running.editor-anim-pop {
+      animation: editorPreviewPop var(--edit-duration, 640ms) var(--ease-out-expo, cubic-bezier(0.16, 1, 0.3, 1)) var(--edit-delay, 0ms) both !important;
+    }
+
+    .editor-motion-preview.editor-anim-rotate {
+      animation: editorPreviewRotate var(--edit-duration, 640ms) var(--ease-out-expo, cubic-bezier(0.16, 1, 0.3, 1)) var(--edit-delay, 0ms) both !important;
+    }
+
+    .editor-motion-running.editor-anim-rotate {
+      animation: editorPreviewRotate var(--edit-duration, 640ms) var(--ease-out-expo, cubic-bezier(0.16, 1, 0.3, 1)) var(--edit-delay, 0ms) both !important;
+    }
+
+    .editor-motion-preview.editor-anim-blur {
+      animation: editorPreviewBlur var(--edit-duration, 640ms) var(--ease-out-expo, cubic-bezier(0.16, 1, 0.3, 1)) var(--edit-delay, 0ms) both !important;
+    }
+
+    .editor-motion-running.editor-anim-blur {
+      animation: editorPreviewBlur var(--edit-duration, 640ms) var(--ease-out-expo, cubic-bezier(0.16, 1, 0.3, 1)) var(--edit-delay, 0ms) both !important;
+    }
+
+    .editor-motion-preview.editor-anim-flip {
+      animation: editorPreviewFlip var(--edit-duration, 640ms) var(--ease-out-expo, cubic-bezier(0.16, 1, 0.3, 1)) var(--edit-delay, 0ms) both !important;
+    }
+
+    .editor-motion-running.editor-anim-flip {
+      animation: editorPreviewFlip var(--edit-duration, 640ms) var(--ease-out-expo, cubic-bezier(0.16, 1, 0.3, 1)) var(--edit-delay, 0ms) both !important;
+    }
+
+    @keyframes editorPreviewFade {
+      from {
+        opacity: 0;
+        transform: translate(var(--edit-x, 0px), var(--edit-y, 0px)) scale(var(--edit-scale-x, var(--edit-scale, 1)), var(--edit-scale-y, var(--edit-scale, 1))) var(--edit-base-transform, matrix(1, 0, 0, 1, 0, 0));
+      }
+      to {
+        opacity: 1;
+        transform: translate(var(--edit-x, 0px), var(--edit-y, 0px)) scale(var(--edit-scale-x, var(--edit-scale, 1)), var(--edit-scale-y, var(--edit-scale, 1))) var(--edit-base-transform, matrix(1, 0, 0, 1, 0, 0));
+      }
+    }
+
+    @keyframes editorPreviewRise {
+      from {
+        opacity: 0;
+        transform: translate(var(--edit-x, 0px), calc(var(--edit-y, 0px) + 34px)) scale(var(--edit-scale-x, var(--edit-scale, 1)), var(--edit-scale-y, var(--edit-scale, 1))) var(--edit-base-transform, matrix(1, 0, 0, 1, 0, 0));
+      }
+      to {
+        opacity: 1;
+        transform: translate(var(--edit-x, 0px), var(--edit-y, 0px)) scale(var(--edit-scale-x, var(--edit-scale, 1)), var(--edit-scale-y, var(--edit-scale, 1))) var(--edit-base-transform, matrix(1, 0, 0, 1, 0, 0));
+      }
+    }
+
+    @keyframes editorPreviewLeft {
+      from {
+        opacity: 0;
+        transform: translate(calc(var(--edit-x, 0px) - 46px), var(--edit-y, 0px)) scale(var(--edit-scale-x, var(--edit-scale, 1)), var(--edit-scale-y, var(--edit-scale, 1))) var(--edit-base-transform, matrix(1, 0, 0, 1, 0, 0));
+      }
+      to {
+        opacity: 1;
+        transform: translate(var(--edit-x, 0px), var(--edit-y, 0px)) scale(var(--edit-scale-x, var(--edit-scale, 1)), var(--edit-scale-y, var(--edit-scale, 1))) var(--edit-base-transform, matrix(1, 0, 0, 1, 0, 0));
+      }
+    }
+
+    @keyframes editorPreviewScale {
+      from {
+        opacity: 0;
+        transform: translate(var(--edit-x, 0px), var(--edit-y, 0px)) scale(calc(var(--edit-scale-x, var(--edit-scale, 1)) * 0.92), calc(var(--edit-scale-y, var(--edit-scale, 1)) * 0.92)) var(--edit-base-transform, matrix(1, 0, 0, 1, 0, 0));
+      }
+      to {
+        opacity: 1;
+        transform: translate(var(--edit-x, 0px), var(--edit-y, 0px)) scale(var(--edit-scale-x, var(--edit-scale, 1)), var(--edit-scale-y, var(--edit-scale, 1))) var(--edit-base-transform, matrix(1, 0, 0, 1, 0, 0));
+      }
+    }
+
+    @keyframes editorPreviewDrop {
+      from {
+        opacity: 0;
+        transform: translate(var(--edit-x, 0px), calc(var(--edit-y, 0px) - 42px)) scale(var(--edit-scale-x, var(--edit-scale, 1)), var(--edit-scale-y, var(--edit-scale, 1))) var(--edit-base-transform, matrix(1, 0, 0, 1, 0, 0));
+      }
+      to {
+        opacity: 1;
+        transform: translate(var(--edit-x, 0px), var(--edit-y, 0px)) scale(var(--edit-scale-x, var(--edit-scale, 1)), var(--edit-scale-y, var(--edit-scale, 1))) var(--edit-base-transform, matrix(1, 0, 0, 1, 0, 0));
+      }
+    }
+
+    @keyframes editorPreviewRight {
+      from {
+        opacity: 0;
+        transform: translate(calc(var(--edit-x, 0px) + 46px), var(--edit-y, 0px)) scale(var(--edit-scale-x, var(--edit-scale, 1)), var(--edit-scale-y, var(--edit-scale, 1))) var(--edit-base-transform, matrix(1, 0, 0, 1, 0, 0));
+      }
+      to {
+        opacity: 1;
+        transform: translate(var(--edit-x, 0px), var(--edit-y, 0px)) scale(var(--edit-scale-x, var(--edit-scale, 1)), var(--edit-scale-y, var(--edit-scale, 1))) var(--edit-base-transform, matrix(1, 0, 0, 1, 0, 0));
+      }
+    }
+
+    @keyframes editorPreviewZoom {
+      from {
+        opacity: 0;
+        transform: translate(var(--edit-x, 0px), var(--edit-y, 0px)) scale(calc(var(--edit-scale-x, var(--edit-scale, 1)) * 1.14), calc(var(--edit-scale-y, var(--edit-scale, 1)) * 1.14)) var(--edit-base-transform, matrix(1, 0, 0, 1, 0, 0));
+      }
+      to {
+        opacity: 1;
+        transform: translate(var(--edit-x, 0px), var(--edit-y, 0px)) scale(var(--edit-scale-x, var(--edit-scale, 1)), var(--edit-scale-y, var(--edit-scale, 1))) var(--edit-base-transform, matrix(1, 0, 0, 1, 0, 0));
+      }
+    }
+
+    @keyframes editorPreviewPop {
+      0% {
+        opacity: 0;
+        transform: translate(var(--edit-x, 0px), var(--edit-y, 0px)) scale(calc(var(--edit-scale-x, var(--edit-scale, 1)) * 0.72), calc(var(--edit-scale-y, var(--edit-scale, 1)) * 0.72)) var(--edit-base-transform, matrix(1, 0, 0, 1, 0, 0));
+      }
+      72% {
+        opacity: 1;
+        transform: translate(var(--edit-x, 0px), var(--edit-y, 0px)) scale(calc(var(--edit-scale-x, var(--edit-scale, 1)) * 1.04), calc(var(--edit-scale-y, var(--edit-scale, 1)) * 1.04)) var(--edit-base-transform, matrix(1, 0, 0, 1, 0, 0));
+      }
+      100% {
+        opacity: 1;
+        transform: translate(var(--edit-x, 0px), var(--edit-y, 0px)) scale(var(--edit-scale-x, var(--edit-scale, 1)), var(--edit-scale-y, var(--edit-scale, 1))) var(--edit-base-transform, matrix(1, 0, 0, 1, 0, 0));
+      }
+    }
+
+    @keyframes editorPreviewRotate {
+      from {
+        opacity: 0;
+        transform: translate(var(--edit-x, 0px), var(--edit-y, 0px)) rotate(-8deg) scale(calc(var(--edit-scale-x, var(--edit-scale, 1)) * 0.96), calc(var(--edit-scale-y, var(--edit-scale, 1)) * 0.96)) var(--edit-base-transform, matrix(1, 0, 0, 1, 0, 0));
+      }
+      to {
+        opacity: 1;
+        transform: translate(var(--edit-x, 0px), var(--edit-y, 0px)) rotate(0deg) scale(var(--edit-scale-x, var(--edit-scale, 1)), var(--edit-scale-y, var(--edit-scale, 1))) var(--edit-base-transform, matrix(1, 0, 0, 1, 0, 0));
+      }
+    }
+
+    @keyframes editorPreviewBlur {
+      from {
+        opacity: 0;
+        filter: blur(14px);
+        transform: translate(var(--edit-x, 0px), var(--edit-y, 0px)) scale(calc(var(--edit-scale-x, var(--edit-scale, 1)) * 1.03), calc(var(--edit-scale-y, var(--edit-scale, 1)) * 1.03)) var(--edit-base-transform, matrix(1, 0, 0, 1, 0, 0));
+      }
+      to {
+        opacity: 1;
+        filter: blur(0);
+        transform: translate(var(--edit-x, 0px), var(--edit-y, 0px)) scale(var(--edit-scale-x, var(--edit-scale, 1)), var(--edit-scale-y, var(--edit-scale, 1))) var(--edit-base-transform, matrix(1, 0, 0, 1, 0, 0));
+      }
+    }
+
+    @keyframes editorPreviewFlip {
+      from {
+        opacity: 0;
+        transform: translate(var(--edit-x, 0px), var(--edit-y, 0px)) perspective(760px) rotateX(70deg) scale(var(--edit-scale-x, var(--edit-scale, 1)), var(--edit-scale-y, var(--edit-scale, 1))) var(--edit-base-transform, matrix(1, 0, 0, 1, 0, 0));
+      }
+      to {
+        opacity: 1;
+        transform: translate(var(--edit-x, 0px), var(--edit-y, 0px)) perspective(760px) rotateX(0deg) scale(var(--edit-scale-x, var(--edit-scale, 1)), var(--edit-scale-y, var(--edit-scale, 1))) var(--edit-base-transform, matrix(1, 0, 0, 1, 0, 0));
+      }
+    }
+
+    .editor-shell[data-html-deck-editor-ui] .editor-frame {
+      position: fixed;
+      display: none;
+      z-index: 850;
+      border: 2px solid #ff3d8b;
+      pointer-events: none;
+      box-shadow:
+        0 0 0 2px rgba(255, 255, 255, 0.96),
+        0 0 0 4px rgba(17, 17, 17, 0.42),
+        0 12px 30px rgba(17, 17, 17, 0.18);
+    }
+
+    .editor-shell[data-html-deck-editor-ui] .editor-frame.active {
+      display: block;
+    }
+
+    .editor-shell[data-html-deck-editor-ui] .editor-frame[data-small-selection="true"] {
+      min-width: 28px;
+      min-height: 28px;
+      transform: translate(-6px, -6px);
+    }
+
+    .editor-shell[data-html-deck-editor-ui] .editor-guide {
+      position: fixed;
+      display: none;
+      z-index: 840;
+      background: #ff3d8b;
+      pointer-events: none;
+      box-shadow: 0 0 0 1px rgba(255, 255, 255, 0.75);
+    }
+
+    .editor-shell[data-html-deck-editor-ui] .editor-guide.active {
+      display: block;
+    }
+
+    .editor-shell[data-html-deck-editor-ui] .editor-guide.vertical {
+      width: 2px;
+      transform: translateX(-1px);
+    }
+
+    .editor-shell[data-html-deck-editor-ui] .editor-guide.horizontal {
+      height: 2px;
+      transform: translateY(-1px);
+    }
+
+    .editor-shell[data-html-deck-editor-ui] .frame-move {
+      position: absolute;
+      left: -2px;
+      top: -30px;
+      height: 26px;
+      padding: 0 9px;
+      display: flex;
+      align-items: center;
+      background: #ff3d8b;
+      color: #ffffff;
+      font: 700 13px/1 var(--font-body, system-ui, -apple-system, BlinkMacSystemFont, "Segoe UI", sans-serif);
+      white-space: nowrap;
+      cursor: move;
+      pointer-events: auto;
+      border-radius: 6px 6px 0 0;
+    }
+
+    .editor-shell[data-html-deck-editor-ui] .frame-delete {
+      position: absolute;
+      top: -40px;
+      right: -2px;
+      display: grid;
+      place-items: center;
+      width: 32px;
+      height: 32px;
+      padding: 0;
+      border: 0;
+      background: #b42318;
+      color: #ffffff;
+      border-radius: 0 6px 0 6px;
+      font: 800 22px/1 var(--font-body, system-ui, -apple-system, BlinkMacSystemFont, "Segoe UI", sans-serif);
+      cursor: pointer;
+      pointer-events: auto;
+    }
+
+    .editor-shell[data-html-deck-editor-ui] .frame-delete:hover,
+    .editor-shell[data-html-deck-editor-ui] .frame-delete:focus-visible {
+      background: #8f1d14;
+      outline: 2px solid rgba(255, 255, 255, 0.95);
+      outline-offset: 2px;
+    }
+
+    .editor-shell[data-html-deck-editor-ui] .frame-resize {
+      position: absolute;
+      right: -8px;
+      bottom: -8px;
+      width: 14px;
+      height: 14px;
+      border: 2px solid #ff3d8b;
+      background: #ffffff;
+      cursor: nwse-resize;
+      pointer-events: auto;
+    }
+
+    .edit-toggle[data-html-deck-editor-ui].show,
+    .edit-toggle[data-html-deck-editor-ui].active {
+      opacity: 1;
+      pointer-events: auto;
+    }
+
+    body.editing:not(.html-deck-editor-exporting) [data-editable],
+    body.editing:not(.html-deck-editor-exporting) [data-editor-kind="text"] {
+      outline: 1px dashed rgba(31, 43, 224, 0.92);
+      outline-offset: 4px;
+      box-shadow:
+        0 0 0 2px rgba(255, 255, 255, 0.92),
+        0 0 0 4px rgba(17, 17, 17, 0.20);
+      cursor: text;
+      user-select: text;
+      -webkit-user-select: text;
+    }
+
+    body.editing:not(.html-deck-editor-exporting) [data-editable] *,
+    body.editing:not(.html-deck-editor-exporting) [data-editor-kind="text"] * {
+      user-select: text;
+      -webkit-user-select: text;
+    }
+
+    body.editing:not(.html-deck-editor-exporting) [data-editable-media],
+    body.editing:not(.html-deck-editor-exporting) [data-editable-box],
+    body.editing:not(.html-deck-editor-exporting) [data-editor-kind="media"],
+    body.editing:not(.html-deck-editor-exporting) [data-editor-kind="box"],
+    body.editing:not(.html-deck-editor-exporting) .editor-layer {
+      outline: 1px dashed rgba(31, 43, 224, 0.92);
+      outline-offset: 4px;
+      box-shadow:
+        0 0 0 2px rgba(255, 255, 255, 0.92),
+        0 0 0 4px rgba(17, 17, 17, 0.20);
+      cursor: pointer;
+    }
+
+    body.editing:not(.html-deck-editor-exporting) [data-editor-small="true"] {
+      outline-offset: 7px;
+    }
+
+    body.editing:not(.html-deck-editor-exporting) .editor-selected {
+      outline: none !important;
+      box-shadow: none !important;
+    }
+
+    body.editing:not(.html-deck-editor-exporting).commenting [data-editable],
+    body.editing:not(.html-deck-editor-exporting).commenting [data-editable-media],
+    body.editing:not(.html-deck-editor-exporting).commenting [data-editable-box],
+    body.editing:not(.html-deck-editor-exporting).commenting [data-editor-kind],
+    body.editing:not(.html-deck-editor-exporting).commenting .editor-layer {
+      cursor: copy;
+    }
+
+    body.editing:not(.html-deck-editor-exporting) [data-ai-commented]:not(.editor-selected) {
+      outline-color: rgba(255, 61, 139, 0.92);
+      box-shadow:
+        0 0 0 2px rgba(255, 255, 255, 0.92),
+        0 0 0 4px rgba(255, 61, 139, 0.22);
+    }
+
+    body.editing:not(.html-deck-editor-exporting).dragging-file .slide.active {
+      box-shadow: inset 0 0 0 12px rgba(31, 43, 224, 0.14);
+    }
+
+    @media (max-width: 960px) {
+      .editor-shell[data-html-deck-editor-ui] .editor-toolbar {
+        top: 8px;
+        left: 8px;
+        right: 8px;
+      }
+
+      .editor-shell[data-html-deck-editor-ui] .editor-slides {
+        top: 68px;
+        left: 8px;
+        right: 8px;
+        bottom: auto;
+        width: auto;
+        height: 78px;
+        padding: 8px;
+        overflow-x: auto;
+        overflow-y: hidden;
+      }
+
+      .editor-shell[data-html-deck-editor-ui] .slide-rail-list {
+        display: flex;
+        gap: 8px;
+      }
+
+      .editor-shell[data-html-deck-editor-ui] .slide-chip {
+        width: 156px;
+        min-width: 156px;
+      }
+
+      .editor-shell[data-html-deck-editor-ui] .editor-zoom-reset {
+        bottom: 264px;
+      }
+
+      .editor-shell[data-html-deck-editor-ui] .editor-panel {
+        top: auto;
+        left: 8px;
+        right: 8px;
+        bottom: 8px;
+        width: auto;
+        max-height: 242px;
+        padding: 10px 12px;
+        display: block;
+        overflow-y: auto;
+        -webkit-overflow-scrolling: touch;
+      }
+
+      .editor-shell[data-html-deck-editor-ui] .inspector-section {
+        min-width: 0;
+        padding: 10px 0;
+        border-top: 0;
+      }
+
+      .editor-shell[data-html-deck-editor-ui] .inspector-section + .inspector-section {
+        border-top: 1px solid rgba(17, 17, 17, 0.10);
+      }
+
+      .editor-shell[data-html-deck-editor-ui] .editor-textarea {
+        min-height: 72px;
+      }
+
+      .editor-shell[data-html-deck-editor-ui] .field-grid {
+        grid-template-columns: 1fr;
+      }
+
+      .editor-shell[data-html-deck-editor-ui] .inspector-actions {
+        grid-template-columns: 1fr;
+      }
+
+      .editor-shell[data-html-deck-editor-ui] .file-picker-row {
+        grid-template-columns: 1fr;
+      }
+
+      .editor-shell[data-html-deck-editor-ui] .file-name {
+        min-height: 32px;
+      }
+
+      .editor-shell[data-html-deck-editor-ui] .font-import-row {
+        grid-template-columns: 1fr;
+      }
+
+      .editor-shell[data-html-deck-editor-ui] .editor-export-modal {
+        align-items: start;
+        padding:
+          max(12px, env(safe-area-inset-top))
+          max(12px, env(safe-area-inset-right))
+          max(12px, env(safe-area-inset-bottom))
+          max(12px, env(safe-area-inset-left));
+      }
+
+      .editor-shell[data-html-deck-editor-ui] .editor-export-card {
+        width: 100%;
+        max-height: calc(100dvh - max(24px, env(safe-area-inset-top) + env(safe-area-inset-bottom)));
+      }
+
+      .editor-shell[data-html-deck-editor-ui] .editor-export-format,
+      .editor-shell[data-html-deck-editor-ui] .editor-export-page-actions {
+        flex-wrap: wrap;
+      }
+
+      .editor-shell[data-html-deck-editor-ui] .editor-export-page-header {
+        align-items: flex-start;
+        flex-direction: column;
+      }
+
+      .editor-shell[data-html-deck-editor-ui] .editor-export-pages {
+        grid-template-columns: 1fr;
+        max-height: 32vh;
+      }
+
+      .editor-shell[data-html-deck-editor-ui] .editor-panel .editor-title:first-child {
+        margin-top: 2px;
+      }
+
+      .editor-shell[data-html-deck-editor-ui] .shape-menu {
+        top: var(--shape-menu-top, 60px);
+        width: calc(100vw - 24px);
+      }
+
+      .editor-shell[data-html-deck-editor-ui] .shape-menu .shape-choice {
+        white-space: nowrap;
+      }
+    }
