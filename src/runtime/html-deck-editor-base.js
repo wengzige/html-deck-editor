@@ -498,6 +498,14 @@
     return element && element.tagName && element.tagName.toLowerCase() === "deck-stage";
   }
 
+  function hasNativeDeckStageLayout(element) {
+    return Boolean(
+      isDeckStageElement(element) &&
+      typeof element.fit === "function" &&
+      typeof element.setEditorInsets === "function"
+    );
+  }
+
   function stageSlides(stage) {
     const directSlides = Array.from(stage?.children || []).filter((child) => child.classList?.contains("slide"));
     if (directSlides.length) return directSlides;
@@ -2615,7 +2623,8 @@
           "data-offset-x",
           "data-offset-y",
           "data-html-deck-editor-current-slide",
-          "data-html-deck-editor-navigation"
+          "data-html-deck-editor-navigation",
+          "data-html-deck-editor-native-layout"
         ];
         return {
           styles: styleNames.map((name) => ({
@@ -3285,9 +3294,17 @@
       }
 
       applyEditorLayout() {
+        this.syncStageEditingMode();
         this.syncCurrentSlideFromHost();
         this.presentation.setEditorInsets?.(this.editorInsets());
         this.presentation.scaleStage?.();
+      }
+
+      syncStageEditingMode() {
+        if (!this.isActive || !isDeckStageElement(this.stage)) return;
+        const nativeLayout = hasNativeDeckStageLayout(this.stage);
+        this.stage.toggleAttribute("data-html-deck-editor-native-layout", nativeLayout);
+        if (nativeLayout) this.stage.removeAttribute("data-html-deck-editor-navigation");
       }
 
       syncCurrentSlideFromHost() {
@@ -3337,13 +3354,7 @@
         this.isActive = typeof force === "boolean" ? force : !this.isActive;
         document.body.classList.toggle("editing", this.isActive);
         document.body.classList.toggle("editor-on", this.isActive);
-        if (
-          this.isActive &&
-          isDeckStageElement(this.stage) &&
-          this.stage.getAttribute("data-html-deck-editor-navigation") === "horizontal"
-        ) {
-          this.stage.removeAttribute("data-html-deck-editor-navigation");
-        }
+        this.syncStageEditingMode();
         this.setHostTouchSurfacesDisabled(this.isActive);
         this.toggle.classList.toggle("active", this.isActive);
         this.showButtons();

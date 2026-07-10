@@ -451,7 +451,7 @@ describe("editor runtime", () => {
 
   it("lays out preserved native deck-stage tags without requiring the web component API", () => {
     document.body.innerHTML = `
-      <deck-stage id="deckStage" width="1920" height="1080" data-html-deck-editor-stage="preserve">
+      <deck-stage id="deckStage" width="1920" height="1080" data-html-deck-editor-stage="preserve" data-html-deck-editor-navigation="horizontal">
         <section class="slide active visible"><h1>One</h1></section>
         <section class="slide"><h1>Two</h1></section>
       </deck-stage>
@@ -475,6 +475,8 @@ describe("editor runtime", () => {
     const scale = Number.parseFloat(stage.style.getPropertyValue("--html-deck-editor-stage-scale"));
 
     expect(typeof (stage as any).fit).toBe("undefined");
+    expect(stage.hasAttribute("data-html-deck-editor-native-layout")).toBe(false);
+    expect(stage.getAttribute("data-html-deck-editor-navigation")).toBe("horizontal");
     expect(scale).toBeGreaterThan(0);
     expect(scale).toBeLessThan(1);
   });
@@ -488,6 +490,8 @@ describe("editor runtime", () => {
     `;
     const stage = document.getElementById("deckStage") as any;
     stage.index = 0;
+    stage.fit = vi.fn();
+    stage.setEditorInsets = vi.fn();
     stage.goTo = vi.fn((index: number) => {
       stage.index = index;
       Array.from(stage.children).forEach((slide: any, slideIndex) => {
@@ -498,6 +502,7 @@ describe("editor runtime", () => {
     installRuntime();
     const editor = (window as any).FrontendSlidesEditor.mount();
     editor.toggleEditMode(true);
+    expect(stage.hasAttribute("data-html-deck-editor-native-layout")).toBe(true);
     expect(stage.hasAttribute("data-html-deck-editor-navigation")).toBe(false);
     editor.presentation.showSlide(1);
 
@@ -508,8 +513,35 @@ describe("editor runtime", () => {
 
     const html = editor.buildExportHtml();
     expect(html).toContain('data-html-deck-editor-navigation="horizontal"');
+    expect(html).not.toContain("data-html-deck-editor-native-layout");
     editor.toggleEditMode(false);
     expect(stage.getAttribute("data-html-deck-editor-navigation")).toBe("horizontal");
+    expect(stage.hasAttribute("data-html-deck-editor-native-layout")).toBe(false);
+  });
+
+  it("switches an asynchronously upgraded deck-stage to native viewport layout", () => {
+    document.body.innerHTML = `
+      <deck-stage id="deckStage" data-html-deck-editor-stage="preserve" data-html-deck-editor-navigation="horizontal">
+        <section class="slide active"><h1>One</h1></section>
+        <section class="slide"><h1>Two</h1></section>
+      </deck-stage>
+    `;
+    const stage = document.getElementById("deckStage") as any;
+
+    installRuntime();
+    const editor = (window as any).FrontendSlidesEditor.mount();
+    editor.toggleEditMode(true);
+    expect(stage.hasAttribute("data-html-deck-editor-native-layout")).toBe(false);
+    expect(stage.getAttribute("data-html-deck-editor-navigation")).toBe("horizontal");
+
+    stage.fit = vi.fn();
+    stage.setEditorInsets = vi.fn();
+    editor.applyEditorLayout();
+
+    expect(stage.hasAttribute("data-html-deck-editor-native-layout")).toBe(true);
+    expect(stage.hasAttribute("data-html-deck-editor-navigation")).toBe(false);
+    expect(stage.setEditorInsets).toHaveBeenCalled();
+    expect(stage.fit).toHaveBeenCalled();
   });
 
   it("keeps preserved horizontal slides addressable in edit mode without removing later pages", () => {
