@@ -556,7 +556,7 @@ describe("editor runtime", () => {
 
   it("switches an asynchronously upgraded deck-stage to native viewport layout", () => {
     document.body.innerHTML = `
-      <deck-stage id="deckStage" data-html-deck-editor-stage="preserve" data-html-deck-editor-navigation="horizontal">
+      <deck-stage id="deckStage" data-html-deck-editor-stage="preserve" data-html-deck-editor-navigation="horizontal" style="transform:rotate(1deg);transform-origin:center center">
         <section class="slide active"><h1>One</h1></section>
         <section class="slide"><h1>Two</h1></section>
       </deck-stage>
@@ -575,8 +575,15 @@ describe("editor runtime", () => {
 
     expect(stage.hasAttribute("data-html-deck-editor-native-layout")).toBe(true);
     expect(stage.hasAttribute("data-html-deck-editor-navigation")).toBe(false);
+    expect(stage.style.getPropertyValue("--html-deck-editor-stage-scale")).toBe("");
+    expect(stage.style.transform).toBe("");
+    expect(stage.style.transformOrigin).toBe("");
     expect(stage.setEditorInsets).toHaveBeenCalled();
     expect(stage.fit).toHaveBeenCalled();
+
+    editor.toggleEditMode(false);
+    expect(stage.style.transform).toBe("rotate(1deg)");
+    expect(stage.style.transformOrigin).toBe("center center");
   });
 
   it("keeps preserved horizontal slides addressable in edit mode without removing later pages", () => {

@@ -3352,7 +3352,12 @@
         }
         const nativeLayout = hasNativeDeckStageLayout(this.stage);
         this.stage.toggleAttribute("data-html-deck-editor-native-layout", nativeLayout);
-        if (nativeLayout) this.stage.removeAttribute("data-html-deck-editor-navigation");
+        if (nativeLayout) {
+          clearPreservedStageSafeLayout(this.stage);
+          this.stage.style.removeProperty("transform");
+          this.stage.style.removeProperty("transform-origin");
+          this.stage.removeAttribute("data-html-deck-editor-navigation");
+        }
       }
 
       syncCurrentSlideFromHost() {

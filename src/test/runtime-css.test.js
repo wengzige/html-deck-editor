@@ -38,13 +38,21 @@ describe("editor runtime css", () => {
   });
 
   it("anchors preserved stages to the viewport before applying editor zoom", () => {
-    const rule = editorCss.match(/body\.editing:not\(\.html-deck-editor-exporting\) \[data-html-deck-editor-stage="preserve"\] \{[\s\S]*?\n    \}/)?.[0] || "";
+    const rule = editorCss.match(/body\.editing:not\(\.html-deck-editor-exporting\) \[data-html-deck-editor-stage="preserve"\]:not\(\[data-html-deck-editor-native-layout\]\) \{[\s\S]*?\n    \}/)?.[0] || "";
 
     expect(rule).toContain("position: fixed !important;");
     expect(rule).toContain("left: 0 !important;");
     expect(rule).toContain("top: 0 !important;");
     expect(rule).toContain("margin: 0 !important;");
     expect(rule).toContain("transform: translate(var(--html-deck-editor-stage-x");
+    expect(rule).toContain("transition: none !important;");
+  });
+
+  it("does not apply generic stage transforms to native deck-stage layouts", () => {
+    const rule = editorCss.match(/body\.editing:not\(\.html-deck-editor-exporting\) \[data-html-deck-editor-stage="preserve"\]\[data-html-deck-editor-native-layout\] \{[\s\S]*?\n    \}/)?.[0] || "";
+
+    expect(rule).toContain("transform: none !important;");
+    expect(rule).toContain("transform-origin: initial !important;");
     expect(rule).toContain("transition: none !important;");
   });
 

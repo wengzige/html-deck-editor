@@ -63,13 +63,19 @@
       pointer-events: none !important;
     }
 
-    body.editing:not(.html-deck-editor-exporting) [data-html-deck-editor-stage="preserve"] {
+    body.editing:not(.html-deck-editor-exporting) [data-html-deck-editor-stage="preserve"]:not([data-html-deck-editor-native-layout]) {
       position: fixed !important;
       left: 0 !important;
       top: 0 !important;
       margin: 0 !important;
       transform: translate(var(--html-deck-editor-stage-x, 0px), var(--html-deck-editor-stage-y, 0px)) scale(var(--html-deck-editor-stage-scale, 1)) translateX(calc(var(--html-deck-editor-slide-offset-x, 0px) * -1)) !important;
       transform-origin: top left;
+      transition: none !important;
+    }
+
+    body.editing:not(.html-deck-editor-exporting) [data-html-deck-editor-stage="preserve"][data-html-deck-editor-native-layout] {
+      transform: none !important;
+      transform-origin: initial !important;
       transition: none !important;
     }
 
