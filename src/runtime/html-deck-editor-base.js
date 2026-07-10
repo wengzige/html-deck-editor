@@ -1262,6 +1262,7 @@
         this.historyCharacterLimit = 8_000_000;
         this.contentPatches = new Map();
         this.draftStorageWarning = "";
+        this.hostSlideObserver = null;
         this.lastInsert = { x: 720, y: 300 };
         this.snapThreshold = 12;
         this.motionFrameRaf = null;
@@ -1432,6 +1433,7 @@
         this.renderSlideRail();
         this.bindControls();
         this.bindEditableEvents();
+        this.observeHostSlideRebuilds();
         this.updateInspector();
         this.hideDeckResetControl();
         requestAnimationFrame(() => {
@@ -2497,6 +2499,8 @@
         this.layoutRefreshTimers.forEach((timer) => window.clearTimeout(timer));
         this.layoutRefreshTimers = [];
         this.stopMotionFrameTracking();
+        this.hostSlideObserver?.disconnect();
+        this.hostSlideObserver = null;
         window.clearTimeout(this.motionPreviewTimer);
         window.clearTimeout(this.hideTimeout);
         window.clearTimeout(this.toastTimer);
@@ -2514,6 +2518,49 @@
         this.prepareEditableElements();
         this.prepareEditableIds();
         this.bindEditableEvents();
+      }
+
+      observeHostSlideRebuilds() {
+        if (this.hostSlideObserver || typeof MutationObserver === "undefined") return;
+        const options = {
+          childList: true,
+          subtree: true,
+          attributes: true,
+          attributeFilter: ["class", "style", "hidden", "aria-hidden", "data-deck-active", "data-html-deck-editor-current"]
+        };
+        this.hostSlideObserver = new MutationObserver((records) => {
+          if (!this.isActive || this.motionHold || this.dragState || this.canvasPanState) return;
+          const slides = stageSlides(this.stage);
+          const changed = records.some((record) => {
+            const target = record.target;
+            if (target !== this.stage && !slides.includes(target)) return false;
+            return record.type === "childList" || record.type === "attributes";
+          });
+          if (!changed) return;
+          const activeIndex = slides.findIndex((slide) => slide.classList.contains("active"));
+          const deckActiveIndex = slides.findIndex((slide) => slide.hasAttribute("data-deck-active"));
+          const transformIndex = currentSlideFromStageTransform(this.stage, slides);
+          const visibleIndex = slides.findIndex((slide) => slide.classList.contains("visible"));
+          const index = activeIndex >= 0
+            ? activeIndex
+            : deckActiveIndex >= 0
+              ? deckActiveIndex
+              : transformIndex >= 0
+                ? transformIndex
+                : visibleIndex >= 0
+                  ? visibleIndex
+                  : this.presentation.currentSlide;
+          this.hostSlideObserver.disconnect();
+          try {
+            this.presentation.slides = slides;
+            this.presentation.currentSlide = markEditorCurrentSlide(slides, index);
+            syncHostCurrentSlide(this.stage, this.presentation.currentSlide);
+            this.handleSlideChange({ detail: { index: this.presentation.currentSlide } });
+          } finally {
+            this.hostSlideObserver?.observe(this.stage, options);
+          }
+        });
+        this.hostSlideObserver.observe(this.stage, options);
       }
 
       bindElement(element) {

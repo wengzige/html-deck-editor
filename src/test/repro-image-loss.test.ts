@@ -200,6 +200,41 @@ describe("repro: replaced image survives slide navigation", () => {
     expect((document.getElementById("img1") as HTMLImageElement).getAttribute("src")).toBe(NEW_SRC);
   });
 
+  it("replays patches when the host calls __playSlide directly", async () => {
+    document.body.innerHTML = `
+      <div id="deckStage" class="deck-stage" data-html-deck-editor-stage="preserve">
+        <section class="slide active" data-title="P1"><h1 id="title" data-editable>Original</h1></section>
+        <section class="slide" data-title="P2"><p>Page two</p></section>
+      </div>
+    `;
+    const stage = document.getElementById("deckStage") as HTMLElement;
+    const original = Array.from(stage.querySelectorAll(".slide")).map((slide) => slide.innerHTML);
+    (window as any).__playSlide = (index: number) => {
+      stage.querySelectorAll(".slide").forEach((slide, slideIndex) => {
+        slide.classList.toggle("active", slideIndex === index);
+        slide.innerHTML = original[slideIndex];
+      });
+    };
+    installRuntime();
+    const editor = (window as any).FrontendSlidesEditor.mount();
+    editor.toggleEditMode(true);
+    const title = document.getElementById("title") as HTMLElement;
+    editor.select(title);
+    title.textContent = "Direct host replay";
+    title.dispatchEvent(new Event("input", { bubbles: true }));
+    const firstSlide = stage.querySelector(".slide") as HTMLElement;
+    firstSlide.classList.add("visible");
+    firstSlide.setAttribute("data-deck-active", "");
+
+    (window as any).__playSlide(1);
+    await new Promise((resolve) => window.setTimeout(resolve, 0));
+    expect(editor.presentation.currentSlide).toBe(1);
+    (window as any).__playSlide(0);
+    await new Promise((resolve) => window.setTimeout(resolve, 0));
+
+    expect(document.getElementById("title")?.textContent).toBe("Direct host replay");
+  });
+
   it("replays edited text and newly added images after a host rebuild", () => {
     document.body.innerHTML = `
       <div id="deckStage" class="deck-stage" data-html-deck-editor-stage="preserve">
