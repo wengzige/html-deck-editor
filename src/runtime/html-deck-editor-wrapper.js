@@ -8,6 +8,7 @@
 
   window.HtmlDeckEditor = {
     mount: mount,
+    recognition: window.FrontendSlidesEditor?.recognition,
     version: "0.1.0"
   };
 })();

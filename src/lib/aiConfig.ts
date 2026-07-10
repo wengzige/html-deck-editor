@@ -150,7 +150,8 @@ export function applyProviderPreset(config: AiConfig, provider: AiProvider): AiC
     provider,
     baseUrl: preset.baseUrl,
     path: preset.path,
-    model: preset.model
+    model: preset.model,
+    proxyUrl: ""
   };
 }
 

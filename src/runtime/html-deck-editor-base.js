@@ -8434,6 +8434,96 @@
       }
     }
 
+  let recognitionEditor = null;
+
+  function recognitionStageRoot() {
+    return getStage() || document.querySelector("[data-deck], .slides, #slides, main") || document.body;
+  }
+
+  function recognitionSlides(stage) {
+    const slides = stageSlides(stage);
+    return slides.length ? slides : [stage];
+  }
+
+  function recognitionEditorForStage() {
+    const stage = recognitionStageRoot();
+    if (!(stage instanceof Element)) return null;
+    if (window.editor?.stage === stage) return window.editor;
+    if (!recognitionEditor || recognitionEditor.stage !== stage) {
+      recognitionEditor = Object.create(DeckEditor.prototype);
+      recognitionEditor.stage = stage;
+      recognitionEditor.presentation = { stage, slides: [], currentSlide: 0 };
+    }
+    recognitionEditor.presentation.slides = recognitionSlides(stage);
+    recognitionEditor.presentation.currentSlide = computeCurrentSlide(recognitionEditor.presentation.slides, stage);
+    return recognitionEditor;
+  }
+
+  function prepareRecognitionWithoutSlideWrapper(editor) {
+    editor.stage.querySelectorAll("[data-editor-auto], [data-editor-kind], [data-editor-small]").forEach((element) => {
+      delete element.dataset.editorAuto;
+      delete element.dataset.editorKind;
+      delete element.dataset.editorSmall;
+    });
+    editor.withEditVisibleElements(() => {
+      const candidates = Array.from(editor.stage.querySelectorAll("*")).filter(
+        (element) => !editor.shouldIgnoreEditorCandidate(element)
+      );
+      candidates.forEach((element) => {
+        const kind = editor.explicitEditorKind(element);
+        if (kind) editor.markEditorKind(element, kind, false);
+      });
+      candidates.forEach((element) => {
+        if (element.dataset.editorKind) return;
+        const kind = editor.inferEditorKind(element, { includeBoxes: false });
+        if (kind) editor.markEditorKind(element, kind, true);
+      });
+      candidates.slice().reverse().forEach((element) => {
+        if (element.dataset.editorKind) return;
+        const kind = editor.inferEditorKind(element, { onlyBoxes: true });
+        if (kind) editor.markEditorKind(element, kind, true);
+      });
+      editor.pruneCompositeAutoContainers();
+    });
+  }
+
+  function recognitionElements() {
+    const editor = recognitionEditorForStage();
+    if (!editor) return [];
+    return Array.from(new Set(editor.getEditableElements())).filter((element) => (
+      element instanceof Element && !editor.isEditorUiElement(element) && Boolean(editor.closestSlide(element))
+    ));
+  }
+
+  const recognition = {
+    prepare() {
+      const editor = recognitionEditorForStage();
+      if (!editor) return [];
+      if (editor.stage.querySelector(".slide")) editor.prepareEditableElements();
+      else prepareRecognitionWithoutSlideWrapper(editor);
+      return recognitionElements();
+    },
+    elements: recognitionElements,
+    kindFor(element) {
+      const editor = recognitionEditorForStage();
+      if (!editor || !(element instanceof Element)) return "";
+      return element.dataset.editorKind || editor.explicitEditorKind(element) || editor.inferEditorKind(element) || "";
+    },
+    labelFor(element) {
+      if (!(element instanceof Element)) return "";
+      const kind = this.kindFor(element);
+      if (kind === "media") return "图片";
+      if (kind === "box") return "视觉块";
+      if (kind === "text") return `文字：${element.tagName.toLowerCase()}`;
+      return element.tagName.toLowerCase();
+    },
+    getEditableTarget(target) {
+      const editor = recognitionEditorForStage();
+      if (!editor || !(target instanceof Element)) return null;
+      return editor.getEditableTarget(target);
+    }
+  };
+
   function mount(options = {}) {
     window.editor?.destroy?.();
     ensureEditorDom();
@@ -8444,5 +8534,5 @@
     return editor;
   }
 
-  window.FrontendSlidesEditor = { mount, DeckEditor };
+  window.FrontendSlidesEditor = { mount, DeckEditor, recognition };
 })();

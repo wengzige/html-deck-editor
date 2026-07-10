@@ -47,6 +47,13 @@ describe("AI adaptation", () => {
     expect(summary).not.toContain("data:image");
   });
 
+  it("builds valid fallback selectors for digit-prefixed IDs and classes", () => {
+    const summary = buildHtmlAdaptationSummary('<main><h1 id="123-title">Title</h1><p class="9lead">Body</p></main>');
+
+    expect(summary).toContain('[id=\\"123-title\\"]');
+    expect(summary).toContain('[class~=\\"9lead\\"]');
+  });
+
   it("parses fenced JSON adaptation plans", () => {
     const plan = parseAiAdaptationPlan("```json\n{\"slides\":[{\"selector\":\"#a\"},{\"selector\":\"#b\"}]}\n```");
 
@@ -182,6 +189,79 @@ describe("AI adaptation", () => {
     expect(result.preview.textCount).toBe(0);
     expect(result.preview.warnings.join(" ")).toContain("selector");
     expect(result.html).not.toContain('id="body" data-editable');
+  });
+
+  it("keeps editable targets bound to the original nodes when moving slides", () => {
+    const result = applyAiAdaptationPlanToHtml(`
+      <body>
+        <section><h1>First</h1></section>
+        <aside><section><p>Second target</p></section></aside>
+      </body>
+    `, {
+      slides: [
+        { selector: "body > section" },
+        { selector: "aside > section" }
+      ],
+      editableTextSelectors: ["aside > section > p"]
+    });
+    const doc = new DOMParser().parseFromString(result.html, "text/html");
+
+    expect(doc.querySelector("aside > section")).toBeNull();
+    expect(doc.querySelector("p")?.getAttribute("data-editable")).toBe("");
+  });
+
+  it("requires the stage to contain every selected slide", () => {
+    const result = previewAiAdaptationPlan(`
+      <main><section id="one"></section><section id="two"></section></main>
+      <footer id="wrong-stage"></footer>
+    `, {
+      stageSelector: "#wrong-stage",
+      slides: [{ selector: "#one" }, { selector: "#two" }]
+    });
+
+    expect(result.plan.stageSelector).toBeNull();
+    expect(result.preview.warnings.join(" ")).toContain("共同祖先");
+  });
+
+  it("never applies editable markers inside a partially matched ignore region", () => {
+    const result = applyAiAdaptationPlanToHtml(`
+      <main>
+        <section id="page"><div class="skip"><p id="ignored">Ignore me</p></div><p id="kept">Keep me</p></section>
+      </main>
+    `, {
+      stageSelector: "main",
+      slides: [{ selector: "#page" }],
+      editableTextSelectors: ["p"],
+      ignoreSelectors: [".skip"]
+    });
+    const doc = new DOMParser().parseFromString(result.html, "text/html");
+
+    expect(doc.querySelector("#ignored")?.hasAttribute("data-editable")).toBe(false);
+    expect(doc.querySelector("#kept")?.getAttribute("data-editable")).toBe("");
+    expect(result.preview.textCount).toBe(1);
+  });
+
+  it("clears forced hidden state from every resolved slide", () => {
+    const result = applyAiAdaptationPlanToHtml(`
+      <main>
+        <section id="one" hidden aria-hidden="true" style="display:none;visibility:hidden;opacity:0"><h1>One</h1></section>
+        <section id="two"><h1>Two</h1></section>
+      </main>
+    `, {
+      stageSelector: "main",
+      slides: [{ selector: "#one" }, { selector: "#two" }]
+    });
+    const slide = new DOMParser().parseFromString(result.html, "text/html").querySelector("#one") as HTMLElement;
+
+    expect(slide.hasAttribute("hidden")).toBe(false);
+    expect(slide.hasAttribute("aria-hidden")).toBe(false);
+    expect(slide.style.display).toBe("");
+    expect(slide.style.visibility).toBe("");
+    expect(slide.style.opacity).toBe("");
+  });
+
+  it("turns truncated AI JSON into a readable retry message", () => {
+    expect(() => parseAiAdaptationPlan('{"slides":[{"selector":"#one"}]')).toThrow("不完整或已被截断");
   });
 
   it("creates a preview through the one-step AI workflow", async () => {

@@ -76,7 +76,7 @@ async function requestOpenAiChatCompletion(
     throw new AiRequestError(await errorMessageForResponse(response), response.status);
   }
 
-  if (stream && response.body) {
+  if (stream && response.body && isEventStreamResponse(response)) {
     return readStreamedContent(response.body, parseStreamDataLine);
   }
 
@@ -101,13 +101,15 @@ async function requestAnthropicMessage(
 
   let response: Response;
   try {
+    const headers: Record<string, string> = {
+      "Content-Type": "application/json",
+      "x-api-key": config.apiKey.trim(),
+      "anthropic-version": "2023-06-01"
+    };
+    if (!config.proxyUrl.trim()) headers["anthropic-dangerous-direct-browser-access"] = "true";
     response = await fetch(chatCompletionUrl(config), {
       method: "POST",
-      headers: {
-        "Content-Type": "application/json",
-        "x-api-key": config.apiKey.trim(),
-        "anthropic-version": "2023-06-01"
-      },
+      headers,
       body: JSON.stringify(body)
     });
   } catch {
@@ -118,7 +120,7 @@ async function requestAnthropicMessage(
     throw new AiRequestError(await errorMessageForResponse(response), response.status);
   }
 
-  if (stream && response.body) {
+  if (stream && response.body && isEventStreamResponse(response)) {
     return readStreamedContent(response.body, parseAnthropicStreamDataLine);
   }
 
@@ -208,26 +210,48 @@ async function readStreamedContent(
   const decoder = new TextDecoder();
   let buffer = "";
   let output = "";
+  let finished = false;
 
-  while (true) {
-    const { done, value } = await reader.read();
-    if (done) break;
-    buffer += decoder.decode(value, { stream: true });
-    const lines = buffer.split(/\r?\n/);
-    buffer = lines.pop() || "";
-    for (const line of lines) {
-      const parsed = parseLine(line);
-      if (parsed === null) return output;
-      output += parsed;
+  try {
+    while (true) {
+      const { done, value } = await reader.read();
+      if (done) {
+        finished = true;
+        break;
+      }
+      buffer += decoder.decode(value, { stream: true });
+      const lines = buffer.split(/\r?\n/);
+      buffer = lines.pop() || "";
+      for (const line of lines) {
+        const parsed = parseLine(line);
+        if (parsed === null) {
+          await reader.cancel();
+          finished = true;
+          return output;
+        }
+        output += parsed;
+      }
     }
-  }
 
-  if (buffer) {
-    const parsed = parseLine(buffer);
-    if (parsed) output += parsed;
+    if (buffer) {
+      const parsed = parseLine(buffer);
+      if (parsed) output += parsed;
+    }
+    return output;
+  } finally {
+    if (!finished) {
+      try {
+        await reader.cancel();
+      } catch {
+        // The stream may already be closed by the provider.
+      }
+    }
+    reader.releaseLock();
   }
+}
 
-  return output;
+function isEventStreamResponse(response: Response): boolean {
+  return response.headers.get("content-type")?.toLowerCase().includes("text/event-stream") === true;
 }
 
 async function errorMessageForResponse(response: Response): Promise<string> {

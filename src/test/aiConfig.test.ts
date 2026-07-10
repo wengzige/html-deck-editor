@@ -12,11 +12,12 @@ describe("AI config", () => {
   });
 
   it("applies editable provider presets", () => {
-    const config = applyProviderPreset(defaultAiConfig, "deepseek");
+    const config = applyProviderPreset({ ...defaultAiConfig, proxyUrl: "https://old-proxy.example.com" }, "deepseek");
 
     expect(config.baseUrl).toBe("https://api.deepseek.com");
     expect(config.path).toBe("/chat/completions");
     expect(config.model).toBe("deepseek-v4-flash");
+    expect(config.proxyUrl).toBe("");
   });
 
   it("provides preset model options while allowing custom models", () => {
