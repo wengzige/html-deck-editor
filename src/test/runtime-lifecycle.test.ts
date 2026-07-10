@@ -74,6 +74,20 @@ describe("editor mount and destroy lifecycle", () => {
     }
   });
 
+  it("cancels a pending layout frame when the editor is destroyed", () => {
+    let frameId = 40;
+    vi.spyOn(window, "requestAnimationFrame").mockImplementation(() => ++frameId);
+    const cancelFrame = vi.spyOn(window, "cancelAnimationFrame").mockImplementation(() => {});
+    const editor = (window as any).FrontendSlidesEditor.mount();
+    editor.toggleEditMode(true);
+    const pendingFrame = editor.layoutRefreshRaf;
+
+    editor.destroy();
+
+    expect(cancelFrame).toHaveBeenCalledWith(pendingFrame);
+    expect(editor.layoutRefreshRaf).toBeNull();
+  });
+
   it("binds editable elements to the new instance after remount", () => {
     const first = (window as any).FrontendSlidesEditor.mount();
     first.toggleEditMode(true);
@@ -124,6 +138,12 @@ describe("editor mount and destroy lifecycle", () => {
     const editor = (window as any).FrontendSlidesEditor.mount();
     editor.toggleEditMode(true);
 
+    stage.goTo(1);
+    expect(editor.presentation.currentSlide).toBe(1);
+    expect(stage.dataset.htmlDeckEditorCurrentSlide).toBe("1");
+    expect(hidden.hasAttribute("data-html-deck-editor-current")).toBe(true);
+
+    editor.presentation.showSlide(0);
     (editor.controls.slideRail.querySelector('[data-slide-index="1"]') as HTMLButtonElement).click();
     expect({ stageIndex: stage.index, currentSlide: editor.presentation.currentSlide, editorActive: editor.isActive }).toEqual({
       stageIndex: 1,

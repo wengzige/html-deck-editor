@@ -481,9 +481,40 @@ describe("editor runtime", () => {
     expect(scale).toBeLessThan(1);
   });
 
+  it("keeps editor navigation aligned when host slides retain stale active classes", async () => {
+    document.body.innerHTML = `
+      <deck-stage id="deckStage" width="1920" height="1080" data-html-deck-editor-stage="preserve">
+        <section class="slide active visible" data-deck-active><h1>One</h1></section>
+        <section class="slide"><h1>Two</h1></section>
+      </deck-stage>
+    `;
+    const stage = document.getElementById("deckStage") as HTMLElement;
+    const slides = Array.from(stage.children) as HTMLElement[];
+    (window as any).presentation = {
+      stage,
+      currentSlide: 0,
+      showSlide(index: number) {
+        slides.forEach((slide, slideIndex) => {
+          slide.toggleAttribute("data-deck-active", slideIndex === index);
+        });
+      }
+    };
+
+    installRuntime();
+    const editor = (window as any).FrontendSlidesEditor.mount();
+    editor.toggleEditMode(true);
+    editor.presentation.showSlide(1);
+    await Promise.resolve();
+
+    expect(editor.presentation.currentSlide).toBe(1);
+    expect(stage.dataset.htmlDeckEditorCurrentSlide).toBe("1");
+    expect(slides[0].hasAttribute("data-html-deck-editor-current")).toBe(false);
+    expect(slides[1].hasAttribute("data-html-deck-editor-current")).toBe(true);
+  });
+
   it("uses the deck-stage goTo API so its internal index stays synchronized", () => {
     document.body.innerHTML = `
-      <deck-stage id="deckStage" data-html-deck-editor-stage="preserve" data-html-deck-editor-navigation="horizontal">
+      <deck-stage id="deckStage" data-html-deck-editor-stage="preserve" data-html-deck-editor-navigation="horizontal" noscale data-codex-fixed-deck-noscale>
         <section class="slide" data-deck-active><h1>One</h1></section>
         <section class="slide"><h1>Two</h1></section>
       </deck-stage>
@@ -504,6 +535,8 @@ describe("editor runtime", () => {
     editor.toggleEditMode(true);
     expect(stage.hasAttribute("data-html-deck-editor-native-layout")).toBe(true);
     expect(stage.hasAttribute("data-html-deck-editor-navigation")).toBe(false);
+    expect(stage.hasAttribute("noscale")).toBe(false);
+    expect(stage.hasAttribute("data-codex-fixed-deck-noscale")).toBe(false);
     editor.presentation.showSlide(1);
 
     expect(stage.goTo).toHaveBeenCalledWith(1);
@@ -514,6 +547,8 @@ describe("editor runtime", () => {
     const html = editor.buildExportHtml();
     expect(html).toContain('data-html-deck-editor-navigation="horizontal"');
     expect(html).not.toContain("data-html-deck-editor-native-layout");
+    expect(html).not.toContain("data-codex-fixed-deck-noscale");
+    expect(html).not.toContain(" noscale");
     editor.toggleEditMode(false);
     expect(stage.getAttribute("data-html-deck-editor-navigation")).toBe("horizontal");
     expect(stage.hasAttribute("data-html-deck-editor-native-layout")).toBe(false);

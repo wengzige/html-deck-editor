@@ -648,20 +648,68 @@
     return NaN;
   }
 
-  function computeHostCurrentSlide(slides, stage) {
-    const stageIndex = Number(stage?.dataset?.htmlDeckEditorCurrentSlide);
-    if (Number.isFinite(stageIndex)) return normalizeSlideIndex(stageIndex, slides);
-    const hostIndex = Number(window.__currentSlideIndex);
-    if (Number.isFinite(hostIndex)) return normalizeSlideIndex(hostIndex, slides);
+  function computeLiveHostCurrentSlide(slides, stage, preferredIndex = -1) {
+    const nativeIndex = Number(stage?.index);
+    if (Number.isFinite(nativeIndex) && nativeIndex >= 0) return normalizeSlideIndex(nativeIndex, slides);
+    const deckActiveIndex = slides.findIndex((slide) => slide.hasAttribute("data-deck-active"));
+    const activeIndex = slides.findIndex((slide) => slide.classList.contains("active"));
+    const visibleIndex = slides.findIndex((slide) => slide.classList.contains("visible"));
+    const preferredNumber = Number(preferredIndex);
+    const preferred = Number.isFinite(preferredNumber) && preferredNumber >= 0
+      ? normalizeSlideIndex(preferredNumber, slides)
+      : -1;
+    const liveSignals = [deckActiveIndex, activeIndex, visibleIndex].filter((index) => index >= 0);
+    if (liveSignals.some((index) => index !== liveSignals[0]) && liveSignals.includes(preferred)) return preferred;
+    if (deckActiveIndex >= 0) return deckActiveIndex;
+    if (activeIndex >= 0) return activeIndex;
+    if (visibleIndex >= 0) return visibleIndex;
     const transformIndex = currentSlideFromStageTransform(stage, slides);
     return transformIndex >= 0 ? transformIndex : -1;
   }
 
+  function currentSlideFromHostMutations(records, slides, stage) {
+    const nativeIndex = Number(stage?.index);
+    if (Number.isFinite(nativeIndex) && nativeIndex >= 0) return normalizeSlideIndex(nativeIndex, slides);
+    let current = -1;
+    records.forEach((record) => {
+      const index = slides.indexOf(record.target);
+      if (index < 0 || record.type !== "attributes") return;
+      const slide = slides[index];
+      if (record.attributeName === "data-deck-active" && slide.hasAttribute("data-deck-active")) {
+        current = index;
+      }
+      if (record.attributeName === "class") {
+        const oldClasses = new Set(String(record.oldValue || "").split(/\s+/).filter(Boolean));
+        if (
+          (slide.classList.contains("active") && !oldClasses.has("active")) ||
+          (slide.classList.contains("visible") && !oldClasses.has("visible"))
+        ) current = index;
+      }
+      if (
+        (record.attributeName === "hidden" && !slide.hasAttribute("hidden")) ||
+        (record.attributeName === "aria-hidden" && slide.getAttribute("aria-hidden") !== "true")
+      ) {
+        current = index;
+      }
+    });
+    return current;
+  }
+
+  function computeHostCurrentSlide(slides, stage, preferredIndex = -1) {
+    const liveIndex = computeLiveHostCurrentSlide(slides, stage, preferredIndex);
+    if (liveIndex >= 0) return liveIndex;
+    const stageIndex = Number(stage?.dataset?.htmlDeckEditorCurrentSlide);
+    if (Number.isFinite(stageIndex)) return normalizeSlideIndex(stageIndex, slides);
+    const hostIndex = Number(window.__currentSlideIndex);
+    if (Number.isFinite(hostIndex)) return normalizeSlideIndex(hostIndex, slides);
+    return -1;
+  }
+
   function computeCurrentSlide(slides, stage) {
+    const liveIndex = computeLiveHostCurrentSlide(slides, stage);
+    if (liveIndex >= 0) return liveIndex;
     const markedIndex = slides.findIndex((slide) => slide.hasAttribute("data-html-deck-editor-current"));
     if (markedIndex >= 0) return markedIndex;
-    const activeIndex = slides.findIndex((slide) => slide.classList.contains("active") || slide.classList.contains("visible") || slide.hasAttribute("data-deck-active"));
-    if (activeIndex >= 0) return activeIndex;
     const hostIndex = computeHostCurrentSlide(slides, stage);
     return hostIndex >= 0 ? hostIndex : 0;
   }
@@ -1281,7 +1329,7 @@
       } else if (originalShowSlide) {
         originalShowSlide(requestedSlide);
         this.slides = stageSlides(stage);
-        const hostIndex = computeHostCurrentSlide(this.slides, stage);
+        const hostIndex = computeHostCurrentSlide(this.slides, stage, requestedSlide);
         this.currentSlide = markEditorCurrentSlide(this.slides, hostIndex >= 0 ? hostIndex : requestedSlide);
       } else {
         this.currentSlide = showPreservedSlide(stage, requestedSlide, { dispatch: false });
@@ -1389,6 +1437,7 @@
         this.motionAncestorCounts = new WeakMap();
         this.textSelectionRange = null;
         this.textSelectionElement = null;
+        this.layoutRefreshRaf = null;
         this.layoutRefreshTimers = [];
         this.globalListenerController = typeof AbortController !== "undefined" ? new AbortController() : null;
         this.globalListeners = [];
@@ -2685,6 +2734,8 @@
           "html-deck-editor-export-capturing"
         );
         this.clearTextSelection();
+        if (this.layoutRefreshRaf !== null) window.cancelAnimationFrame(this.layoutRefreshRaf);
+        this.layoutRefreshRaf = null;
         this.layoutRefreshTimers.forEach((timer) => window.clearTimeout(timer));
         this.layoutRefreshTimers = [];
         this.stopMotionFrameTracking();
@@ -2730,6 +2781,7 @@
           childList: true,
           subtree: true,
           attributes: true,
+          attributeOldValue: true,
           attributeFilter: ["class", "style", "hidden", "aria-hidden", "data-deck-active", "data-html-deck-editor-current"]
         };
         this.hostSlideObserver = new MutationObserver((records) => {
@@ -2741,19 +2793,11 @@
             return record.type === "childList" || record.type === "attributes";
           });
           if (!changed) return;
-          const activeIndex = slides.findIndex((slide) => slide.classList.contains("active"));
-          const deckActiveIndex = slides.findIndex((slide) => slide.hasAttribute("data-deck-active"));
-          const transformIndex = currentSlideFromStageTransform(this.stage, slides);
-          const visibleIndex = slides.findIndex((slide) => slide.classList.contains("visible"));
-          const index = activeIndex >= 0
-            ? activeIndex
-            : deckActiveIndex >= 0
-              ? deckActiveIndex
-              : transformIndex >= 0
-                ? transformIndex
-                : visibleIndex >= 0
-                  ? visibleIndex
-                  : this.presentation.currentSlide;
+          const mutatedIndex = currentSlideFromHostMutations(records, slides, this.stage);
+          const liveIndex = mutatedIndex >= 0
+            ? mutatedIndex
+            : computeLiveHostCurrentSlide(slides, this.stage, this.presentation.currentSlide);
+          const index = liveIndex >= 0 ? liveIndex : this.presentation.currentSlide;
           this.hostSlideObserver.disconnect();
           try {
             this.presentation.slides = slides;
@@ -3302,6 +3346,10 @@
 
       syncStageEditingMode() {
         if (!this.isActive || !isDeckStageElement(this.stage)) return;
+        if (this.stage.hasAttribute("data-codex-fixed-deck-noscale")) {
+          this.stage.removeAttribute("noscale");
+          this.stage.removeAttribute("data-codex-fixed-deck-noscale");
+        }
         const nativeLayout = hasNativeDeckStageLayout(this.stage);
         this.stage.toggleAttribute("data-html-deck-editor-native-layout", nativeLayout);
         if (nativeLayout) this.stage.removeAttribute("data-html-deck-editor-navigation");
@@ -3310,7 +3358,11 @@
       syncCurrentSlideFromHost() {
         if (!this.stage || this.stage.getAttribute("data-html-deck-editor-stage") !== "preserve") return;
         this.presentation.slides = stageSlides(this.stage);
-        const hostIndex = computeHostCurrentSlide(this.presentation.slides, this.stage);
+        const hostIndex = computeHostCurrentSlide(
+          this.presentation.slides,
+          this.stage,
+          this.presentation.currentSlide
+        );
         const next = hostIndex >= 0 ? hostIndex : this.presentation.currentSlide;
         this.presentation.currentSlide = markEditorCurrentSlide(this.presentation.slides, next);
         syncHostCurrentSlide(this.stage, this.presentation.currentSlide);
@@ -3344,8 +3396,13 @@
         };
         this.layoutRefreshTimers.forEach((timer) => window.clearTimeout(timer));
         this.layoutRefreshTimers = [];
+        if (this.layoutRefreshRaf !== null) window.cancelAnimationFrame(this.layoutRefreshRaf);
         refresh();
-        requestAnimationFrame(refresh);
+        this.layoutRefreshRaf = requestAnimationFrame(() => {
+          this.layoutRefreshRaf = null;
+          if (!this.isActive) return;
+          refresh();
+        });
         this.layoutRefreshTimers.push(window.setTimeout(refresh, 80));
         this.layoutRefreshTimers.push(window.setTimeout(refresh, 220));
       }
@@ -5733,19 +5790,21 @@
         if (this.motionHold || this.dragState || this.canvasPanState) return;
         const index = Number.isFinite(event?.detail?.index) ? event.detail.index : this.presentation.currentSlide;
         this.presentation.slides = stageSlides(this.stage);
-        this.presentation.currentSlide = normalizeSlideIndex(index, this.presentation.slides);
-        const slide = this.presentation.slides[index];
+        const current = normalizeSlideIndex(index, this.presentation.slides);
+        this.presentation.currentSlide = markEditorCurrentSlide(this.presentation.slides, current);
+        syncHostCurrentSlide(this.stage, this.presentation.currentSlide);
+        const slide = this.presentation.slides[this.presentation.currentSlide];
         if (this.isActive) {
           this.refreshEditableElements();
           this.replayContentPatches(slide);
         }
         const now = performance.now();
-        if (this.lastSlideReplay.index === index && now - this.lastSlideReplay.at < 90) return;
-        this.lastSlideReplay = { index, at: now };
+        if (this.lastSlideReplay.index === current && now - this.lastSlideReplay.at < 90) return;
+        this.lastSlideReplay = { index: current, at: now };
         this.stopMotionFrameTracking();
         if (this.isActive) {
           this.centerEditorView();
-          this.revealActiveSlideForEditing(index);
+          this.revealActiveSlideForEditing(current);
           this.renderSlideRail();
         }
         if (this.isActive && this.selected && slide && this.closestSlide(this.selected) !== slide) {
@@ -7082,6 +7141,10 @@
         });
         clone.querySelectorAll("[data-codex-fixed-deck-stage]").forEach((node) => {
           node.removeAttribute("data-codex-fixed-deck-stage");
+        });
+        clone.querySelectorAll("[data-codex-fixed-deck-noscale]").forEach((node) => {
+          node.removeAttribute("noscale");
+          node.removeAttribute("data-codex-fixed-deck-noscale");
         });
         clone.querySelectorAll(".editor-selected").forEach((node) => node.classList.remove("editor-selected"));
         clone.querySelectorAll(".editor-motion-parent-stable").forEach((node) => node.classList.remove("editor-motion-parent-stable"));
