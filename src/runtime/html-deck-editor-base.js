@@ -1245,7 +1245,7 @@
       constructor(presentation) {
         this.presentation = presentation;
         this.storageKey = this.makeStorageKey();
-        this.legacyStorageKeys = [];
+        this.legacyStorageKeys = this.makeLegacyStorageKeys();
         this.isActive = false;
         this.selected = null;
         this.hideTimeout = null;
@@ -1260,6 +1260,8 @@
         this.hasPendingHistoryChange = false;
         this.historyLimit = 40;
         this.historyCharacterLimit = 8_000_000;
+        this.contentPatches = new Map();
+        this.draftStorageWarning = "";
         this.lastInsert = { x: 720, y: 300 };
         this.snapThreshold = 12;
         this.motionFrameRaf = null;
@@ -1417,6 +1419,7 @@
         });
         this.prepareEditableElements();
         this.prepareEditableIds();
+        this.sourceFingerprint = this.currentSourceFingerprint();
         const embeddedFonts = this.restoreManagedFonts();
         this.fontLibraryReady = this.restoreReusableFonts(embeddedFonts);
         this.renderTextColorPalette();
@@ -1483,7 +1486,14 @@
       }
 
       makeStorageKey() {
-        return `frontend-slides:${location.pathname}:${document.title}:visual-edits:v1`;
+        return `frontend-slides:${location.pathname}:visual-edits:v2`;
+      }
+
+      makeLegacyStorageKeys() {
+        return [
+          `frontend-slides:${location.pathname}:${document.title}:visual-edits:v1`,
+          `frontend-slides:${location.pathname}:visual-edits:v1`
+        ].filter((key) => key !== this.storageKey);
       }
 
       loadExportAssetMap() {
@@ -2109,6 +2119,170 @@
         });
       }
 
+      currentSourceFingerprint() {
+        const clone = this.stage.cloneNode(true);
+        this.cleanEditorArtifacts(clone);
+        stageSlides(clone).forEach((slide) => {
+          slide.classList.remove("active", "visible", "current", "present", "is-active");
+          slide.removeAttribute("aria-hidden");
+          slide.removeAttribute("data-deck-active");
+          slide.style.removeProperty("display");
+          slide.style.removeProperty("visibility");
+          slide.style.removeProperty("opacity");
+        });
+        const source = clone.innerHTML;
+        let hash = 2166136261;
+        for (let index = 0; index < source.length; index += 1) {
+          hash = Math.imul(hash ^ source.charCodeAt(index), 16777619);
+        }
+        return `fnv1a-${(hash >>> 0).toString(16)}-${source.length}`;
+      }
+
+      contentPatchIdentity(element) {
+        if (!element || !this.stage.contains(element)) return null;
+        if (!element.dataset.editId) this.prepareEditableIds();
+        const slides = stageSlides(this.stage);
+        const slide = slides.find((candidate) => candidate === element || candidate.contains(element));
+        const identity = {
+          editId: element.dataset.editId || "",
+          aiAnchor: element.dataset.aiAnchor || "",
+          id: element.id || "",
+          slideIndex: Math.max(0, slides.indexOf(slide))
+        };
+        const key = identity.aiAnchor
+          ? `anchor:${identity.aiAnchor}`
+          : identity.id
+            ? `id:${identity.id}`
+            : identity.editId
+              ? `edit:${identity.editId}`
+              : "";
+        return key ? { ...identity, key } : null;
+      }
+
+      snapshotPatchedElement(element) {
+        const wrapper = document.createElement("div");
+        wrapper.appendChild(element.cloneNode(true));
+        this.cleanEditorArtifacts(wrapper);
+        return wrapper.innerHTML;
+      }
+
+      recordContentPatch(element, options = {}) {
+        const identity = this.contentPatchIdentity(element);
+        if (!identity) return;
+        const previous = this.contentPatches.get(identity.key);
+        this.contentPatches.set(identity.key, {
+          ...identity,
+          added: options.added === true || previous?.added === true,
+          deleted: false,
+          html: this.snapshotPatchedElement(element)
+        });
+      }
+
+      recordContentDeletion(element) {
+        const identity = this.contentPatchIdentity(element);
+        if (!identity) return;
+        const previous = this.contentPatches.get(identity.key);
+        this.contentPatches.set(identity.key, {
+          ...identity,
+          added: previous?.added === true,
+          deleted: true,
+          html: ""
+        });
+      }
+
+      contentPatchMetadata() {
+        return Array.from(this.contentPatches.values()).map(({ html, ...metadata }) => metadata);
+      }
+
+      restoreContentPatches(entries) {
+        this.contentPatches = new Map();
+        if (Array.isArray(entries)) {
+          entries.forEach((entry) => {
+            if (!entry?.key) return;
+            const patch = {
+              key: String(entry.key),
+              editId: String(entry.editId || ""),
+              aiAnchor: String(entry.aiAnchor || ""),
+              id: String(entry.id || ""),
+              slideIndex: Number.isFinite(entry.slideIndex) ? entry.slideIndex : 0,
+              added: entry.added === true,
+              deleted: entry.deleted === true,
+              html: ""
+            };
+            const target = this.findContentPatchTarget(patch);
+            if (!patch.deleted && !target) return;
+            if (target) patch.html = this.snapshotPatchedElement(target);
+            this.contentPatches.set(patch.key, patch);
+          });
+          return;
+        }
+
+        this.stage.querySelectorAll("[data-inline-image], .editor-layer[data-edit-id]").forEach((element) => {
+          this.recordContentPatch(element, { added: element.classList.contains("editor-layer") });
+        });
+      }
+
+      findContentPatchTarget(patch) {
+        if (patch.aiAnchor) {
+          const target = Array.from(this.stage.querySelectorAll("[data-ai-anchor]"))
+            .find((element) => element.dataset.aiAnchor === patch.aiAnchor);
+          if (target) return target;
+        }
+        if (patch.id) {
+          const target = document.getElementById(patch.id);
+          if (target && this.stage.contains(target)) return target;
+        }
+        if (patch.editId) {
+          const target = Array.from(this.stage.querySelectorAll("[data-edit-id]"))
+            .find((element) => element.dataset.editId === patch.editId);
+          if (target) return target;
+        }
+        return null;
+      }
+
+      patchedElementFromHtml(html) {
+        const template = document.createElement("template");
+        template.innerHTML = String(html || "").trim();
+        return template.content.firstElementChild;
+      }
+
+      replayContentPatches(slide) {
+        if (!slide || !this.contentPatches.size) return false;
+        let changed = false;
+        this.contentPatches.forEach((patch) => {
+          const target = this.findContentPatchTarget(patch);
+          const targetSlide = target ? this.closestSlide(target) : null;
+          if (target && targetSlide !== slide) return;
+          if (!target && this.presentation.slides[patch.slideIndex] !== slide) return;
+          if (patch.deleted) {
+            if (target) {
+              target.remove();
+              changed = true;
+            }
+            return;
+          }
+          if (target) {
+            if (!patch.html || this.snapshotPatchedElement(target) === patch.html) return;
+            const replacement = this.patchedElementFromHtml(patch.html);
+            if (!replacement) return;
+            target.replaceWith(replacement);
+            changed = true;
+            return;
+          }
+          if (patch.added && patch.html) {
+            const added = this.patchedElementFromHtml(patch.html);
+            if (!added) return;
+            slide.appendChild(added);
+            changed = true;
+          }
+        });
+        if (changed) {
+          this.presentation.slides = stageSlides(this.stage);
+          this.refreshEditableElements();
+        }
+        return changed;
+      }
+
       bindControls() {
         this.controls.help.addEventListener("click", () => this.openHelp());
         this.controls.helpClose.addEventListener("click", () => this.closeHelp());
@@ -2268,6 +2442,7 @@
         this.addGlobalListener(document, "pointerup", () => this.finishPointerAction());
         this.addGlobalListener(document, "pointercancel", () => this.finishPointerAction());
         this.addGlobalListener(window, "blur", () => {
+          this.commitPendingHistoryChange();
           this.finishPointerAction();
           this.editShortcutHandled = false;
         });
@@ -2417,6 +2592,7 @@
         });
         element.addEventListener("input", () => {
           if (!this.isActive) return;
+          this.recordContentPatch(element);
           this.saveDraft(false);
           this.updateInspector();
           this.updateFrame();
@@ -2655,7 +2831,9 @@
           const dy = event.key === "ArrowUp" ? -step : event.key === "ArrowDown" ? step : 0;
           this.setStagePosition(this.selected, box.x + dx, box.y + dy, box.width, box.height);
           this.updateInspector();
-          this.saveDraft(false, true);
+          this.recordContentPatch(this.selected);
+          this.saveDraft(false, false);
+          this.markPendingHistoryChange();
         }
         if (this.isHostDeckShortcut(event)) {
           event.preventDefault();
@@ -2673,6 +2851,10 @@
       }
 
       handleEditShortcutKeyup(event) {
+        if (this.isActive && ["ArrowUp", "ArrowDown", "ArrowLeft", "ArrowRight"].includes(event.key)) {
+          this.commitPendingHistoryChange();
+          return;
+        }
         const isEKey = event.key?.toLowerCase?.() === "e" || event.code === "KeyE";
         if (!isEKey) return;
         if (this.editShortcutHandled) {
@@ -3929,6 +4111,7 @@
           if (this.applyInlineTextStyle(element, property, value)) {
             this.updateFrame();
             const recordHistory = options.recordHistory !== false;
+            this.recordContentPatch(element);
             this.saveDraft(false, recordHistory);
             if (!recordHistory) this.markPendingHistoryChange();
             return true;
@@ -3953,6 +4136,7 @@
         element.style.setProperty(property, value);
         this.updateFrame();
         this.updateInspector();
+        this.recordContentPatch(element);
         this.saveDraft(false, true);
       }
 
@@ -4044,6 +4228,7 @@
           this.rememberMotionStableBox(motionElement, this.reconcileStoredStagePosition(motionElement, { mode: "sync" }) || this.getStableStageBox(motionElement));
           this.applyAnimation(motionElement, this.controls.anim.value, true);
           this.syncMotionControls(motionElement);
+          this.recordContentPatch(motionElement);
           this.saveDraft(false, recordHistory);
           return;
         }
@@ -4074,6 +4259,7 @@
         }
         this.updateFrame();
         if (refreshInspector) this.updateInspector();
+        this.recordContentPatch(element);
         this.saveDraft(false, recordHistory);
         if (!recordHistory) this.markPendingHistoryChange();
       }
@@ -5235,14 +5421,17 @@
         const index = Number.isFinite(event?.detail?.index) ? event.detail.index : this.presentation.currentSlide;
         this.presentation.slides = stageSlides(this.stage);
         this.presentation.currentSlide = normalizeSlideIndex(index, this.presentation.slides);
+        const slide = this.presentation.slides[index];
+        if (this.isActive) {
+          this.refreshEditableElements();
+          this.replayContentPatches(slide);
+        }
         const now = performance.now();
         if (this.lastSlideReplay.index === index && now - this.lastSlideReplay.at < 90) return;
         this.lastSlideReplay = { index, at: now };
         this.stopMotionFrameTracking();
-        const slide = this.presentation.slides[index];
         if (this.isActive) {
           this.centerEditorView();
-          this.refreshEditableElements();
           this.revealActiveSlideForEditing(index);
           this.renderSlideRail();
         }
@@ -5543,6 +5732,7 @@
         this.motionHold = false;
         if (element) {
           this.reconcileStoredStagePosition(element, { mode: "sync" });
+          this.recordContentPatch(element);
           this.updateFrame();
           this.updateInspector();
         }
@@ -5566,6 +5756,7 @@
         this.activeSlide().appendChild(layer);
         this.bindElement(layer);
         this.select(layer);
+        this.recordContentPatch(layer, { added: true });
         this.saveDraft();
       }
 
@@ -5585,6 +5776,7 @@
         this.activeSlide().appendChild(layer);
         this.bindElement(layer);
         this.select(layer);
+        this.recordContentPatch(layer, { added: true });
         this.saveDraft();
       }
 
@@ -5607,6 +5799,7 @@
         this.activeSlide().appendChild(wrapper);
         this.bindElement(wrapper);
         this.select(wrapper);
+        this.recordContentPatch(wrapper, { added: true });
         this.lastInsert = point;
         const stored = this.saveDraft(false);
         this.toastMessage(stored ? "图片已添加" : "图片已添加，但浏览器草稿空间不足；请立即保存 HTML");
@@ -5736,6 +5929,7 @@
           element.style.backgroundRepeat = "no-repeat";
           element.dataset.inlineImage = "true";
         }
+        this.recordContentPatch(element);
         const stored = this.saveDraft(false);
         this.updateInspector();
         this.toastMessage(stored ? "图片已替换" : "图片已替换，但浏览器草稿空间不足；请立即保存 HTML");
@@ -6144,6 +6338,7 @@
       deleteSelected() {
         if (!this.canDeleteElement(this.selected)) return;
         const element = this.selected;
+        this.recordContentDeletion(element);
         this.removeCommentsForElement(element);
         element.remove();
         this.clearSelection();
@@ -6195,7 +6390,9 @@
         const data = {
           stage: stageClone.innerHTML,
           comments: this.normalizeComments(this.comments),
-          currentSlide: this.presentation.currentSlide
+          currentSlide: this.presentation.currentSlide,
+          sourceFingerprint: this.sourceFingerprint || this.currentSourceFingerprint(),
+          contentPatches: this.contentPatchMetadata()
         };
         const speakerNotes = document.getElementById("speaker-notes");
         if (speakerNotes) data.speakerNotes = speakerNotes.textContent || "";
@@ -6221,7 +6418,7 @@
           this.hasPendingHistoryChange = false;
           this.pushHistory(snapshot);
         }
-        const stored = this.writeStoredValue(this.storageKey, snapshot);
+        const stored = this.persistDraftData(data);
         if (showToast) {
           this.toastMessage(stored
             ? "已保存到本地草稿；点“保存 HTML”才会写入文件"
@@ -6235,11 +6432,69 @@
         if (!raw) return;
         try {
           const data = JSON.parse(raw);
+          if (data.stage && !this.shouldRestoreDraft(data)) {
+            this.openConfirm({
+              title: "检测到 HTML 文件已更新",
+              message: "浏览器里还有一份较旧的本地草稿。当前先保留文件里的新内容；只有选择恢复草稿，才会覆盖当前页面。",
+              okText: "恢复旧草稿",
+              action: () => {
+                this.restoreSnapshot(data);
+                this.saveDraft(false, true);
+                this.toastMessage("已恢复旧的浏览器草稿");
+              }
+            });
+            return;
+          }
           if (data.stage) this.restoreSnapshot(data);
-          this.writeStoredValue(this.storageKey, raw);
+          this.persistDraftData(data);
         } catch (error) {
-          this.removeStoredValue(this.storageKey);
+          this.discardStoredDrafts();
         }
+      }
+
+      shouldRestoreDraft(data) {
+        const documentMtime = Number(document.querySelector('meta[name="codex-mtime"]')?.getAttribute("content"));
+        if (Number.isFinite(documentMtime) && documentMtime > 0 && Number(data.savedAt) > 0 && documentMtime > Number(data.savedAt)) {
+          return false;
+        }
+        if (!data.sourceFingerprint) return true;
+        return data.sourceFingerprint === this.sourceFingerprint;
+      }
+
+      persistDraftData(data) {
+        const snapshot = JSON.stringify({
+          ...data,
+          sourceFingerprint: this.sourceFingerprint || data.sourceFingerprint || this.currentSourceFingerprint(),
+          savedAt: Date.now()
+        });
+        const stored = this.writeStoredValue(this.storageKey, snapshot);
+        if (stored) {
+          this.legacyStorageKeys.forEach((key) => this.removeStoredValue(key));
+          this.clearDraftStorageWarning();
+          return true;
+        }
+        this.discardStoredDrafts();
+        this.showDraftStorageWarning("浏览器草稿空间不足；当前修改仍在页面中，请立即保存 HTML");
+        return false;
+      }
+
+      discardStoredDrafts() {
+        this.removeStoredValue(this.storageKey);
+        this.legacyStorageKeys.forEach((key) => this.removeStoredValue(key));
+      }
+
+      showDraftStorageWarning(message) {
+        this.draftStorageWarning = message;
+        this.toastMessage(message, { persistent: true });
+      }
+
+      clearDraftStorageWarning() {
+        const warning = this.draftStorageWarning;
+        this.draftStorageWarning = "";
+        if (!warning || this.toast.textContent !== warning) return;
+        window.clearTimeout(this.toastTimer);
+        this.toast.textContent = "";
+        this.toast.classList.remove("show");
       }
 
       readStoredDraft() {
@@ -6340,8 +6595,9 @@
         const snapshot = this.undoStack[this.historyIndex];
         this.isRestoringHistory = true;
         try {
-          this.restoreSnapshot(JSON.parse(snapshot));
-          this.writeStoredValue(this.storageKey, snapshot);
+          const data = JSON.parse(snapshot);
+          this.restoreSnapshot(data);
+          this.persistDraftData(data);
         } finally {
           this.isRestoringHistory = false;
           this.updateHistoryButtons();
@@ -6356,8 +6612,9 @@
         const snapshot = this.undoStack[this.historyIndex];
         this.isRestoringHistory = true;
         try {
-          this.restoreSnapshot(JSON.parse(snapshot));
-          this.writeStoredValue(this.storageKey, snapshot);
+          const data = JSON.parse(snapshot);
+          this.restoreSnapshot(data);
+          this.persistDraftData(data);
         } finally {
           this.isRestoringHistory = false;
           this.updateHistoryButtons();
@@ -6386,6 +6643,7 @@
         this.hideDeckResetControl();
         this.prepareEditableElements();
         this.prepareEditableIds();
+        this.restoreContentPatches(data.contentPatches);
         this.bindEditableEvents();
         this.stage.refreshSlides?.();
         const page = Number.parseInt(window.location.hash.replace("#", ""), 10);
@@ -7553,11 +7811,19 @@
         return [1, 2, 3].map((index) => Number(match[index]).toString(16).padStart(2, "0")).join("").replace(/^/, "#");
       }
 
-      toastMessage(message) {
+      toastMessage(message, options = {}) {
         this.toast.textContent = message;
         this.toast.classList.add("show");
         window.clearTimeout(this.toastTimer);
-        this.toastTimer = window.setTimeout(() => this.toast.classList.remove("show"), 1400);
+        if (options.persistent === true) return;
+        this.toastTimer = window.setTimeout(() => {
+          if (this.draftStorageWarning) {
+            this.toast.textContent = this.draftStorageWarning;
+            this.toast.classList.add("show");
+            return;
+          }
+          this.toast.classList.remove("show");
+        }, 1400);
       }
     }
 
