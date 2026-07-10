@@ -25,6 +25,16 @@ export type LoadProgressEvent = {
 
 type LoadProgressCallback = (event: LoadProgressEvent) => void;
 
+type ZipStreamHelper = {
+  on(event: "data", callback: (chunk: Uint8Array, metadata: { percent: number }) => void): ZipStreamHelper;
+  on(event: "end", callback: () => void): ZipStreamHelper;
+  on(event: "error", callback: (error: Error) => void): ZipStreamHelper;
+  pause(): ZipStreamHelper;
+  resume(): ZipStreamHelper;
+};
+
+class ZipActualSizeError extends Error {}
+
 function baseName(name: string): string {
   return name.replace(/\.[^.]+$/, "") || "deck";
 }
@@ -45,6 +55,59 @@ function zipEntrySize(entry: unknown): number {
   const data = (entry as { _data?: { uncompressedSize?: unknown } })?._data;
   const size = Number(data?.uncompressedSize);
   return Number.isFinite(size) && size > 0 ? size : 0;
+}
+
+async function readZipEntry(
+  entry: JSZip.JSZipObject,
+  onBytes: (size: number) => void,
+  onProgress: (percent: number) => void
+): Promise<Uint8Array> {
+  const internalStream = (entry as unknown as { internalStream?: (type: string) => ZipStreamHelper }).internalStream;
+  if (typeof internalStream !== "function") {
+    const data = await entry.async("uint8array", (metadata) => onProgress(metadata.percent));
+    onBytes(data.byteLength);
+    return data;
+  }
+
+  return new Promise<Uint8Array>((resolve, reject) => {
+    const chunks: Uint8Array[] = [];
+    let byteLength = 0;
+    let settled = false;
+    const stream = internalStream.call(entry, "uint8array");
+    stream
+      .on("data", (chunk, metadata) => {
+        if (settled) return;
+        const bytes = chunk instanceof Uint8Array ? chunk : new Uint8Array(chunk);
+        try {
+          onBytes(bytes.byteLength);
+        } catch (error) {
+          settled = true;
+          stream.pause();
+          reject(error);
+          return;
+        }
+        chunks.push(new Uint8Array(bytes));
+        byteLength += bytes.byteLength;
+        onProgress(metadata.percent);
+      })
+      .on("error", (error) => {
+        if (settled) return;
+        settled = true;
+        reject(error);
+      })
+      .on("end", () => {
+        if (settled) return;
+        settled = true;
+        const output = new Uint8Array(byteLength);
+        let offset = 0;
+        chunks.forEach((chunk) => {
+          output.set(chunk, offset);
+          offset += chunk.byteLength;
+        });
+        resolve(output);
+      })
+      .resume();
+  });
 }
 
 export async function loadZip(file: File, onProgress?: LoadProgressCallback): Promise<LoadResult> {
@@ -74,8 +137,8 @@ export async function loadZip(file: File, onProgress?: LoadProgressCallback): Pr
   const entries = Object.entries(zip.files).filter(([, entry]) => !entry.dir);
   const readableEntries: Array<[string, (typeof entries)[number][1]]> = [];
   let totalBytes = 0;
-  let skippedIgnored = 0;
-  let skippedSensitive = 0;
+  const skippedIgnored: string[] = [];
+  const skippedSensitive: string[] = [];
 
   for (const [path, entry] of entries) {
     const safePath = normalizePath(path);
@@ -84,30 +147,46 @@ export async function loadZip(file: File, onProgress?: LoadProgressCallback): Pr
       continue;
     }
     if (isIgnoredImportPath(safePath)) {
-      skippedIgnored += 1;
+      skippedIgnored.push(safePath);
       continue;
     }
     if (isSensitivePath(safePath)) {
-      skippedSensitive += 1;
+      skippedSensitive.push(safePath);
       continue;
     }
     readableEntries.push([safePath, entry]);
     totalBytes += zipEntrySize(entry);
   }
 
-  if (skippedIgnored > 0) warnings.push(`已跳过 ${skippedIgnored} 个依赖、缓存或系统文件。`);
-  if (skippedSensitive > 0) warnings.push(`为了安全，已跳过 ${skippedSensitive} 个敏感文件。`);
+  appendSkippedFileWarnings(warnings, skippedIgnored, skippedSensitive);
 
   const limitErrors = collectionLimitErrors(readableEntries.length, totalBytes);
   if (limitErrors.length) {
     return { input: null, warnings, errors: limitErrors };
   }
 
+  let actualTotalBytes = 0;
   for (const [index, [safePath, entry]] of readableEntries.entries()) {
-    const data = await entry.async("uint8array", (metadata) => {
-      const percent = ((index + metadata.percent / 100) / readableEntries.length) * 100;
-      onProgress?.({ stage: "collect", percent, detail: safePath });
-    });
+    let data: Uint8Array;
+    try {
+      data = await readZipEntry(entry, (size) => {
+        actualTotalBytes += size;
+        if (actualTotalBytes > LIMITS.maxTotalBytes) {
+          throw new ZipActualSizeError("ZIP 解压后的实际体积超过约 300MB，已停止读取，避免占用过多内存。");
+        }
+      }, (entryPercent) => {
+        const percent = ((index + entryPercent / 100) / readableEntries.length) * 100;
+        onProgress?.({ stage: "collect", percent, detail: safePath });
+      });
+    } catch (error) {
+      return {
+        input: null,
+        warnings,
+        errors: [error instanceof ZipActualSizeError
+          ? error.message
+          : `无法解压 ${safePath}：条目可能已损坏或加密，请重新压缩后再试。`]
+      };
+    }
     files.push({ path: safePath, name: safePath.split("/").pop() || safePath, data, size: data.byteLength });
     onProgress?.({ stage: "collect", percent: ((index + 1) / readableEntries.length) * 100, detail: safePath });
   }
@@ -132,8 +211,8 @@ export async function loadFolder(files: FileList, onProgress?: LoadProgressCallb
   const warnings: string[] = [];
   const readableFiles: Array<{ file: File; path: string }> = [];
   let totalBytes = 0;
-  let skippedIgnored = 0;
-  let skippedSensitive = 0;
+  const skippedIgnored: string[] = [];
+  const skippedSensitive: string[] = [];
 
   for (let index = 0; index < files.length; index += 1) {
     const file = files[index];
@@ -145,11 +224,11 @@ export async function loadFolder(files: FileList, onProgress?: LoadProgressCallb
       continue;
     }
     if (isIgnoredImportPath(safePath)) {
-      skippedIgnored += 1;
+      skippedIgnored.push(safePath);
       continue;
     }
     if (isSensitivePath(safePath)) {
-      skippedSensitive += 1;
+      skippedSensitive.push(safePath);
       continue;
     }
 
@@ -157,14 +236,12 @@ export async function loadFolder(files: FileList, onProgress?: LoadProgressCallb
     totalBytes += file.size || 0;
     const limitErrors = collectionLimitErrors(readableFiles.length, totalBytes);
     if (limitErrors.length) {
-      if (skippedIgnored > 0) warnings.push(`已跳过 ${skippedIgnored} 个依赖、缓存或系统文件。`);
-      if (skippedSensitive > 0) warnings.push(`为了安全，已跳过 ${skippedSensitive} 个敏感文件。`);
+      appendSkippedFileWarnings(warnings, skippedIgnored, skippedSensitive);
       return { input: null, warnings, errors: limitErrors };
     }
   }
 
-  if (skippedIgnored > 0) warnings.push(`已跳过 ${skippedIgnored} 个依赖、缓存或系统文件。`);
-  if (skippedSensitive > 0) warnings.push(`为了安全，已跳过 ${skippedSensitive} 个敏感文件。`);
+  appendSkippedFileWarnings(warnings, skippedIgnored, skippedSensitive);
 
   for (const [index, { file, path }] of readableFiles.entries()) {
     onProgress?.({ stage: "collect", percent: (index / readableFiles.length) * 100, detail: path });
@@ -196,6 +273,7 @@ function finalizeInput(input: LoadedInput, warnings: string[]): LoadResult {
 
   if (filtered.skipped.length > 0) {
     allWarnings.push(`为了安全，已跳过 ${filtered.skipped.length} 个敏感文件。`);
+    allWarnings.push(`已跳过的敏感文件：${displayPaths(filtered.skipped)}。`);
   }
 
   return {
@@ -203,4 +281,20 @@ function finalizeInput(input: LoadedInput, warnings: string[]): LoadResult {
     warnings: allWarnings,
     errors: limitErrors
   };
+}
+
+function appendSkippedFileWarnings(warnings: string[], ignored: string[], sensitive: string[]): void {
+  if (ignored.length) {
+    warnings.push(`已跳过 ${ignored.length} 个依赖、缓存或系统文件。`);
+    warnings.push(`已跳过的依赖、缓存或系统文件：${displayPaths(ignored)}。`);
+  }
+  if (sensitive.length) {
+    warnings.push(`为了安全，已跳过 ${sensitive.length} 个敏感文件。`);
+    warnings.push(`已跳过的敏感文件：${displayPaths(sensitive)}。`);
+  }
+}
+
+function displayPaths(paths: string[]): string {
+  const shown = paths.slice(0, 8);
+  return `${shown.join("、")}${paths.length > shown.length ? ` 等 ${paths.length} 个文件` : ""}`;
 }

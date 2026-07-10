@@ -45,6 +45,57 @@ function unreadFolderFile(path: string, size = 1): File & { arrayBuffer: ReturnT
   return file;
 }
 
+function streamingZipEntry(options: { chunks?: Uint8Array[]; error?: Error; declaredSize?: number }) {
+  const handlers: Record<string, ((...args: unknown[]) => void) | undefined> = {};
+  let paused = false;
+  const stream = {
+    on(event: string, callback: (...args: unknown[]) => void) {
+      handlers[event] = callback;
+      return stream;
+    },
+    pause: vi.fn(() => {
+      paused = true;
+      return stream;
+    }),
+    resume: vi.fn(() => {
+      queueMicrotask(() => {
+        if (options.error) {
+          handlers.error?.(options.error);
+          return;
+        }
+        for (const chunk of options.chunks || []) {
+          if (paused) return;
+          handlers.data?.(chunk, { percent: 50 });
+        }
+        if (!paused) handlers.end?.();
+      });
+      return stream;
+    })
+  };
+  const asyncRead = vi.fn(async () => {
+    if (options.error) throw options.error;
+    const chunks = options.chunks || [];
+    const size = chunks.reduce((sum, chunk) => sum + chunk.byteLength, 0);
+    const output = new Uint8Array(size);
+    let offset = 0;
+    chunks.forEach((chunk) => {
+      output.set(chunk, offset);
+      offset += chunk.byteLength;
+    });
+    return output;
+  });
+  return {
+    entry: {
+      dir: false,
+      _data: { uncompressedSize: options.declaredSize || 0 },
+      async: asyncRead,
+      internalStream: vi.fn(() => stream)
+    },
+    asyncRead,
+    stream
+  };
+}
+
 describe("file loading", () => {
   it("loads a single HTML file as index.html and warns about missing assets", async () => {
     const result = await loadHtml(browserFile([htmlDeck()], "slides.html", { type: "text/html" }));
@@ -76,6 +127,27 @@ describe("file loading", () => {
     expect(result.errors).toEqual([]);
     expect(result.input?.files.map((file) => file.path)).toEqual(["index.html"]);
     expect(result.warnings).toContain("为了安全，已跳过 2 个敏感文件。");
+    expect(result.warnings.join(" ")).toContain(".env");
+    expect(result.warnings.join(" ")).toContain("keys/private.key");
+  });
+
+  it("keeps token icons and token-named folders while filtering exact secret filenames", async () => {
+    const result = await loadZip(await zipFile("deck.zip", {
+      "index.html": htmlDeck(),
+      "assets/token-icon.png": "icon",
+      "tokens/palette.json": "{}",
+      "token.json": "private token",
+      "secret.txt": "private secret"
+    }));
+
+    expect(result.errors).toEqual([]);
+    expect(result.input?.files.map((file) => file.path).sort()).toEqual([
+      "assets/token-icon.png",
+      "index.html",
+      "tokens/palette.json"
+    ]);
+    expect(result.warnings.join(" ")).toContain("token.json");
+    expect(result.warnings.join(" ")).toContain("secret.txt");
   });
 
   it("skips macOS resource fork files inside zip uploads", async () => {
@@ -107,6 +179,41 @@ describe("file loading", () => {
 
     expect(result.input).toBeNull();
     expect(result.errors[0]).toContain("ZIP 太大了");
+  });
+
+  it("stops streamed decompression when actual bytes exceed the limit", async () => {
+    const previous = LIMITS.maxTotalBytes;
+    const fake = streamingZipEntry({
+      declaredSize: 1,
+      chunks: [new Uint8Array([1, 2, 3]), new Uint8Array([4, 5, 6])]
+    });
+    const loadSpy = vi.spyOn(JSZip, "loadAsync").mockResolvedValue({ files: { "index.html": fake.entry } } as unknown as JSZip);
+    LIMITS.maxTotalBytes = 4;
+    try {
+      const result = await loadZip(browserFile(["zip"], "streamed.zip", { type: "application/zip" }));
+
+      expect(result.input).toBeNull();
+      expect(result.errors.join(" ")).toContain("解压后的实际体积");
+      expect(fake.stream.pause).toHaveBeenCalled();
+      expect(fake.asyncRead).not.toHaveBeenCalled();
+    } finally {
+      LIMITS.maxTotalBytes = previous;
+      loadSpy.mockRestore();
+    }
+  });
+
+  it("returns a readable error for damaged or encrypted zip entries", async () => {
+    const fake = streamingZipEntry({ error: new Error("encrypted entry") });
+    const loadSpy = vi.spyOn(JSZip, "loadAsync").mockResolvedValue({ files: { "assets/broken.png": fake.entry } } as unknown as JSZip);
+    try {
+      const result = await loadZip(browserFile(["zip"], "encrypted.zip", { type: "application/zip" }));
+
+      expect(result.input).toBeNull();
+      expect(result.errors.join(" ")).toContain("assets/broken.png");
+      expect(result.errors.join(" ")).toContain("损坏或加密");
+    } finally {
+      loadSpy.mockRestore();
+    }
   });
 
   it("loads a selected folder and strips the common root", async () => {
@@ -160,6 +267,7 @@ describe("path and sensitive-file safety", () => {
   it("rejects unsafe paths", () => {
     expect(normalizePath("../index.html")).toBeNull();
     expect(normalizePath("deck//index.html")).toBeNull();
+    expect(normalizePath("./deck/./index.html")).toBe("deck/index.html");
     expect(normalizePath("/deck/index.html")).toBe("deck/index.html");
     expect(normalizePath("deck\\index.html")).toBe("deck/index.html");
   });

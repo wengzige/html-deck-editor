@@ -3,7 +3,9 @@ import type { VirtualFile } from "../types/deck";
 export const LIMITS = {
   maxZipBytes: 100 * 1024 * 1024,
   maxFileCount: 1000,
-  maxTotalBytes: 300 * 1024 * 1024
+  maxTotalBytes: 300 * 1024 * 1024,
+  maxInlineImageBytes: 10 * 1024 * 1024,
+  maxInlineImageTotalBytes: 40 * 1024 * 1024
 };
 
 const IGNORED_IMPORT_DIRECTORY_NAMES = new Set([
@@ -26,27 +28,30 @@ const IGNORED_IMPORT_FILE_NAMES = new Set([
 
 const SENSITIVE_NAME_PATTERNS = [
   /^\.env(?:\.|$)/i,
-  /(?:^|\/)id_rsa$/i,
-  /(?:^|\/)id_ed25519$/i,
+  /^id_rsa$/i,
+  /^id_ed25519$/i,
   /\.pem$/i,
   /\.key$/i,
   /\.p12$/i,
-  /token/i,
-  /secret/i
+  /^(?:token|secret)(?:\.[^.]+)?$/i
 ];
 
 export function normalizePath(path: string): string | null {
   const normalized = path.replaceAll("\\", "/").replace(/^\/+/, "");
-  if (!normalized || normalized.includes("\0")) return null;
-  if (normalized.split("/").some((part) => part === ".." || part === "")) return null;
-  if (/^[a-z]:\//i.test(normalized)) return null;
-  return normalized;
+  if (!normalized || normalized.includes("\0") || /^[a-z]:\//i.test(normalized)) return null;
+  const parts: string[] = [];
+  for (const part of normalized.split("/")) {
+    if (part === ".") continue;
+    if (part === ".." || part === "") return null;
+    parts.push(part);
+  }
+  return parts.join("/") || null;
 }
 
 export function isSensitivePath(path: string): boolean {
   const normalized = path.toLowerCase();
   const baseName = normalized.split("/").pop() || normalized;
-  return SENSITIVE_NAME_PATTERNS.some((pattern) => pattern.test(normalized) || pattern.test(baseName));
+  return SENSITIVE_NAME_PATTERNS.some((pattern) => pattern.test(baseName));
 }
 
 export function isIgnoredImportPath(path: string): boolean {

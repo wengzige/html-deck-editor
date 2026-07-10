@@ -47,15 +47,7 @@ export function detectDeck(input: LoadedInput): DetectionReport {
 
   const html = bytesToText(indexFile.data);
   const doc = new DOMParser().parseFromString(html, "text/html");
-  const parseError = doc.querySelector("parsererror");
-  if (parseError) {
-    return unsupported(indexFile.path, ["HTML 文件解析失败，可能不是标准 HTML。"]);
-  }
-
-  const hasExistingRuntime =
-    html.includes("HtmlDeckEditor") ||
-    html.includes("FrontendSlidesEditor.mount") ||
-    Boolean(doc.querySelector('script[src*="html-deck-editor"], script[src*="editor-runtime"]'));
+  const hasExistingRuntime = hasExplicitEditorRuntime(doc);
 
   const deckStage = doc.querySelector("deck-stage#deckStage, #deckStage, .deck-stage");
   const slides = deckStage ? stageSlides(deckStage) : [];
@@ -75,7 +67,7 @@ export function detectDeck(input: LoadedInput): DetectionReport {
   if (deckStage && slides.length > 0) {
     return {
       status: "ready",
-      sourceKind: html.includes("frontend-slides") ? "frontend-slides" : "fixed-stage",
+      sourceKind: isFrontendSlidesDeck(doc) ? "frontend-slides" : "fixed-stage",
       indexPath: indexFile.path,
       slideCount: slides.length,
       confidence: 0.95,
@@ -84,8 +76,8 @@ export function detectDeck(input: LoadedInput): DetectionReport {
     };
   }
 
-  const revealSlides = directChildren(doc.querySelector(".reveal .slides"), "section");
-  if (revealSlides.length >= 2) {
+  const revealSlides = selectRevealSlides(doc);
+  if (revealSlides.length >= 1) {
     return {
       status: "adaptable",
       sourceKind: "reveal",
@@ -94,6 +86,19 @@ export function detectDeck(input: LoadedInput): DetectionReport {
       confidence: 0.82,
       messages: [`识别到 Reveal.js 演示结构，共 ${revealSlides.length} 页。`],
       warnings: ["第一版会把每页内容包装进固定舞台，复杂 Reveal 转场和插件不会完整保留。", ...aiWarnings]
+    };
+  }
+
+  const impressSlides = directChildren(doc.querySelector("#impress, .impress"), ".step");
+  if (impressSlides.length >= 1) {
+    return {
+      status: "adaptable",
+      sourceKind: "impress",
+      indexPath: indexFile.path,
+      slideCount: impressSlides.length,
+      confidence: 0.82,
+      messages: [`识别到 Impress.js 演示结构，共 ${impressSlides.length} 页。`],
+      warnings: ["会移除 Impress.js 的空间定位和翻页接管，转换后请复核每页布局。", ...aiWarnings]
     };
   }
 
@@ -162,7 +167,46 @@ function selectExplicitContainerSlides(doc: Document): Element[] {
 }
 
 function selectTopLevelSlides(doc: Document): Element[] {
-  return topLevelElements(Array.from(doc.body.querySelectorAll("section.slide, .slide")));
+  return topLevelElements(Array.from(doc.body.querySelectorAll("section.slide, .slide")))
+    .filter((element) => !element.matches(".carousel, .carousel-item") && !element.closest(".carousel"));
+}
+
+function selectRevealSlides(doc: Document): Element[] {
+  const topLevel = directChildren(doc.querySelector(".reveal .slides"), "section");
+  return topLevel.flatMap((section) => {
+    const nested = directChildren(section, "section");
+    if (!nested.length || hasOwnRevealContent(section)) return [section];
+    return nested;
+  });
+}
+
+function hasOwnRevealContent(section: Element): boolean {
+  return Array.from(section.childNodes).some((node) => {
+    if (node.nodeType === Node.TEXT_NODE) return Boolean(node.textContent?.trim());
+    return node.nodeType === Node.ELEMENT_NODE && !(node as Element).matches("section, script, template");
+  });
+}
+
+function hasExplicitEditorRuntime(doc: Document): boolean {
+  if (doc.querySelector([
+    "[data-html-deck-editor-runtime]",
+    'script[src*="html-deck-editor"]',
+    'link[href*="html-deck-editor"]',
+    'script[src*="editor-runtime"]',
+    'link[href*="editor-runtime"]'
+  ].join(", "))) return true;
+  return Array.from(doc.querySelectorAll("script:not([src])")).some((script) =>
+    /\b(?:HtmlDeckEditor|FrontendSlidesEditor|InlineDeckEditor)\b/.test(script.textContent || "")
+  );
+}
+
+function isFrontendSlidesDeck(doc: Document): boolean {
+  return Boolean(doc.querySelector([
+    'meta[name="generator"][content*="frontend-slides" i]',
+    'script[src*="frontend-slides" i]',
+    'link[href*="frontend-slides" i]',
+    '[data-frontend-slides]'
+  ].join(", ")));
 }
 
 function stageSlides(stage: Element): Element[] {
@@ -205,7 +249,7 @@ function isDocumentLikePage(doc: Document): boolean {
   const visualDataBlocks = doc.querySelectorAll("svg, canvas, table, details, .mono, [class*='metric'], [class*='score'], [class*='chart'], [class*='report'], [class*='audit']").length;
   const averageSectionText = topSections.reduce((sum, section) => sum + compactWhitespace(section.textContent || "").length, 0) / topSections.length;
   const denseSections = topSections.length >= 4 && (bodyText.length >= 1000 || averageSectionText >= 120 || textBlocks >= 10);
-  const reportLike = termMatched && (constrained || semanticDocument || visualDataBlocks >= 2 || textBlocks >= topSections.length * 2);
+  const reportLike = !explicitPresentation && termMatched && (constrained || semanticDocument || visualDataBlocks >= 2 || textBlocks >= topSections.length * 2);
   const longFormDocument = !explicitPresentation && (constrained || semanticDocument) && denseSections && (headings >= 4 || textBlocks >= 8 || visualDataBlocks >= 2);
 
   return reportLike || longFormDocument;
@@ -213,7 +257,7 @@ function isDocumentLikePage(doc: Document): boolean {
 
 function hasConstrainedBodyLayout(doc: Document): boolean {
   const styles = Array.from(doc.querySelectorAll("style")).map((style) => style.textContent || "").join("\n");
-  if (/body\s*\{[^}]*max-width\s*:\s*(?:[1-9]\d{2}|1[01]\d{2}|1200)px/i.test(styles)) return true;
+  if (/(?:^|[}\s,])body\s*\{[^}]*max-width\s*:\s*(?:[1-9]\d{2}|1[01]\d{2}|1200)px/im.test(styles)) return true;
   const bodyStyle = doc.body.getAttribute("style") || "";
   return /max-width\s*:\s*(?:[1-9]\d{2}|1[01]\d{2}|1200)px/i.test(bodyStyle);
 }
@@ -301,7 +345,7 @@ function slideStructureWarnings(doc: Document, deckStage: Element | null): strin
 
 function likelySlides(doc: Document, deckStage: Element | null): Element[] {
   if (deckStage) return stageSlides(deckStage);
-  const revealSlides = directChildren(doc.querySelector(".reveal .slides"), "section");
+  const revealSlides = selectRevealSlides(doc);
   if (revealSlides.length) return revealSlides;
   const explicit = selectTopLevelSlides(doc);
   if (explicit.length) return explicit;
@@ -331,21 +375,42 @@ function hasDynamicSlideScript(doc: Document): boolean {
 
 function missingLocalResources(doc: Document, input: LoadedInput, indexPath: string): string[] {
   const files = new Set(input.files.map((item) => normalizeVirtualPath(item.path)));
-  const references = Array.from(doc.querySelectorAll("img[src], video[src], audio[src], source[src], track[src], script[src], link[href]"))
-    .map((element) => element.getAttribute("src") || element.getAttribute("href") || "")
-    .map((value) => resolveResourcePath(value, indexPath))
+  const values = Array.from(doc.querySelectorAll("img[src], video[src], video[poster], audio[src], source[src], track[src], script[src], link[href]:not(base)"))
+    .map((element) => element.getAttribute("src") || element.getAttribute("poster") || element.getAttribute("href") || "");
+  doc.querySelectorAll("[srcset]").forEach((element) => {
+    (element.getAttribute("srcset") || "").split(",").forEach((candidate) => values.push(candidate.trim().split(/\s+/)[0] || ""));
+  });
+  doc.querySelectorAll("[style], style").forEach((element) => {
+    const css = element.matches("style") ? element.textContent || "" : element.getAttribute("style") || "";
+    for (const match of css.matchAll(/url\((['"]?)(.*?)\1\)/gi)) values.push(match[2] || "");
+  });
+  const baseHref = doc.querySelector("base[href]")?.getAttribute("href") || "";
+  const references = values
+    .map((value) => resolveResourcePath(value, indexPath, baseHref))
     .filter((value): value is string => Boolean(value));
   return Array.from(new Set(references.filter((reference) => !files.has(reference))));
 }
 
-function resolveResourcePath(value: string, indexPath: string): string | null {
+function resolveResourcePath(value: string, indexPath: string, baseHref = ""): string | null {
   const raw = value.trim();
   if (!raw || raw.startsWith("#")) return null;
-  if (/^(?:https?:|data:|blob:|mailto:|tel:|javascript:)/i.test(raw)) return null;
-  const clean = raw.split(/[?#]/)[0];
-  if (!clean) return null;
-  const base = clean.startsWith("/") ? "" : dirname(indexPath);
-  return normalizeVirtualPath(`${base}${clean.replace(/^\/+/, "")}`);
+  if (/^(?:data:|blob:|mailto:|tel:|javascript:)/i.test(raw)) return null;
+  try {
+    const origin = "https://html-deck.local";
+    const documentUrl = new URL(indexPath.replace(/^\/+/, ""), `${origin}/`);
+    const baseUrl = baseHref ? new URL(baseHref, documentUrl) : documentUrl;
+    const resolved = new URL(raw, baseUrl);
+    if (resolved.origin !== origin) return null;
+    let path = resolved.pathname.replace(/^\/+/, "");
+    try {
+      path = decodeURIComponent(path);
+    } catch {
+      // Keep malformed percent escapes literal so the missing file is still reported.
+    }
+    return normalizeVirtualPath(path);
+  } catch {
+    return null;
+  }
 }
 
 function normalizeVirtualPath(path: string): string {
@@ -359,12 +424,6 @@ function normalizeVirtualPath(path: string): string {
     parts.push(part);
   });
   return parts.join("/");
-}
-
-function dirname(path: string): string {
-  const normalized = normalizeVirtualPath(path);
-  const index = normalized.lastIndexOf("/");
-  return index >= 0 ? `${normalized.slice(0, index)}/` : "";
 }
 
 function uniqueElements(elements: Array<Element | null>): Element[] {

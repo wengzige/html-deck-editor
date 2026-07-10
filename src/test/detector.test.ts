@@ -3,6 +3,7 @@ import JSZip from "jszip";
 import type { LoadedInput, VirtualFile } from "../types/deck";
 import { detectDeck, findIndexFile } from "../lib/detector";
 import { convertInput, rewriteHtml } from "../lib/injector";
+import { LIMITS } from "../lib/safety";
 import { textToBytes } from "../lib/text";
 
 function file(path: string, text: string): VirtualFile {
@@ -295,7 +296,7 @@ describe("deck detection", () => {
     ]));
 
     expect(report.status).toBe("adaptable");
-    expect(report.sourceKind).toBe("generic-section");
+    expect(report.sourceKind).toBe("impress");
     expect(report.slideCount).toBe(2);
   });
 
@@ -306,6 +307,60 @@ describe("deck detection", () => {
     expect(report.status).toBe("adaptable");
     expect(report.sourceKind).toBe("reveal");
     expect(report.slideCount).toBe(2);
+  });
+
+  it("detects single-page Reveal decks", () => {
+    const report = detectDeck(input([
+      file("index.html", "<div class=\"reveal\"><div class=\"slides\"><section><h1>Only page</h1></section></div></div>")
+    ]));
+
+    expect(report.status).toBe("adaptable");
+    expect(report.sourceKind).toBe("reveal");
+    expect(report.slideCount).toBe(1);
+  });
+
+  it("flattens standard Reveal vertical stacks into navigable pages", () => {
+    const report = detectDeck(input([
+      file("index.html", `
+        <div class="reveal"><div class="slides">
+          <section><h1>Horizontal</h1></section>
+          <section>
+            <section><h1>Vertical A</h1></section>
+            <section><h1>Vertical B</h1></section>
+          </section>
+        </div></div>
+      `)
+    ]));
+
+    expect(report.sourceKind).toBe("reveal");
+    expect(report.slideCount).toBe(3);
+  });
+
+  it("does not treat Bootstrap carousel widgets as slide decks", () => {
+    const report = detectDeck(input([
+      file("index.html", `
+        <main>
+          <div class="carousel slide" data-bs-ride="carousel">
+            <div class="carousel-inner"><div class="carousel-item active">Product image</div></div>
+          </div>
+          <article><h1>Storefront</h1><p>This is an ordinary commerce page with a carousel widget.</p></article>
+        </main>
+      `)
+    ]));
+
+    expect(report.status).toBe("unsupported");
+  });
+
+  it("does not infer an installed editor from ordinary page text", () => {
+    const report = detectDeck(input([
+      file("index.html", `
+        <div id="deckStage" class="deck-stage">
+          <section class="slide"><h1>HtmlDeckEditor migration notes</h1></section>
+        </div>
+      `)
+    ]));
+
+    expect(report.status).toBe("ready");
   });
 
   it("does not count nested slide-like elements as pages", () => {
@@ -408,9 +463,118 @@ describe("deck detection", () => {
     expect(report.sourceKind).toBe("generic-section");
     expect(report.slideCount).toBe(4);
   });
+
+  it("keeps report-themed content as slides when presentation semantics are explicit", () => {
+    const report = detectDeck(input([
+      file("index.html", `
+        <main id="presentation">
+          <section><h1>Audit overview</h1><p>Report findings and confidence metrics for the first presentation page.</p></section>
+          <section><h2>Assessment</h2><p>Detailed scorecard and review findings for the second presentation page.</p></section>
+          <section><h2>Appendix</h2><p>Benchmark evidence and audit notes for the third presentation page.</p></section>
+        </main>
+      `)
+    ]));
+
+    expect(report.status).toBe("adaptable");
+    expect(report.sourceKind).not.toBe("unknown");
+    expect(report.slideCount).toBe(3);
+  });
 });
 
 describe("runtime injection", () => {
+  it("neutralizes Reveal initialization while preserving unrelated scripts", () => {
+    const source = `
+      <div class="reveal"><div class="slides">
+        <section><h1>One</h1></section>
+        <section><h1>Two</h1></section>
+      </div></div>
+      <script src="vendor/reveal.js"></script>
+      <script>window.beforeReveal = true; Reveal.initialize({ hash: true, plugins: [] }); window.keepBusinessLogic = true;</script>
+    `;
+    const report = detectDeck(input([file("index.html", source)]));
+    const html = rewriteHtml(source, report);
+    const doc = new DOMParser().parseFromString(html, "text/html");
+
+    expect(doc.querySelectorAll("#deckStage > .slide")).toHaveLength(2);
+    expect(doc.querySelector(".reveal, .slides")).toBeNull();
+    expect(html).not.toContain("vendor/reveal.js");
+    expect(html).not.toContain("Reveal.initialize");
+    expect(html).toContain("window.beforeReveal = true");
+    expect(html).toContain("window.keepBusinessLogic = true");
+  });
+
+  it("neutralizes Impress positioning and initialization", () => {
+    const source = `
+      <div id="impress">
+        <div class="step feature" data-x="0" data-y="100" style="transform: translate3d(0, 100px, 0)"><h1>One</h1><p>Enough text here</p></div>
+        <div class="step" data-x="1000"><h1>Two</h1><p>Enough text here</p></div>
+      </div>
+      <script src="vendor/impress.js"></script>
+      <script>impress().init();</script>
+      <script>window.keepBusinessLogic = true;</script>
+    `;
+    const report = detectDeck(input([file("index.html", source)]));
+    const html = rewriteHtml(source, report);
+    const doc = new DOMParser().parseFromString(html, "text/html");
+    const stage = doc.getElementById("deckStage") as HTMLElement;
+    const slides = Array.from(stage.children) as HTMLElement[];
+
+    expect(report.sourceKind).toBe("impress");
+    expect(slides).toHaveLength(2);
+    expect(slides.every((slide) => slide.classList.contains("slide") && !slide.classList.contains("step"))).toBe(true);
+    expect(slides[0].classList.contains("active")).toBe(true);
+    expect(slides.every((slide) => !slide.hasAttribute("data-x") && !slide.hasAttribute("data-y"))).toBe(true);
+    expect(slides[0].style.transform).toBe("");
+    expect(html).not.toContain("vendor/impress.js");
+    expect(html).not.toContain("impress().init");
+    expect(html).toContain("window.keepBusinessLogic = true");
+  });
+
+  it("resolves authored resources before removing base href", () => {
+    const source = `
+      <html><head>
+        <base href="assets/sub/">
+        <link rel="stylesheet" href="../deck.css">
+        <script src="app.js"></script>
+      </head><body><main>
+        <section><h1>One</h1><p>Enough text here</p><img src="../hero.png"></section>
+        <section><h1>Two</h1><p>Enough text here</p></section>
+      </main></body></html>
+    `;
+    const report = detectDeck(input([file("index.html", source)]));
+    const html = rewriteHtml(source, report);
+    const doc = new DOMParser().parseFromString(html, "text/html");
+
+    expect(doc.querySelector("base")).toBeNull();
+    expect(doc.querySelector("img")?.getAttribute("src")).toBe("assets/hero.png");
+    expect(doc.querySelector('script[src="assets/sub/app.js"]')).toBeTruthy();
+    expect(doc.querySelector('link[href="assets/deck.css"]')).toBeTruthy();
+    expect(doc.querySelector('script[src="runtime/html-deck-editor.js"]')).toBeTruthy();
+  });
+
+  it("preserves ordinary controls and business scripts that only look editor-related", () => {
+    const source = `
+      <button id="editToggle">编辑模式</button>
+      <main><section><h1>One</h1><p>Enough text here</p></section><section><h1>Two</h1><p>Enough text here</p></section></main>
+      <script>document.getElementById("editToggle").addEventListener("click", () => window.businessMode = true);</script>
+    `;
+    const report = detectDeck(input([file("index.html", source)]));
+    const html = rewriteHtml(source, report);
+
+    expect(report.status).toBe("adaptable");
+    expect(html).toContain('id="editToggle"');
+    expect(html).toContain("window.businessMode = true");
+  });
+
+  it("preserves an authored doctype and upgrades missing declarations to UTF-8", () => {
+    const source = '<!DOCTYPE HTML PUBLIC "-//W3C//DTD HTML 4.01//EN"><html><body><main><section><h1>One</h1><p>Enough text</p></section><section><h1>Two</h1><p>Enough text</p></section></main></body></html>';
+    const report = detectDeck(input([file("index.html", source)]));
+    const html = rewriteHtml(source, report);
+
+    expect(html.startsWith('<!DOCTYPE HTML PUBLIC "-//W3C//DTD HTML 4.01//EN">')).toBe(true);
+    expect(html).toContain('<meta charset="utf-8">');
+  });
+
   it("wraps section decks and adds runtime links", () => {
     const report = detectDeck(input([
       file("index.html", "<header id=\"intro\">Keep me</header><main><section><h1>One</h1><p>Enough text here</p></section><section><h1>Two</h1><p>Enough text here</p></section></main><footer id=\"credits\">Keep me too</footer><script>window.keepMe = true;</script>")
@@ -558,7 +722,7 @@ describe("runtime injection", () => {
     expect((directSlides[1] as HTMLElement).style.opacity).toBe("");
   });
 
-  it("adapts public framework deck containers without dropping source attributes", () => {
+  it("adapts public framework containers while neutralizing their navigation state", () => {
     const source = `
       <div class="fallback-message">Keep fallback</div>
       <div id="impress" data-width="1920" data-height="1080">
@@ -570,16 +734,17 @@ describe("runtime injection", () => {
     const report = detectDeck(input([file("index.html", source)]));
     const html = rewriteHtml(source, report);
     const doc = new DOMParser().parseFromString(html, "text/html");
-    const stage = doc.getElementById("impress") as HTMLElement;
+    const stage = doc.getElementById("deckStage") as HTMLElement;
     const slides = Array.from(stage.children).filter((child) => child.classList.contains("slide")) as HTMLElement[];
 
     expect(report.status).toBe("adaptable");
     expect(stage.getAttribute("data-html-deck-editor-stage")).toBe("preserve");
+    expect(stage.getAttribute("data-width")).toBe("1920");
     expect(slides).toHaveLength(2);
-    expect(slides[0].classList.contains("step")).toBe(true);
-    expect(slides[1].getAttribute("data-x")).toBe("1000");
+    expect(slides[0].classList.contains("step")).toBe(false);
+    expect(slides[1].getAttribute("data-x")).toBeNull();
     expect(doc.querySelector(".fallback-message")).toBeTruthy();
-    expect(html).toContain("impress().init();");
+    expect(html).not.toContain("impress().init();");
   });
 
   it("repairs escaped slides back into an explicit deck container", () => {
@@ -644,7 +809,7 @@ describe("runtime injection", () => {
     const report = detectDeck(input([file("index.html", source)]));
     const html = rewriteHtml(source, report);
     const doc = new DOMParser().parseFromString(html, "text/html");
-    const stage = doc.querySelector(".slides") as HTMLElement;
+    const stage = doc.getElementById("deckStage") as HTMLElement;
     const directSlides = Array.from(stage.children).filter((child) => child.classList.contains("slide"));
     const nestedStep = doc.querySelector("[data-step='nested']") as HTMLElement;
 
@@ -765,6 +930,78 @@ describe("runtime injection", () => {
     expect(html).toContain("data:image/jpeg;base64");
   });
 
+  it("only inlines image assets referenced by HTML, CSS, or srcset", async () => {
+    const result = await convertInput(input([
+      file("deck/index.html", `
+        <style>.slide { background-image: url("assets/bg.png"); }</style>
+        <main>
+          <section><h1>One</h1><p>Enough text here</p><img src="assets/used.png"></section>
+          <section><h1>Two</h1><p>Enough text here</p><picture><source srcset="assets/set%20image.png 1x"><img alt="set"></picture></section>
+        </main>
+      `),
+      file("deck/assets/used.png", "used"),
+      file("deck/assets/bg.png", "background"),
+      file("deck/assets/set image.png", "srcset"),
+      file("deck/assets/unused.png", "unused")
+    ]));
+
+    const zip = await JSZip.loadAsync(result.blob!);
+    const html = await zip.file("deck/index.html")!.async("string");
+    const doc = new DOMParser().parseFromString(html, "text/html");
+    const manifest = JSON.parse(doc.getElementById("html-deck-editor-export-assets")?.textContent || "{}");
+
+    expect(manifest.assets.map((asset: { path: string }) => asset.path).sort()).toEqual([
+      "assets/bg.png",
+      "assets/set image.png",
+      "assets/used.png"
+    ]);
+    expect(html).not.toContain('"path":"assets/unused.png"');
+  });
+
+  it("keeps oversized referenced images as files and reports the inline limit", async () => {
+    const previous = LIMITS.maxInlineImageBytes;
+    LIMITS.maxInlineImageBytes = 4;
+    try {
+      const result = await convertInput(input([
+        file("index.html", "<main><section><h1>One</h1><p>Enough text</p><img src=\"assets/large.png\"></section><section><h1>Two</h1><p>Enough text</p></section></main>"),
+        file("assets/large.png", "12345")
+      ]));
+      const zip = await JSZip.loadAsync(result.blob!);
+      const html = await zip.file("index.html")!.async("string");
+
+      expect(zip.file("assets/large.png")).toBeTruthy();
+      expect(html).not.toContain('"path":"assets/large.png"');
+      expect(result.warnings.join(" ")).toContain("assets/large.png");
+      expect(result.warnings.join(" ")).toContain("内联上限");
+    } finally {
+      LIMITS.maxInlineImageBytes = previous;
+    }
+  });
+
+  it("stops adding manifest images when the inline total would be exceeded", async () => {
+    const previousFile = LIMITS.maxInlineImageBytes;
+    const previousTotal = LIMITS.maxInlineImageTotalBytes;
+    LIMITS.maxInlineImageBytes = 10;
+    LIMITS.maxInlineImageTotalBytes = 6;
+    try {
+      const result = await convertInput(input([
+        file("index.html", "<main><section><h1>One</h1><p>Enough text</p><img src=\"assets/a.png\"><img src=\"assets/b.png\"></section><section><h1>Two</h1><p>Enough text</p></section></main>"),
+        file("assets/a.png", "1234"),
+        file("assets/b.png", "5678")
+      ]));
+      const zip = await JSZip.loadAsync(result.blob!);
+      const html = await zip.file("index.html")!.async("string");
+      const doc = new DOMParser().parseFromString(html, "text/html");
+      const manifest = JSON.parse(doc.getElementById("html-deck-editor-export-assets")?.textContent || "{}");
+
+      expect(manifest.assets).toHaveLength(1);
+      expect(result.warnings.join(" ")).toContain("内联总量");
+    } finally {
+      LIMITS.maxInlineImageBytes = previousFile;
+      LIMITS.maxInlineImageTotalBytes = previousTotal;
+    }
+  });
+
   it("uses an AI adaptation plan before normal runtime injection", async () => {
     const result = await convertInput(input([
       file("index.html", `
@@ -853,6 +1090,41 @@ describe("runtime injection", () => {
     expect(report.warnings.some((warning) => warning.includes("单张图片"))).toBe(true);
     expect(report.warnings.some((warning) => warning.includes("动态生成 slide"))).toBe(true);
     expect(report.warnings.some((warning) => warning.includes("assets/missing.png"))).toBe(true);
+  });
+
+  it("checks srcset and percent-encoded local resource paths", () => {
+    const missing = detectDeck(input([
+      file("index.html", `
+        <div id="deckStage" class="deck-stage">
+          <section class="slide"><img srcset="assets/missing%20image.png 1x" alt="missing"></section>
+        </div>
+      `)
+    ]));
+    const present = detectDeck(input([
+      file("index.html", `
+        <div id="deckStage" class="deck-stage">
+          <section class="slide"><img srcset="assets/hero%20image.png 1x" alt="present"></section>
+        </div>
+      `),
+      file("assets/hero image.png", "image")
+    ]));
+
+    expect(missing.warnings.join(" ")).toContain("assets/missing image.png");
+    expect(present.warnings.join(" ")).not.toContain("找不到");
+  });
+
+  it("uses base href when checking bundled local resources", () => {
+    const report = detectDeck(input([
+      file("index.html", `
+        <base href="assets/">
+        <div id="deckStage" class="deck-stage">
+          <section class="slide"><img src="hero.png" alt="present"></section>
+        </div>
+      `),
+      file("assets/hero.png", "image")
+    ]));
+
+    expect(report.warnings.join(" ")).not.toContain("找不到");
   });
 
   it("does not remove user-owned vanilla-picker assets outside the editor runtime path", () => {

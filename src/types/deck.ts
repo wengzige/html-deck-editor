@@ -6,6 +6,7 @@ export type DeckSourceKind =
   | "fixed-stage"
   | "frontend-slides"
   | "reveal"
+  | "impress"
   | "section-slide"
   | "generic-section"
   | "unknown";

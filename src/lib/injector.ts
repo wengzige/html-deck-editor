@@ -3,6 +3,7 @@ import type { ConvertResult, DetectionReport, LoadedInput, VirtualFile } from ".
 import { applyAiAdaptationPlanToHtml, type AiAdaptationPlan } from "./aiAdapter";
 import { detectDeck, findIndexFile } from "./detector";
 import { runtimeAssets, RUNTIME_VERSION } from "./runtimeAssets";
+import { LIMITS } from "./safety";
 import { bytesToText, textToBytes } from "./text";
 
 const marker = "data-html-deck-editor-runtime";
@@ -151,7 +152,9 @@ export async function convertInput(
 
   onProgress?.({ stage: "rewrite", percent: 0, detail: `正在改写 ${indexFile.path}` });
   const sourceHtml = bytesToText(indexFile.data);
-  const rewrittenHtml = injectExportAssetManifest(rewriteHtml(sourceHtml, report), workingInput.files, indexFile.path);
+  const manifestResult = injectExportAssetManifest(rewriteHtml(sourceHtml, report, indexFile.path), workingInput.files, indexFile.path);
+  const rewrittenHtml = manifestResult.html;
+  warnings = [...warnings, ...manifestResult.warnings];
   onProgress?.({ stage: "rewrite", percent: 100, detail: "HTML 已加入编辑器入口。" });
 
   const zip = new JSZip();
@@ -162,7 +165,7 @@ export async function convertInput(
   for (const file of workingInput.files) {
     if (file.path === indexFile.path) {
       zip.file(file.path, rewrittenHtml);
-    } else if (isLegacyRuntimeFile(file.path)) {
+    } else if (report.status === "already-editable" && isLegacyRuntimeFile(file.path)) {
       continue;
     } else {
       zip.file(file.path, stableBytes(file.data));
@@ -191,10 +194,13 @@ export async function convertInput(
   };
 }
 
-export function rewriteHtml(html: string, report: DetectionReport): string {
+export function rewriteHtml(html: string, report: DetectionReport, indexPath = "index.html"): string {
   const doc = new DOMParser().parseFromString(html, "text/html");
+  const upgradeExistingEditor = report.status === "already-editable";
+  rewriteBaseResources(doc, indexPath);
   ensureTitle(doc);
-  removeLegacyEditorArtifacts(doc, { upgradeExistingEditor: report.status === "already-editable" });
+  ensureUtf8Charset(doc);
+  removeLegacyEditorArtifacts(doc, { upgradeExistingEditor });
 
   if ((report.status === "ready" || report.status === "already-editable") && shouldPreserveReadyStage(doc)) {
     prepareReadyStage(doc);
@@ -202,9 +208,10 @@ export function rewriteHtml(html: string, report: DetectionReport): string {
     prepareAdaptableStage(doc, report);
   }
 
-  ensureRuntimeLinks(doc);
+  neutralizeSourceFramework(doc, report);
+  ensureRuntimeLinks(doc, upgradeExistingEditor);
   ensureRuntimeMount(doc);
-  return `<!doctype html>\n${doc.documentElement.outerHTML}`;
+  return serializeHtmlDocument(doc, html);
 }
 
 function ensureTitle(doc: Document): void {
@@ -213,6 +220,110 @@ function ensureTitle(doc: Document): void {
     title.textContent = "Editable HTML Deck";
     doc.head.appendChild(title);
   }
+}
+
+function ensureUtf8Charset(doc: Document): void {
+  const charsetMetas = Array.from(doc.querySelectorAll("meta[charset]"));
+  const primary = charsetMetas.shift() || doc.createElement("meta");
+  primary.setAttribute("charset", "utf-8");
+  if (!primary.parentElement) doc.head.prepend(primary);
+  charsetMetas.forEach((meta) => meta.remove());
+  doc.querySelectorAll("meta[http-equiv]").forEach((meta) => {
+    if (meta.getAttribute("http-equiv")?.toLowerCase() === "content-type") meta.remove();
+  });
+}
+
+function serializeHtmlDocument(doc: Document, sourceHtml: string): string {
+  const doctype = sourceHtml.match(/<!doctype\b[^>]*>/i)?.[0] || "<!doctype html>";
+  return `${doctype}\n${doc.documentElement.outerHTML}`;
+}
+
+function rewriteBaseResources(doc: Document, indexPath: string): void {
+  const base = doc.querySelector("base[href]");
+  if (!base) return;
+  const baseHref = base.getAttribute("href")?.trim();
+  if (!baseHref) {
+    doc.querySelectorAll("base").forEach((node) => node.remove());
+    return;
+  }
+
+  const localOrigin = "https://html-deck.local";
+  const documentUrl = new URL(indexPath.replace(/^\/+/, ""), `${localOrigin}/`);
+  let baseUrl: URL;
+  try {
+    baseUrl = new URL(baseHref, documentUrl);
+  } catch {
+    doc.querySelectorAll("base").forEach((node) => node.remove());
+    return;
+  }
+
+  const indexDir = virtualDirname(indexPath);
+  const rewrite = (value: string) => rewriteBasedUrl(value, baseUrl, indexDir, localOrigin);
+  [
+    ["[src]", "src"],
+    ["[href]", "href"],
+    ["[poster]", "poster"],
+    ["object[data]", "data"],
+    ["image[href]", "href"],
+    ["image[xlink\\:href]", "xlink:href"]
+  ].forEach(([selector, attribute]) => {
+    doc.querySelectorAll(selector).forEach((element) => {
+      const value = element.getAttribute(attribute);
+      if (value !== null) element.setAttribute(attribute, rewrite(value));
+    });
+  });
+  doc.querySelectorAll("[srcset]").forEach((element) => {
+    const value = element.getAttribute("srcset") || "";
+    element.setAttribute("srcset", value.split(",").map((candidate) => {
+      const parts = candidate.trim().split(/\s+/);
+      if (!parts[0]) return candidate;
+      parts[0] = rewrite(parts[0]);
+      return parts.join(" ");
+    }).join(", "));
+  });
+  doc.querySelectorAll("[style]").forEach((element) => {
+    element.setAttribute("style", rewriteCssUrls(element.getAttribute("style") || "", rewrite));
+  });
+  doc.querySelectorAll("style").forEach((style) => {
+    style.textContent = rewriteCssUrls(style.textContent || "", rewrite);
+  });
+  doc.querySelectorAll("base").forEach((node) => node.remove());
+}
+
+function rewriteBasedUrl(value: string, baseUrl: URL, indexDir: string, localOrigin: string): string {
+  const raw = value.trim();
+  if (!raw || raw.startsWith("#") || /^(?:data:|blob:|mailto:|tel:|javascript:)/i.test(raw)) return value;
+  try {
+    const resolved = new URL(raw, baseUrl);
+    if (resolved.origin !== localOrigin) return resolved.href;
+    const target = resolved.pathname.replace(/^\/+/, "");
+    return `${relativeVirtualPath(target, indexDir)}${resolved.search}${resolved.hash}`;
+  } catch {
+    return value;
+  }
+}
+
+function rewriteCssUrls(css: string, rewrite: (value: string) => string): string {
+  return css.replace(/url\((['"]?)(.*?)\1\)/gi, (match, quote, value) => {
+    const source = String(value || "").trim();
+    if (!source) return match;
+    const rewritten = rewrite(source);
+    return `url(${quote || "\""}${rewritten}${quote || "\""})`;
+  });
+}
+
+function virtualDirname(path: string): string {
+  const clean = path.replace(/\\/g, "/").replace(/^\/+/, "");
+  const index = clean.lastIndexOf("/");
+  return index >= 0 ? clean.slice(0, index) : "";
+}
+
+function relativeVirtualPath(target: string, indexDir: string): string {
+  const targetParts = target.split("/").filter(Boolean);
+  const fromParts = indexDir.split("/").filter(Boolean);
+  let common = 0;
+  while (common < targetParts.length && common < fromParts.length && targetParts[common] === fromParts[common]) common += 1;
+  return [...fromParts.slice(common).map(() => ".."), ...targetParts.slice(common)].join("/") || "./";
 }
 
 function prepareReadyStage(doc: Document): void {
@@ -400,11 +511,28 @@ function wrapSlidesInPlace(doc: Document, sourceSlides: Element[]): void {
 }
 
 function selectSlideCandidates(doc: Document, report: DetectionReport): Element[] {
-  if (report.sourceKind === "reveal") return directChildren(doc.querySelector(".reveal .slides"), "section");
+  if (report.sourceKind === "reveal") return selectRevealSlides(doc);
+  if (report.sourceKind === "impress") return directChildren(doc.querySelector("#impress, .impress"), ".step");
   if (report.sourceKind === "section-slide") return selectTopLevelSlides(doc);
   const explicitSlides = selectExplicitContainerSlides(doc);
   if (explicitSlides.length >= 2) return explicitSlides;
   return Array.from(doc.body.querySelectorAll("main > section, body > section")).filter(hasEnoughText);
+}
+
+function selectRevealSlides(doc: Document): Element[] {
+  const topLevel = directChildren(doc.querySelector(".reveal .slides"), "section");
+  return topLevel.flatMap((section) => {
+    const nested = directChildren(section, "section");
+    if (!nested.length || hasOwnRevealContent(section)) return [section];
+    return nested;
+  });
+}
+
+function hasOwnRevealContent(section: Element): boolean {
+  return Array.from(section.childNodes).some((node) => {
+    if (node.nodeType === Node.TEXT_NODE) return Boolean(node.textContent?.trim());
+    return node.nodeType === Node.ELEMENT_NODE && !(node as Element).matches("section, script, template");
+  });
 }
 
 function selectTopLevelSlides(doc: Document): Element[] {
@@ -462,8 +590,53 @@ function slideTitle(source: Element, index: number): string {
   return text || `Slide ${index + 1}`;
 }
 
-function ensureRuntimeLinks(doc: Document): void {
-  removeOwnedRuntime(doc);
+function neutralizeSourceFramework(doc: Document, report: DetectionReport): void {
+  if (report.sourceKind === "reveal") neutralizeReveal(doc);
+  if (report.sourceKind === "impress") neutralizeImpress(doc);
+}
+
+function neutralizeReveal(doc: Document): void {
+  doc.querySelectorAll(".reveal").forEach((element) => element.classList.remove("reveal"));
+  doc.querySelectorAll(".slides").forEach((element) => element.classList.remove("slides"));
+  doc.querySelectorAll(".slide").forEach((element) => {
+    element.classList.remove("present", "past", "future");
+    element.removeAttribute("aria-hidden");
+    if (element instanceof HTMLElement) {
+      ["display", "visibility", "opacity", "transform", "top", "left"].forEach((property) => element.style.removeProperty(property));
+    }
+  });
+  removeFrameworkScripts(doc, /(?:^|\/)reveal(?:\.min)?\.js(?:[?#]|$)/i, /\bReveal\s*\.\s*(?:initialize|configure|sync|layout)\s*(?=\()/g);
+}
+
+function neutralizeImpress(doc: Document): void {
+  const stage = doc.querySelector("#impress, .impress, [data-html-deck-editor-stage]");
+  if (stage) {
+    stage.id = "deckStage";
+    stage.classList.remove("impress");
+  }
+  doc.querySelectorAll(".step").forEach((element) => {
+    element.classList.remove("step", "past", "present", "future");
+    ["data-x", "data-y", "data-z", "data-rotate", "data-rotate-x", "data-rotate-y", "data-rotate-z", "data-scale"].forEach((name) => element.removeAttribute(name));
+    if (element instanceof HTMLElement) {
+      ["position", "transform", "transform-origin", "top", "left"].forEach((property) => element.style.removeProperty(property));
+    }
+  });
+  removeFrameworkScripts(doc, /(?:^|\/)impress(?:\.min)?\.js(?:[?#]|$)/i, /\bimpress\s*\(\s*\)\s*\.\s*init\s*(?=\()/g);
+}
+
+function removeFrameworkScripts(doc: Document, sourcePattern: RegExp, inlinePattern: RegExp): void {
+  doc.querySelectorAll("script[src]").forEach((script) => {
+    if (sourcePattern.test(script.getAttribute("src") || "")) script.remove();
+  });
+  doc.querySelectorAll("script:not([src])").forEach((script) => {
+    const source = script.textContent || "";
+    const rewritten = source.replace(inlinePattern, "(() => undefined)");
+    if (rewritten !== source) script.textContent = rewritten;
+  });
+}
+
+function ensureRuntimeLinks(doc: Document, upgradeExistingEditor: boolean): void {
+  removeOwnedRuntime(doc, upgradeExistingEditor);
 
   const pickerCss = doc.createElement("link");
   pickerCss.rel = "stylesheet";
@@ -528,33 +701,59 @@ function ensureRuntimeMount(doc: Document): void {
   doc.body.appendChild(script);
 }
 
-function injectExportAssetManifest(html: string, files: VirtualFile[], indexPath: string): string {
-  const assets = collectExportAssets(files, indexPath);
-  if (!assets.length) return html;
+function injectExportAssetManifest(html: string, files: VirtualFile[], indexPath: string): { html: string; warnings: string[] } {
   const doc = new DOMParser().parseFromString(html, "text/html");
+  const collected = collectExportAssets(doc, files, indexPath);
+  if (!collected.assets.length) return { html, warnings: collected.warnings };
   doc.getElementById("html-deck-editor-export-assets")?.remove();
   const script = doc.createElement("script");
   script.id = "html-deck-editor-export-assets";
   script.type = "application/json";
   script.setAttribute(marker, RUNTIME_VERSION);
-  script.textContent = JSON.stringify({ assets }).replace(/</g, "\\u003c");
+  script.textContent = JSON.stringify({ assets: collected.assets }).replace(/</g, "\\u003c");
   doc.head.appendChild(script);
-  return `<!doctype html>\n${doc.documentElement.outerHTML}`;
+  return { html: serializeHtmlDocument(doc, html), warnings: collected.warnings };
 }
 
-function collectExportAssets(files: VirtualFile[], indexPath: string): Array<{ path: string; keys: string[]; dataUrl: string }> {
+function collectExportAssets(
+  doc: Document,
+  files: VirtualFile[],
+  indexPath: string
+): { assets: Array<{ path: string; keys: string[]; dataUrl: string }>; warnings: string[] } {
   const indexDir = indexPath.includes("/") ? indexPath.split("/").slice(0, -1).join("/") : "";
-  const imageFiles = files.filter((file) => file.path !== indexPath && imageMimeForPath(file.path));
-  const baseCounts = new Map<string, number>();
+  const references = referencedAssetPaths(doc, indexPath);
+  const imageFiles = files.filter((file) =>
+    file.path !== indexPath && imageMimeForPath(file.path) && references.has(normalizeReferencedPath(file.path))
+  );
+  const selected: VirtualFile[] = [];
+  const oversized: string[] = [];
+  const overTotal: string[] = [];
+  let totalBytes = 0;
   imageFiles.forEach((file) => {
+    const size = file.data.byteLength;
+    if (size > LIMITS.maxInlineImageBytes) {
+      oversized.push(file.path);
+      return;
+    }
+    if (totalBytes + size > LIMITS.maxInlineImageTotalBytes) {
+      overTotal.push(file.path);
+      return;
+    }
+    selected.push(file);
+    totalBytes += size;
+  });
+
+  const baseCounts = new Map<string, number>();
+  selected.forEach((file) => {
     const base = file.path.split("/").pop() || file.path;
     baseCounts.set(base, (baseCounts.get(base) || 0) + 1);
   });
 
-  return imageFiles.map((file) => {
+  const assets = selected.map((file) => {
     const relativePath = relativeAssetPath(file.path, indexDir);
     const base = file.path.split("/").pop() || file.path;
-    const keys = new Set([file.path, relativePath, `./${relativePath}`]);
+    const encodedPath = encodeURI(relativePath);
+    const keys = new Set([file.path, relativePath, `./${relativePath}`, encodedPath, `./${encodedPath}`]);
     if (baseCounts.get(base) === 1) keys.add(base);
     return {
       path: relativePath,
@@ -562,6 +761,62 @@ function collectExportAssets(files: VirtualFile[], indexPath: string): Array<{ p
       dataUrl: `data:${imageMimeForPath(file.path)};base64,${bytesToBase64(file.data)}`
     };
   });
+  const warnings: string[] = [];
+  if (oversized.length) {
+    warnings.push(`以下图片超过单文件内联上限，已保留文件路径：${oversized.join("、")}。单独保存 HTML 时请同时保留这些图片。`);
+  }
+  if (overTotal.length) {
+    warnings.push(`图片内联总量已达到上限，以下图片仅保留文件路径：${overTotal.join("、")}。单独保存 HTML 时请同时保留这些图片。`);
+  }
+  return { assets, warnings };
+}
+
+function referencedAssetPaths(doc: Document, indexPath: string): Set<string> {
+  const references = new Set<string>();
+  const add = (value: string | null) => {
+    const path = referencedVirtualPath(value || "", indexPath);
+    if (path) references.add(path);
+  };
+  doc.querySelectorAll("[src], [poster], object[data], image[href], image[xlink\\:href], link[rel~='icon'][href]").forEach((element) => {
+    add(element.getAttribute("src"));
+    add(element.getAttribute("poster"));
+    add(element.getAttribute("data"));
+    add(element.getAttribute("href"));
+    add(element.getAttribute("xlink:href"));
+  });
+  doc.querySelectorAll("[srcset]").forEach((element) => {
+    (element.getAttribute("srcset") || "").split(",").forEach((candidate) => add(candidate.trim().split(/\s+/)[0] || ""));
+  });
+  doc.querySelectorAll("[style], style").forEach((element) => {
+    const css = element.matches("style") ? element.textContent || "" : element.getAttribute("style") || "";
+    for (const match of css.matchAll(/url\((['"]?)(.*?)\1\)/gi)) add(match[2] || "");
+  });
+  return references;
+}
+
+function referencedVirtualPath(value: string, indexPath: string): string {
+  const raw = value.trim();
+  if (!raw || raw.startsWith("#") || /^(?:[a-z][a-z0-9+.-]*:|\/\/)/i.test(raw)) return "";
+  const clean = raw.split(/[?#]/)[0];
+  if (!clean) return "";
+  let decoded = clean;
+  try {
+    decoded = decodeURIComponent(clean);
+  } catch {
+    // Keep the literal path when malformed percent escapes are present.
+  }
+  const base = decoded.startsWith("/") ? "" : virtualDirname(indexPath);
+  return normalizeReferencedPath(`${base ? `${base}/` : ""}${decoded.replace(/^\/+/, "")}`);
+}
+
+function normalizeReferencedPath(path: string): string {
+  const parts: string[] = [];
+  path.replace(/\\/g, "/").split("/").forEach((part) => {
+    if (!part || part === ".") return;
+    if (part === "..") parts.pop();
+    else parts.push(part);
+  });
+  return parts.join("/");
 }
 
 function relativeAssetPath(path: string, indexDir: string): string {
@@ -589,9 +844,9 @@ function bytesToBase64(data: Uint8Array): string {
   return btoa(binary);
 }
 
-function removeOwnedRuntime(doc: Document): void {
-  doc.querySelectorAll([
-    `[${marker}]`,
+function removeOwnedRuntime(doc: Document, upgradeExistingEditor: boolean): void {
+  const selectors = [`[${marker}]`];
+  if (upgradeExistingEditor) selectors.push(
     'script[src*="editor-runtime"]',
     'link[href*="editor-runtime"]',
     'script[src*="html-deck-editor"]',
@@ -601,12 +856,16 @@ function removeOwnedRuntime(doc: Document): void {
     'script[src*="runtime/html-to-image"]',
     'script[src*="runtime/jspdf"]',
     'script[src*="runtime/jszip"]'
-  ].join(", ")).forEach((node) => {
+  );
+  doc.querySelectorAll(selectors.join(", ")).forEach((node) => {
     node.parentNode?.removeChild(node);
   });
 }
 
 function removeLegacyEditorArtifacts(doc: Document, options: { upgradeExistingEditor: boolean }): void {
+  doc.querySelectorAll("[data-html-deck-editor-ui]").forEach((node) => node.remove());
+  if (!options.upgradeExistingEditor) return;
+
   doc.querySelectorAll(legacyEditorShellSelectors.join(", ")).forEach((node) => {
     if (node instanceof Element && shouldRemoveEditorShell(node)) {
       node.parentNode?.removeChild(node);
@@ -738,7 +997,7 @@ function isLegacyRuntimeFile(path: string): boolean {
 }
 
 function safeName(name: string): string {
-  return name.replace(/[^a-z0-9._-]+/gi, "-").replace(/^-+|-+$/g, "") || "html-deck";
+  return name.normalize("NFKC").replace(/[^\p{L}\p{N}._-]+/gu, "-").replace(/^-+|-+$/g, "") || "html-deck";
 }
 
 function stableBytes(data: Uint8Array): Uint8Array {
