@@ -3105,6 +3105,62 @@ describe("editor runtime", () => {
     expect(html).toContain(imageData);
   });
 
+  it("aligns the browser draft with a successfully downloaded HTML snapshot", async () => {
+    document.body.innerHTML = `
+      <div id="deckStage" class="deck-stage">
+        <section class="slide active">
+          <h1 id="title">下载前标题</h1>
+        </section>
+      </div>
+    `;
+    const title = document.getElementById("title") as HTMLElement;
+    title.getBoundingClientRect = () => rect({ left: 100, top: 100, width: 640, height: 120 });
+
+    installRuntime();
+    const editor = (window as any).FrontendSlidesEditor.mount();
+    title.textContent = "下载后标题";
+    expect(editor.hasUnsavedChanges()).toBe(true);
+    vi.spyOn(editor, "canWriteFile").mockReturnValue(false);
+    const download = vi.spyOn(editor, "downloadHtml").mockImplementation(() => undefined);
+
+    await editor.exportHtml();
+
+    expect(download).toHaveBeenCalledOnce();
+    expect(editor.hasUnsavedChanges()).toBe(false);
+    expect(editor.sourceFingerprint).toBe(editor.currentSourceFingerprint());
+    const draft = JSON.parse(localStorage.getItem(editor.storageKey) || "{}");
+    expect(editor.draftRestoreStatus(draft)).toBe("current");
+  });
+
+  it("aligns the browser draft after directly writing an HTML file", async () => {
+    document.body.innerHTML = `
+      <div id="deckStage" class="deck-stage">
+        <section class="slide active">
+          <h1 id="title">覆盖前标题</h1>
+        </section>
+      </div>
+    `;
+    const title = document.getElementById("title") as HTMLElement;
+    title.getBoundingClientRect = () => rect({ left: 100, top: 100, width: 640, height: 120 });
+
+    installRuntime();
+    const editor = (window as any).FrontendSlidesEditor.mount();
+    title.textContent = "覆盖后标题";
+    expect(editor.hasUnsavedChanges()).toBe(true);
+    vi.spyOn(editor, "canWriteFile").mockReturnValue(true);
+    const write = vi.spyOn(editor, "writeHtmlFile").mockResolvedValue(undefined);
+    const download = vi.spyOn(editor, "downloadHtml").mockImplementation(() => undefined);
+
+    await editor.exportHtml();
+
+    expect(write).toHaveBeenCalledOnce();
+    expect(download).not.toHaveBeenCalled();
+    expect(editor.hasUnsavedChanges()).toBe(false);
+    expect(editor.sourceFingerprint).toBe(editor.currentSourceFingerprint());
+    const draft = JSON.parse(localStorage.getItem(editor.storageKey) || "{}");
+    expect(editor.draftRestoreStatus(draft)).toBe("current");
+  });
+
   it("handles Ctrl+S only from the active canvas", () => {
     document.body.innerHTML = `
       <div id="deckStage" class="deck-stage">

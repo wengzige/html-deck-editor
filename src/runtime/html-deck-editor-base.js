@@ -8365,6 +8365,7 @@
         if (this.canWriteFile()) {
           try {
             await this.writeHtmlFile(html);
+            this.markSourceSaved();
             this.toastMessage("已覆盖保存 HTML");
             return;
           } catch (error) {
@@ -8376,6 +8377,7 @@
           }
         }
         this.downloadHtml(html);
+        this.markSourceSaved();
         this.toastMessage("已下载 index.html；请替换原项目目录里的同名文件");
       }
 
