@@ -554,7 +554,7 @@ describe("editor runtime", () => {
     expect(stage.hasAttribute("data-html-deck-editor-native-layout")).toBe(false);
   });
 
-  it("switches an asynchronously upgraded deck-stage to native viewport layout", () => {
+  it("switches an asynchronously upgraded deck-stage to native viewport layout", async () => {
     document.body.innerHTML = `
       <deck-stage id="deckStage" data-html-deck-editor-stage="preserve" data-html-deck-editor-navigation="horizontal" style="transform:rotate(1deg);transform-origin:center center">
         <section class="slide active"><h1>One</h1></section>
@@ -562,28 +562,38 @@ describe("editor runtime", () => {
       </deck-stage>
     `;
     const stage = document.getElementById("deckStage") as any;
+    let resolveUpgrade!: (constructor: CustomElementConstructor) => void;
+    const whenDefined = vi.spyOn(window.customElements, "whenDefined").mockReturnValue(new Promise((resolve) => {
+      resolveUpgrade = resolve;
+    }));
 
-    installRuntime();
-    const editor = (window as any).FrontendSlidesEditor.mount();
-    editor.toggleEditMode(true);
-    expect(stage.hasAttribute("data-html-deck-editor-native-layout")).toBe(false);
-    expect(stage.getAttribute("data-html-deck-editor-navigation")).toBe("horizontal");
+    try {
+      installRuntime();
+      const editor = (window as any).FrontendSlidesEditor.mount();
+      editor.toggleEditMode(true);
+      expect(stage.hasAttribute("data-html-deck-editor-native-layout")).toBe(false);
+      expect(stage.getAttribute("data-html-deck-editor-navigation")).toBe("horizontal");
 
-    stage.fit = vi.fn();
-    stage.setEditorInsets = vi.fn();
-    editor.applyEditorLayout();
+      stage.fit = vi.fn();
+      stage.setEditorInsets = vi.fn();
+      resolveUpgrade(class extends HTMLElement {});
+      await Promise.resolve();
+      await Promise.resolve();
 
-    expect(stage.hasAttribute("data-html-deck-editor-native-layout")).toBe(true);
-    expect(stage.hasAttribute("data-html-deck-editor-navigation")).toBe(false);
-    expect(stage.style.getPropertyValue("--html-deck-editor-stage-scale")).toBe("");
-    expect(stage.style.transform).toBe("");
-    expect(stage.style.transformOrigin).toBe("");
-    expect(stage.setEditorInsets).toHaveBeenCalled();
-    expect(stage.fit).toHaveBeenCalled();
+      expect(stage.hasAttribute("data-html-deck-editor-native-layout")).toBe(true);
+      expect(stage.hasAttribute("data-html-deck-editor-navigation")).toBe(false);
+      expect(stage.style.getPropertyValue("--html-deck-editor-stage-scale")).toBe("");
+      expect(stage.style.transform).toBe("");
+      expect(stage.style.transformOrigin).toBe("");
+      expect(stage.setEditorInsets).toHaveBeenCalled();
+      expect(stage.fit).toHaveBeenCalled();
 
-    editor.toggleEditMode(false);
-    expect(stage.style.transform).toBe("rotate(1deg)");
-    expect(stage.style.transformOrigin).toBe("center center");
+      editor.toggleEditMode(false);
+      expect(stage.style.transform).toBe("rotate(1deg)");
+      expect(stage.style.transformOrigin).toBe("center center");
+    } finally {
+      whenDefined.mockRestore();
+    }
   });
 
   it("keeps preserved horizontal slides addressable in edit mode without removing later pages", () => {

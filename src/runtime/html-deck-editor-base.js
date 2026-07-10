@@ -1437,6 +1437,7 @@
         this.motionAncestorCounts = new WeakMap();
         this.textSelectionRange = null;
         this.textSelectionElement = null;
+        this.nativeStageUpgradeWatch = null;
         this.layoutRefreshRaf = null;
         this.layoutRefreshTimers = [];
         this.globalListenerController = typeof AbortController !== "undefined" ? new AbortController() : null;
@@ -2739,6 +2740,7 @@
         this.layoutRefreshTimers.forEach((timer) => window.clearTimeout(timer));
         this.layoutRefreshTimers = [];
         this.stopMotionFrameTracking();
+        this.nativeStageUpgradeWatch = null;
         this.hostSlideObserver?.disconnect();
         this.hostSlideObserver = null;
         window.clearTimeout(this.motionPreviewTimer);
@@ -3353,11 +3355,33 @@
         const nativeLayout = hasNativeDeckStageLayout(this.stage);
         this.stage.toggleAttribute("data-html-deck-editor-native-layout", nativeLayout);
         if (nativeLayout) {
+          this.nativeStageUpgradeWatch = null;
           clearPreservedStageSafeLayout(this.stage);
           this.stage.style.removeProperty("transform");
           this.stage.style.removeProperty("transform-origin");
           this.stage.removeAttribute("data-html-deck-editor-navigation");
+        } else {
+          this.watchForNativeStageUpgrade();
         }
+      }
+
+      watchForNativeStageUpgrade() {
+        if (this.nativeStageUpgradeWatch || !this.isActive || !isDeckStageElement(this.stage)) return;
+        const registry = window.customElements;
+        if (!registry || typeof registry.whenDefined !== "function") return;
+        const stage = this.stage;
+        const watch = Promise.resolve(registry.whenDefined("deck-stage"))
+          .then(() => {
+            if (this.nativeStageUpgradeWatch !== watch) return;
+            this.nativeStageUpgradeWatch = null;
+            if (!this.isActive || this.stage !== stage || !stage.isConnected) return;
+            this.applyEditorLayout();
+            this.updateFrame();
+          })
+          .catch(() => {
+            if (this.nativeStageUpgradeWatch === watch) this.nativeStageUpgradeWatch = null;
+          });
+        this.nativeStageUpgradeWatch = watch;
       }
 
       syncCurrentSlideFromHost() {
