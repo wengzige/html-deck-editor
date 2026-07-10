@@ -459,6 +459,7 @@ function findRepairableDeckStage(sourceSlides: Element[]): Element | null {
 }
 
 function moveSlidesIntoStage(stage: Element, sourceSlides: Element[]): void {
+  const formerParents = new Set(sourceSlides.map((slide) => slide.parentElement).filter(Boolean) as Element[]);
   const marker = stage.ownerDocument.createTextNode("");
   const firstExistingSlide = sourceSlides.find((slide) => slide.parentElement === stage);
   if (firstExistingSlide) {
@@ -472,6 +473,15 @@ function moveSlidesIntoStage(stage: Element, sourceSlides: Element[]): void {
     fragment.appendChild(source);
   });
   marker.parentNode?.replaceChild(fragment, marker);
+
+  formerParents.forEach((parent) => {
+    if (parent === stage || !parent.isConnected) return;
+    const hasContent = Array.from(parent.childNodes).some((node) => {
+      if (node.nodeType === Node.TEXT_NODE) return Boolean(node.textContent?.trim());
+      return node.nodeType === Node.ELEMENT_NODE;
+    });
+    if (!hasContent) parent.remove();
+  });
 }
 
 function markPreservedStage(stage: Element, sourceSlides: Element[]): void {

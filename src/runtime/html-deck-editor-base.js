@@ -7224,7 +7224,12 @@
           "[data-codex-frame-inner]",
           "[data-codex-preview-navigation]",
           "[data-codex-workspace-button]",
-          ".codex-workspace-panel"
+          ".codex-workspace-panel",
+          "#codexBridgeStyle",
+          "#codexWorkspaceStyle",
+          "#codexBridgeBadge",
+          "#codex-browser-sidebar-comments-root",
+          "[id^='codex-browser-']"
         ].join(",")).forEach((node) => node.remove());
         clone.removeAttribute("data-codex-editor-booting");
         clone.removeAttribute("data-codex-workbench");
@@ -7244,6 +7249,22 @@
         clone.querySelectorAll("[data-codex-fixed-deck-noscale]").forEach((node) => {
           node.removeAttribute("noscale");
           node.removeAttribute("data-codex-fixed-deck-noscale");
+        });
+        clone.querySelectorAll("[data-html-deck-editor-server-runtime]").forEach((node) => {
+          ["src", "href"].forEach((attribute) => {
+            const value = node.getAttribute(attribute);
+            if (value?.startsWith("/runtime/")) node.setAttribute(attribute, value.slice(1));
+          });
+          node.removeAttribute("data-html-deck-editor-server-runtime");
+        });
+        [clone, ...clone.querySelectorAll("*")].forEach((node) => {
+          Array.from(node.attributes || []).forEach((attribute) => {
+            if (attribute.name.startsWith("data-codex-")) node.removeAttribute(attribute.name);
+          });
+          if (!node.style) return;
+          Array.from(node.style).forEach((property) => {
+            if (property.startsWith("--codex-")) node.style.removeProperty(property);
+          });
         });
         clone.querySelectorAll(".editor-selected").forEach((node) => node.classList.remove("editor-selected"));
         clone.querySelectorAll(".editor-motion-parent-stable").forEach((node) => node.classList.remove("editor-motion-parent-stable"));

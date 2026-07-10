@@ -3244,19 +3244,29 @@ describe("editor runtime", () => {
   it("strips Codex workspace runtime from saved editor HTML", () => {
     document.documentElement.setAttribute("data-codex-workbench", "true");
     document.documentElement.setAttribute("data-codex-fixed-deck-viewport", "true");
+    document.documentElement.style.setProperty("--codex-workbench-scale", "0.58");
     document.body.setAttribute("data-codex-workspace-open", "true");
     document.body.innerHTML = `
+      <style id="codexBridgeStyle">.codex-bridge-selected { outline: 2px solid pink; }</style>
+      <style id="codexWorkspaceStyle">.codex-workspace-panel { width: 360px; }</style>
       <div data-codex-fixed-deck-scale>
-        <div id="deckStage" class="deck-stage" data-codex-fixed-deck-stage>
+        <div id="deckStage" class="deck-stage" data-codex-fixed-deck-stage data-codex-transient="true" style="--codex-workbench-stage-width: 2880px">
           <section class="slide active"><h1 id="title">用户内容</h1></section>
         </div>
       </div>
       <button data-codex-workspace-button>工作区</button>
       <div class="codex-workspace-panel">临时面板</div>
+      <div id="codexBridgeBadge">Codex bridge ready</div>
+      <div id="codex-browser-sidebar-comments-root">浏览器批注浮层</div>
       <script data-codex-editor-runtime></script>
       <script data-codex-bridge></script>
       <script data-codex-save-target></script>
       <script data-codex-preview-navigation></script>
+      <script src="runtime/html-to-image.js" data-html-deck-editor-runtime></script>
+      <script src="runtime/jspdf.umd.min.js" data-html-deck-editor-runtime></script>
+      <script src="runtime/jszip.min.js" data-html-deck-editor-runtime></script>
+      <link rel="stylesheet" href="/runtime/html-deck-editor.css" data-html-deck-editor-runtime data-html-deck-editor-server-runtime>
+      <script src="/runtime/html-deck-editor.js" data-html-deck-editor-runtime data-html-deck-editor-server-runtime></script>
     `;
     (document.getElementById("title") as HTMLElement).getBoundingClientRect = () => rect({ left: 100, top: 100, width: 640, height: 120 });
 
@@ -3273,6 +3283,18 @@ describe("editor runtime", () => {
     expect(html).not.toContain("codex-workspace-panel");
     expect(html).not.toContain("data-codex-save-target");
     expect(html).not.toContain("data-codex-preview-navigation");
+    expect(html).not.toContain("codexWorkspaceStyle");
+    expect(html).not.toContain("codexBridgeStyle");
+    expect(html).not.toContain("codexBridgeBadge");
+    expect(html).not.toContain("codex-browser-sidebar-comments-root");
+    expect(html).not.toContain("--codex-workbench");
+    expect(html).not.toContain("data-codex-transient");
+    expect(html).toContain('src="runtime/html-to-image.js"');
+    expect(html).toContain('src="runtime/jspdf.umd.min.js"');
+    expect(html).toContain('src="runtime/jszip.min.js"');
+    expect(html).toContain('href="runtime/html-deck-editor.css"');
+    expect(html).toContain('src="runtime/html-deck-editor.js"');
+    expect(html).not.toContain("data-html-deck-editor-server-runtime");
   });
 
   it("bakes moved image positions into exported HTML without editor CSS", () => {

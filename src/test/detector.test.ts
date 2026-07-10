@@ -503,6 +503,30 @@ describe("runtime injection", () => {
     expect(html).toContain("window.keepBusinessLogic = true");
   });
 
+  it("removes emptied Reveal vertical-stack wrappers after flattening", () => {
+    const source = `
+      <div class="reveal"><div class="slides">
+        <section><h1>Horizontal</h1></section>
+        <section>
+          <section><h1>Vertical A</h1></section>
+          <section><h1>Vertical B</h1></section>
+        </section>
+      </div></div>
+    `;
+    const report = detectDeck(input([file("index.html", source)]));
+    const html = rewriteHtml(source, report);
+    const doc = new DOMParser().parseFromString(html, "text/html");
+    const directSections = Array.from(doc.querySelectorAll("#deckStage > section"));
+
+    expect(directSections).toHaveLength(3);
+    expect(directSections.every((section) => section.classList.contains("slide"))).toBe(true);
+    expect(directSections.map((section) => section.textContent?.trim())).toEqual([
+      "Horizontal",
+      "Vertical A",
+      "Vertical B"
+    ]);
+  });
+
   it("neutralizes Impress positioning and initialization", () => {
     const source = `
       <div id="impress">

@@ -1242,12 +1242,13 @@
     .editor-shell[data-html-deck-editor-ui] .editor-help-section {
       display: grid;
       gap: 7px;
-      padding-top: 14px;
+      margin: 0;
+      padding: 14px 0 0;
       border-top: 1px solid rgba(17, 17, 17, 0.10);
     }
 
     .editor-shell[data-html-deck-editor-ui] .editor-help-section:first-child {
-      padding-top: 0;
+      padding: 0;
       border-top: 0;
     }
 
