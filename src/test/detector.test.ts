@@ -937,6 +937,12 @@ describe("runtime injection", () => {
     expect(html).toContain('src="runtime/jspdf.umd.min.js"');
     expect(html).toContain('src="runtime/jszip.min.js"');
     expect(html).toContain('data-html-deck-editor-runtime="0.1.8"');
+    const deckStageRuntime = await zip.file("runtime/deck-stage.js")!.async("string");
+    const editorRuntime = await zip.file("runtime/html-deck-editor.js")!.async("string");
+    expect(deckStageRuntime).toContain("s.classList.toggle('active', isCurrent)");
+    expect(deckStageRuntime).toContain("s.classList.toggle('visible', isCurrent)");
+    expect(editorRuntime).toContain("if (isDeckStageElement(stage))");
+    expect(editorRuntime).toContain('slide.classList.toggle("visible", isCurrent)');
   });
 
   it("adds local image assets to the export manifest", async () => {
