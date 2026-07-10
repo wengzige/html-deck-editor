@@ -948,6 +948,47 @@ describe("editor runtime", () => {
     expect(box.classList.contains("editor-anim-rise")).toBe(true);
   });
 
+  it("clears stale authored visibility when a legacy native stage navigates backwards", () => {
+    document.body.innerHTML = `
+      <deck-stage id="deckStage" width="1920" height="1080">
+        <section class="slide active visible">
+          <div class="reveal"><h1>First page</h1></div>
+        </section>
+        <section class="slide">
+          <div class="reveal"><h2>Second page</h2></div>
+        </section>
+      </deck-stage>
+    `;
+    const stage = document.getElementById("deckStage") as any;
+    const slides = Array.from(stage.children) as HTMLElement[];
+    let stageIndex = 0;
+    Object.defineProperty(stage, "index", { get: () => stageIndex, configurable: true });
+    stage.goTo = (index: number) => {
+      stageIndex = Math.max(0, Math.min(slides.length - 1, index));
+      slides.forEach((slide, itemIndex) => slide.toggleAttribute("data-deck-active", itemIndex === stageIndex));
+      stage.dispatchEvent(new CustomEvent("slidechange", { detail: { index: stageIndex } }));
+    };
+    stage.fit = vi.fn();
+    stage.setEditorInsets = vi.fn();
+    stage.setEditorView = vi.fn();
+    vi.stubGlobal("requestAnimationFrame", (callback: FrameRequestCallback) => { callback(0); return 1; });
+
+    installRuntime();
+    const editor = (window as any).FrontendSlidesEditor.mount();
+
+    editor.presentation.showSlide(1);
+    expect(slides[0].classList.contains("active")).toBe(false);
+    expect(slides[0].classList.contains("visible")).toBe(false);
+    expect(slides[1].classList.contains("active")).toBe(true);
+    expect(slides[1].classList.contains("visible")).toBe(true);
+
+    editor.presentation.showSlide(0);
+    expect(slides[0].classList.contains("active")).toBe(true);
+    expect(slides[0].classList.contains("visible")).toBe(true);
+    expect(slides[1].classList.contains("active")).toBe(false);
+    expect(slides[1].classList.contains("visible")).toBe(false);
+  });
+
   it("applies entrance changes to an imported animation wrapper around selected text", () => {
     document.body.innerHTML = `
       <div id="slidesWrapper" data-html-deck-editor-stage="preserve">

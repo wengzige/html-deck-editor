@@ -728,6 +728,14 @@
     window.__currentSlideIndex = index;
     if (stage) {
       const slides = stageSlides(stage);
+      if (isDeckStageElement(stage)) {
+        const current = normalizeSlideIndex(index, slides);
+        slides.forEach((slide, slideIndex) => {
+          const isCurrent = slideIndex === current;
+          slide.classList.toggle("active", isCurrent);
+          slide.classList.toggle("visible", isCurrent);
+        });
+      }
       const isHorizontal = usesHorizontalSlideOffset(stage, slides);
       stage.dataset.htmlDeckEditorCurrentSlide = String(index);
       stage.style.setProperty("--html-deck-editor-current-slide", String(index));

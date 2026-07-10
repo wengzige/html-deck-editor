@@ -87,6 +87,29 @@ describe("deck-stage editor APIs", () => {
     expect(stage.index).toBe(2);
   });
 
+  it("keeps authored active and visible classes aligned in both navigation directions", () => {
+    document.body.innerHTML = `
+      <deck-stage id="deckStage">
+        <section class="slide active visible">A</section>
+        <section class="slide">B</section>
+      </deck-stage>
+    `;
+    const stage = document.getElementById("deckStage") as any;
+    const slides = Array.from(stage.children) as HTMLElement[];
+
+    stage.goTo(1);
+    expect(slides[0].classList.contains("active")).toBe(false);
+    expect(slides[0].classList.contains("visible")).toBe(false);
+    expect(slides[1].classList.contains("active")).toBe(true);
+    expect(slides[1].classList.contains("visible")).toBe(true);
+
+    stage.goTo(0);
+    expect(slides[0].classList.contains("active")).toBe(true);
+    expect(slides[0].classList.contains("visible")).toBe(true);
+    expect(slides[1].classList.contains("active")).toBe(false);
+    expect(slides[1].classList.contains("visible")).toBe(false);
+  });
+
   it("ignores prevented keyboard events and interactive controls", () => {
     document.body.innerHTML = `
       <deck-stage id="deckStage">

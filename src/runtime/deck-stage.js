@@ -544,8 +544,10 @@
         try { history.replaceState(null, '', '#' + (curr + 1)); } catch (e) {}
       }
       this._slides.forEach((s, i) => {
-        if (i === curr) s.setAttribute('data-deck-active', '');
-        else s.removeAttribute('data-deck-active');
+        const isCurrent = i === curr;
+        s.toggleAttribute('data-deck-active', isCurrent);
+        s.classList.toggle('active', isCurrent);
+        s.classList.toggle('visible', isCurrent);
       });
       if (this._countEl) this._countEl.textContent = String(curr + 1);
 
