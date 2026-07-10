@@ -43,6 +43,10 @@
       transition: opacity 180ms ease, visibility 180ms ease;
     }
 
+    .editor-shell[data-html-deck-editor-ui].editor-modal-open {
+      z-index: 2147483640;
+    }
+
     .editor-shell[data-html-deck-editor-ui],
     .editor-shell[data-html-deck-editor-ui] * {
       box-sizing: border-box;
@@ -843,10 +847,12 @@
       margin: 0;
       color: rgba(17, 17, 17, 0.72);
       font: 500 14px/1.65 var(--font-body, system-ui, -apple-system, BlinkMacSystemFont, "Segoe UI", sans-serif);
+      white-space: pre-line;
     }
 
     .editor-shell[data-html-deck-editor-ui] .editor-confirm-actions {
       display: flex;
+      flex-wrap: wrap;
       justify-content: flex-end;
       gap: 8px;
       margin-top: 18px;

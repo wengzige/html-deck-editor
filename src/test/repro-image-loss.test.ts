@@ -135,7 +135,7 @@ describe("repro: replaced image survives slide navigation", () => {
     remounted.destroy?.();
   });
 
-  it("does not let an older browser draft overwrite externally updated HTML", () => {
+  it("blocks an incompatible browser draft after the HTML changes", () => {
     const editor = mountDeck();
     editor.saveDraft(false);
     editor.destroy();
@@ -146,9 +146,62 @@ describe("repro: replaced image survives slide navigation", () => {
 
     expect((document.querySelector("#deckStage .slide h1") as HTMLElement).textContent).toBe("Externally updated page");
     expect(document.getElementById("editorConfirm")?.hidden).toBe(false);
+    expect(document.getElementById("editorConfirmTitle")?.textContent).toBe("旧草稿与当前 HTML 不兼容");
+    expect(document.getElementById("editorConfirmMessage")?.textContent).toContain("不会载入这份旧草稿");
+    expect(document.getElementById("editorConfirmCancelBtn")?.textContent).toBe("继续使用当前文件");
+    expect(document.getElementById("editorConfirmCancelBtn")?.classList.contains("primary")).toBe(true);
+    expect(document.getElementById("editorConfirmOkBtn")?.textContent).toBe("清除旧草稿");
     expect(storage.has(remounted.storageKey)).toBe(true);
     remounted.runConfirmedAction();
-    expect((document.querySelector("#deckStage .slide h1") as HTMLElement).textContent).toBe("Page one");
+    expect((document.querySelector("#deckStage .slide h1") as HTMLElement).textContent).toBe("Externally updated page");
+    expect(storage.has(remounted.storageKey)).toBe(false);
+    remounted.destroy?.();
+  });
+
+  it("allows a compatible older draft to be restored deliberately", () => {
+    const editor = mountDeck();
+    const title = document.querySelector("#deckStage .slide h1") as HTMLElement;
+    title.textContent = "Browser draft edit";
+    editor.saveDraft(false);
+    const draft = JSON.parse(storage.get(editor.storageKey) || "{}");
+    editor.destroy();
+    title.textContent = "Page one";
+    const mtime = document.createElement("meta");
+    mtime.name = "codex-mtime";
+    mtime.content = String(draft.savedAt + 1_000);
+    document.head.appendChild(mtime);
+
+    const remounted = (window as any).FrontendSlidesEditor.mount();
+
+    expect(title.textContent).toBe("Page one");
+    expect(document.getElementById("editorConfirmTitle")?.textContent).toBe("发现较旧的浏览器草稿");
+    expect(document.getElementById("editorConfirmMessage")?.textContent).toContain("当前 HTML 文件较新");
+    expect(document.getElementById("editorConfirmMessage")?.textContent).toContain("不会立即写入 HTML 文件");
+    expect(document.getElementById("editorConfirmCancelBtn")?.textContent).toBe("继续使用新文件");
+    expect(document.getElementById("editorConfirmOkBtn")?.textContent).toBe("恢复较旧草稿");
+    expect(document.getElementById("editorShell")?.classList.contains("editor-modal-open")).toBe(true);
+    document.getElementById("editorConfirmCancelBtn")?.click();
+    expect(title.textContent).toBe("Page one");
+    expect(document.getElementById("editorConfirm")?.hidden).toBe(true);
+    expect(document.getElementById("editorShell")?.classList.contains("editor-modal-open")).toBe(false);
+    remounted.restore();
+    remounted.runConfirmedAction();
+    expect((document.querySelector("#deckStage .slide h1") as HTMLElement).textContent).toBe("Browser draft edit");
+    expect(document.getElementById("editorToast")?.textContent).toContain("尚未写入 HTML 文件");
+    remounted.destroy?.();
+  });
+
+  it("does not restore a malformed draft even when its fingerprint matches", () => {
+    const editor = mountDeck();
+    editor.saveDraft(false);
+    const draft = JSON.parse(storage.get(editor.storageKey) || "{}");
+    storage.set(editor.storageKey, JSON.stringify({ ...draft, stage: "<div>broken draft</div>" }));
+    editor.destroy();
+
+    const remounted = (window as any).FrontendSlidesEditor.mount();
+
+    expect(document.querySelectorAll("#deckStage .slide")).toHaveLength(2);
+    expect(document.getElementById("editorConfirmTitle")?.textContent).toBe("旧草稿与当前 HTML 不兼容");
     remounted.destroy?.();
   });
 

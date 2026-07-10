@@ -3180,49 +3180,63 @@
       }
 
       openHelp() {
-        this.controls.helpModal.hidden = false;
+        this.showModal(this.controls.helpModal);
       }
 
       closeHelp() {
-        this.controls.helpModal.hidden = true;
+        this.hideModal(this.controls.helpModal);
       }
 
       openAiExportHelp() {
-        this.controls.aiExportHelpModal.hidden = false;
+        this.showModal(this.controls.aiExportHelpModal);
       }
 
       closeAiExportHelp() {
-        this.controls.aiExportHelpModal.hidden = true;
+        this.hideModal(this.controls.aiExportHelpModal);
       }
 
       openSaveHelp() {
-        this.controls.saveHelpModal.hidden = false;
+        this.showModal(this.controls.saveHelpModal);
       }
 
       closeSaveHelp() {
-        this.controls.saveHelpModal.hidden = true;
+        this.hideModal(this.controls.saveHelpModal);
       }
 
       openResetHelp() {
-        this.controls.resetHelpModal.hidden = false;
+        this.showModal(this.controls.resetHelpModal);
       }
 
       closeResetHelp() {
-        this.controls.resetHelpModal.hidden = true;
+        this.hideModal(this.controls.resetHelpModal);
       }
 
-      openConfirm({ title, message, okText, action }) {
+      showModal(modal) {
+        modal.hidden = false;
+        this.shell.classList.add("editor-modal-open");
+      }
+
+      hideModal(modal) {
+        modal.hidden = true;
+        const hasOpenModal = Array.from(this.shell.querySelectorAll(".editor-help-modal"))
+          .some((candidate) => !candidate.hidden);
+        this.shell.classList.toggle("editor-modal-open", hasOpenModal);
+      }
+
+      openConfirm({ title, message, okText, cancelText = "取消", primaryCancel = false, action }) {
         this.pendingConfirm = action;
         this.controls.confirmTitle.textContent = title;
         this.controls.confirmMessage.textContent = message;
+        this.controls.confirmCancel.textContent = cancelText;
+        this.controls.confirmCancel.classList.toggle("primary", primaryCancel);
         this.controls.confirmOk.textContent = okText;
-        this.controls.confirmModal.hidden = false;
+        this.showModal(this.controls.confirmModal);
         this.controls.confirmCancel.focus({ preventScroll: true });
       }
 
       closeConfirm() {
         this.pendingConfirm = null;
-        this.controls.confirmModal.hidden = true;
+        this.hideModal(this.controls.confirmModal);
       }
 
       runConfirmedAction() {
@@ -6842,15 +6856,32 @@
         if (!raw) return;
         try {
           const data = JSON.parse(raw);
-          if (data.stage && !this.shouldRestoreDraft(data)) {
+          const restoreStatus = data.stage ? this.draftRestoreStatus(data) : "current";
+          if (restoreStatus === "incompatible") {
             this.openConfirm({
-              title: "检测到 HTML 文件已更新",
-              message: "浏览器里还有一份较旧的本地草稿。当前先保留文件里的新内容；只有选择恢复草稿，才会覆盖当前页面。",
-              okText: "恢复旧草稿",
+              title: "旧草稿与当前 HTML 不兼容",
+              message: "这份浏览器草稿无法确认与当前页面结构兼容。直接恢复可能破坏布局，因此编辑器不会载入这份旧草稿。\n\n当前页面仍是 HTML 文件内容。请选择“继续使用当前文件”，或在确定不再需要草稿时清除它。",
+              cancelText: "继续使用当前文件",
+              primaryCancel: true,
+              okText: "清除旧草稿",
+              action: () => {
+                this.discardStoredDrafts();
+                this.toastMessage("已清除不兼容的旧草稿；当前 HTML 文件未改动");
+              }
+            });
+            return;
+          }
+          if (restoreStatus === "stale") {
+            this.openConfirm({
+              title: "发现较旧的浏览器草稿",
+              message: this.draftConflictMessage(data),
+              cancelText: "继续使用新文件",
+              primaryCancel: true,
+              okText: "恢复较旧草稿",
               action: () => {
                 this.restoreSnapshot(data);
                 this.saveDraft(false, true);
-                this.toastMessage("已恢复旧的浏览器草稿");
+                this.toastMessage("已恢复较旧草稿；可点“撤回”返回新文件，尚未写入 HTML 文件");
               }
             });
             return;
@@ -6862,13 +6893,52 @@
         }
       }
 
-      shouldRestoreDraft(data) {
-        const documentMtime = Number(document.querySelector('meta[name="codex-mtime"]')?.getAttribute("content"));
-        if (Number.isFinite(documentMtime) && documentMtime > 0 && Number(data.savedAt) > 0 && documentMtime > Number(data.savedAt)) {
-          return false;
+      documentModifiedAt() {
+        return Number(document.querySelector('meta[name="codex-mtime"]')?.getAttribute("content"));
+      }
+
+      isDraftSnapshotUsable(data) {
+        if (typeof data?.stage !== "string" || !data.stage.trim()) return false;
+        const template = document.createElement("template");
+        template.innerHTML = data.stage;
+        return stageSlides(template.content).length > 0;
+      }
+
+      draftRestoreStatus(data) {
+        if (!this.isDraftSnapshotUsable(data)) return "incompatible";
+        if (!data.sourceFingerprint || data.sourceFingerprint !== this.sourceFingerprint) return "incompatible";
+        const documentMtime = this.documentModifiedAt();
+        const draftSavedAt = Number(data.savedAt);
+        if (Number.isFinite(documentMtime) && documentMtime > 0 && draftSavedAt > 0 && documentMtime > draftSavedAt) {
+          return "stale";
         }
-        if (!data.sourceFingerprint) return true;
-        return data.sourceFingerprint === this.sourceFingerprint;
+        return "current";
+      }
+
+      formatDraftTimestamp(value) {
+        const timestamp = Number(value);
+        if (!Number.isFinite(timestamp) || timestamp <= 0) return "";
+        return new Intl.DateTimeFormat("zh-CN", {
+          year: "numeric",
+          month: "2-digit",
+          day: "2-digit",
+          hour: "2-digit",
+          minute: "2-digit",
+          hour12: false
+        }).format(new Date(timestamp));
+      }
+
+      draftConflictMessage(data) {
+        const documentTime = this.formatDraftTimestamp(this.documentModifiedAt());
+        const draftTime = this.formatDraftTimestamp(data.savedAt);
+        const timeSummary = documentTime && draftTime
+          ? `文件更新：${documentTime}；草稿保存：${draftTime}。`
+          : "";
+        return [
+          "当前 HTML 文件较新，页面已保留新文件内容。",
+          timeSummary,
+          "建议选择“继续使用新文件”。“恢复较旧草稿”会用旧内容替换当前页面，但不会立即写入 HTML 文件。"
+        ].filter(Boolean).join("\n\n");
       }
 
       persistDraftData(data) {
