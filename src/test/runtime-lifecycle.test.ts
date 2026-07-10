@@ -1,6 +1,7 @@
 import { afterEach, beforeEach, describe, expect, it, vi } from "vitest";
 import editorRuntime from "../runtime/html-deck-editor-base.js?raw";
 import editorCss from "../runtime/html-deck-editor.css?raw";
+import deckStageRuntime from "../runtime/deck-stage.js?raw";
 
 function installRuntime(): void {
   const style = document.createElement("style");
@@ -47,7 +48,7 @@ describe("editor mount and destroy lifecycle", () => {
     vi.unstubAllGlobals();
   });
 
-  it.fails("does not retain window resize listeners across remounts", () => {
+  it("does not retain window resize listeners across remounts", () => {
     const originalAdd = window.addEventListener.bind(window);
     const originalRemove = window.removeEventListener.bind(window);
     const addedResizeListeners: EventListenerOrEventListenerObject[] = [];
@@ -63,19 +64,17 @@ describe("editor mount and destroy lifecycle", () => {
     });
 
     try {
-      const first = (window as any).FrontendSlidesEditor.mount();
-      first.destroy();
-      expect(addedResizeListeners.filter((listener) => !removedResizeListeners.has(listener))).toHaveLength(0);
-
-      const second = (window as any).FrontendSlidesEditor.mount();
-      second.destroy();
-      expect(addedResizeListeners.filter((listener) => !removedResizeListeners.has(listener))).toHaveLength(0);
+      for (let index = 0; index < 10; index += 1) {
+        const editor = (window as any).FrontendSlidesEditor.mount();
+        editor.destroy();
+        expect(addedResizeListeners.filter((listener) => !removedResizeListeners.has(listener))).toHaveLength(0);
+      }
     } finally {
       addedResizeListeners.forEach((listener) => originalRemove("resize", listener));
     }
   });
 
-  it.fails("binds editable elements to the new instance after remount", () => {
+  it("binds editable elements to the new instance after remount", () => {
     const first = (window as any).FrontendSlidesEditor.mount();
     first.toggleEditMode(true);
     const title = document.getElementById("title") as HTMLElement;
@@ -90,7 +89,7 @@ describe("editor mount and destroy lifecycle", () => {
     expect(saveDraft).toHaveBeenCalled();
   });
 
-  it.fails("restores body state and authored stage transform when destroyed", () => {
+  it("restores body state and authored stage transform when destroyed", () => {
     const stage = document.getElementById("deckStage") as HTMLElement;
     stage.style.transform = "rotate(1deg)";
     stage.style.transformOrigin = "center center";
@@ -108,5 +107,44 @@ describe("editor mount and destroy lifecycle", () => {
     expect(stage.dataset.scale).toBeUndefined();
     expect(stage.dataset.offsetX).toBeUndefined();
     expect(stage.dataset.offsetY).toBeUndefined();
+  });
+
+  it("restores authored hidden state after editing a native deck-stage slide", () => {
+    if (!customElements.get("deck-stage")) window.eval(deckStageRuntime);
+    history.replaceState(null, "", "#1");
+    document.body.innerHTML = `
+      <deck-stage id="deckStage" width="1920" height="1080" data-html-deck-editor-stage="preserve" style="transform:translateX(6px)">
+        <section>Visible</section>
+        <section hidden aria-hidden="true" class="is-hidden" style="display:none;visibility:hidden;opacity:0">Hidden</section>
+      </deck-stage>
+    `;
+    const stage = document.getElementById("deckStage") as any;
+    stage.refreshSlides();
+    const hidden = stage.children[1] as HTMLElement;
+    const editor = (window as any).FrontendSlidesEditor.mount();
+    editor.toggleEditMode(true);
+
+    (editor.controls.slideRail.querySelector('[data-slide-index="1"]') as HTMLButtonElement).click();
+    expect({ stageIndex: stage.index, currentSlide: editor.presentation.currentSlide, editorActive: editor.isActive }).toEqual({
+      stageIndex: 1,
+      currentSlide: 1,
+      editorActive: true
+    });
+    expect(hidden.hasAttribute("hidden")).toBe(false);
+    expect(hidden.hasAttribute("data-html-deck-editor-hidden-state")).toBe(true);
+
+    editor.toggleEditMode(false);
+    expect(stage.style.transform).toBe("translateX(6px)");
+    expect(hidden.hasAttribute("hidden")).toBe(true);
+    expect(hidden.getAttribute("aria-hidden")).toBe("true");
+    expect(hidden.classList.contains("is-hidden")).toBe(true);
+    expect(hidden.style.display).toBe("none");
+    expect(hidden.style.visibility).toBe("hidden");
+    expect(hidden.style.opacity).toBe("0");
+    expect(hidden.hasAttribute("data-html-deck-editor-hidden-state")).toBe(false);
+
+    editor.presentation.showSlide(1);
+    expect(hidden.hasAttribute("hidden")).toBe(true);
+    expect(hidden.hasAttribute("data-html-deck-editor-hidden-state")).toBe(false);
   });
 });

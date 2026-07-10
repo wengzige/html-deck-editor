@@ -59,6 +59,7 @@
     { value: "#0f172a", label: "深蓝灰" }
   ];
   const FORCED_HIDDEN_SLIDE_CLASSES = ["hidden", "is-hidden", "d-none", "invisible", "opacity-0"];
+  const BOUND_EDITOR_OWNERS = new WeakMap();
 
   const EDITOR_HTML = `
 <div class="edit-hotzone" data-html-deck-editor-ui aria-hidden="true"></div>
@@ -500,7 +501,9 @@
   function stageSlides(stage) {
     const directSlides = Array.from(stage?.children || []).filter((child) => child.classList?.contains("slide"));
     if (directSlides.length) return directSlides;
-    return topLevelElements(Array.from(stage?.querySelectorAll?.(".slide") || []));
+    const nestedSlides = topLevelElements(Array.from(stage?.querySelectorAll?.(".slide") || []));
+    if (nestedSlides.length) return nestedSlides;
+    return Array.from(stage?.children || []).filter((child) => ["SECTION", "ARTICLE"].includes(child.tagName));
   }
 
   function topLevelElements(elements) {
@@ -509,6 +512,25 @@
 
   function clearForcedHiddenSlideState(slide) {
     if (!slide) return;
+    if (!slide.dataset.htmlDeckEditorHiddenState) {
+      const state = {
+        hidden: slide.getAttribute("hidden"),
+        ariaHidden: slide.getAttribute("aria-hidden"),
+        classes: FORCED_HIDDEN_SLIDE_CLASSES.filter((className) => slide.classList.contains(className)),
+        styles: ["display", "visibility", "opacity"].map((name) => ({
+          name,
+          value: slide.style.getPropertyValue(name),
+          priority: slide.style.getPropertyPriority(name)
+        }))
+      };
+      const hasForcedState = state.hidden !== null || state.ariaHidden === "true" || state.classes.length > 0 ||
+        state.styles.some(({ name, value }) => (
+          (name === "display" && value === "none") ||
+          (name === "visibility" && value === "hidden") ||
+          (name === "opacity" && Number.parseFloat(value || "") === 0)
+        ));
+      if (hasForcedState) slide.dataset.htmlDeckEditorHiddenState = JSON.stringify(state);
+    }
     slide.removeAttribute("hidden");
     if (slide.getAttribute("aria-hidden") === "true") slide.removeAttribute("aria-hidden");
     FORCED_HIDDEN_SLIDE_CLASSES.forEach((className) => slide.classList.remove(className));
@@ -517,6 +539,44 @@
       if (slide.style.visibility === "hidden") slide.style.removeProperty("visibility");
       if (Number.parseFloat(slide.style.opacity || "") === 0) slide.style.removeProperty("opacity");
     }
+  }
+
+  function restoreForcedHiddenSlideState(slide) {
+    const raw = slide?.dataset?.htmlDeckEditorHiddenState;
+    if (!raw) return;
+    try {
+      const state = JSON.parse(raw);
+      if (state.hidden === null) slide.removeAttribute("hidden");
+      else slide.setAttribute("hidden", state.hidden || "");
+      if (state.ariaHidden === null) slide.removeAttribute("aria-hidden");
+      else slide.setAttribute("aria-hidden", state.ariaHidden);
+      FORCED_HIDDEN_SLIDE_CLASSES.forEach((className) => {
+        slide.classList.toggle(className, state.classes?.includes(className) === true);
+      });
+      state.styles?.forEach(({ name, value, priority }) => {
+        if (value) slide.style.setProperty(name, value, priority || "");
+        else slide.style.removeProperty(name);
+      });
+    } catch (error) {
+      // Ignore malformed transient editor state and remove its marker below.
+    }
+    delete slide.dataset.htmlDeckEditorHiddenState;
+  }
+
+  function restoreForcedHiddenSlideStates(root) {
+    if (!root) return;
+    if (root.matches?.("[data-html-deck-editor-hidden-state]")) restoreForcedHiddenSlideState(root);
+    root.querySelectorAll?.("[data-html-deck-editor-hidden-state]").forEach(restoreForcedHiddenSlideState);
+  }
+
+  function canTemporarilyRevealHiddenSlides() {
+    const body = document.body;
+    return Boolean(body && (
+      body.classList.contains("editing") ||
+      body.classList.contains("editor-on") ||
+      body.classList.contains("html-deck-editor-exporting") ||
+      body.classList.contains("html-deck-editor-export-capturing")
+    ));
   }
 
   function normalizeSlideIndex(index, slides) {
@@ -602,7 +662,7 @@
     const current = normalizeSlideIndex(index, slides);
     slides.forEach((slide, i) => {
       slide.setAttribute("data-html-deck-editor-page", "");
-      if (i === current) clearForcedHiddenSlideState(slide);
+      if (i === current && canTemporarilyRevealHiddenSlides()) clearForcedHiddenSlideState(slide);
       slide.toggleAttribute("data-html-deck-editor-current", i === current);
     });
     return current;
@@ -624,7 +684,7 @@
     const current = normalizeSlideIndex(index, slides);
     slides.forEach((slide, i) => {
       const isCurrent = i === current;
-      if (isCurrent) clearForcedHiddenSlideState(slide);
+      if (isCurrent && canTemporarilyRevealHiddenSlides()) clearForcedHiddenSlideState(slide);
       slide.classList.remove("exit");
       slide.classList.toggle("active", isCurrent);
       slide.classList.toggle("visible", isCurrent);
@@ -686,9 +746,9 @@
   }
 
   function installPreservedDeckNavigationBridge(stage, presentation) {
-    if (!stage || stage.getAttribute("data-html-deck-editor-stage") !== "preserve") return;
+    if (!stage || stage.getAttribute("data-html-deck-editor-stage") !== "preserve") return () => {};
     markPreservedHostChrome(stage);
-    if (stage.dataset.htmlDeckEditorNavBridge === "true") return;
+    const originalBridgeMarker = stage.getAttribute("data-html-deck-editor-nav-bridge");
     stage.dataset.htmlDeckEditorNavBridge = "true";
     const play = (index, options = {}) => {
       presentation.slides = stageSlides(stage);
@@ -696,11 +756,13 @@
       presentation.scaleStage?.();
       return presentation.currentSlide;
     };
+    let bridgePlay = null;
     if (typeof window.__playSlide !== "function") {
-      window.__playSlide = (index) => play(index);
-      window.__playSlide.__htmlDeckEditorBridge = true;
+      bridgePlay = (index) => play(index);
+      bridgePlay.__htmlDeckEditorBridge = true;
+      window.__playSlide = bridgePlay;
     }
-    document.addEventListener("click", (event) => {
+    const handleClick = (event) => {
       if (!stage.isConnected) return;
       if (document.body.classList.contains("editing")) return;
       const target = event.target?.closest?.("#prevBtn, #nextBtn, .nav-dot, [data-slide-index], [data-slide]");
@@ -721,8 +783,8 @@
       event.preventDefault();
       event.stopImmediatePropagation();
       play(next);
-    }, true);
-    document.addEventListener("keydown", (event) => {
+    };
+    const handleKeydown = (event) => {
       if (!stage.isConnected) return;
       if (document.body.classList.contains("editing")) return;
       if (event.defaultPrevented || ["INPUT", "TEXTAREA", "SELECT"].includes(event.target?.tagName) || event.target?.isContentEditable) return;
@@ -742,7 +804,19 @@
       event.preventDefault();
       event.stopImmediatePropagation();
       play(next);
-    }, true);
+    };
+    document.addEventListener("click", handleClick, true);
+    document.addEventListener("keydown", handleKeydown, true);
+    return () => {
+      document.removeEventListener("click", handleClick, true);
+      document.removeEventListener("keydown", handleKeydown, true);
+      if (bridgePlay && window.__playSlide === bridgePlay) delete window.__playSlide;
+      if (originalBridgeMarker === null) stage.removeAttribute("data-html-deck-editor-nav-bridge");
+      else stage.setAttribute("data-html-deck-editor-nav-bridge", originalBridgeMarker);
+      document.querySelectorAll("[data-html-deck-editor-host-chrome]").forEach((node) => {
+        node.removeAttribute("data-html-deck-editor-host-chrome");
+      });
+    };
   }
 
   function usesHorizontalSlideOffset(stage, slides = stageSlides(stage)) {
@@ -875,9 +949,22 @@
 
     const root = contentChildren[0];
     if (!hasAuthoredExportBox(root)) return null;
+    const computed = getComputedStyle(root);
+    if (computed.display === "none" || ["hidden", "collapse"].includes(computed.visibility) || Number.parseFloat(computed.opacity) === 0) {
+      return null;
+    }
     const rect = root.getBoundingClientRect?.();
     const size = elementDesignSize(root, { width: rect?.width || 0, height: rect?.height || 0 });
-    return size.width >= 120 && size.height >= 80 ? root : null;
+    if (size.width < 120 || size.height < 80 || size.width * size.height < 9600) return null;
+
+    const slideRect = slide.getBoundingClientRect?.();
+    if (rect?.width > 0 && rect?.height > 0 && slideRect?.width > 0 && slideRect?.height > 0) {
+      const visibleWidth = Math.max(0, Math.min(rect.right, slideRect.right) - Math.max(rect.left, slideRect.left));
+      const visibleHeight = Math.max(0, Math.min(rect.bottom, slideRect.bottom) - Math.max(rect.top, slideRect.top));
+      const visibleRatio = (visibleWidth * visibleHeight) / (rect.width * rect.height);
+      if (visibleRatio < 0.25) return null;
+    }
+    return root;
   }
 
   function exportCapturePlan(slide, stage) {
@@ -957,7 +1044,7 @@
     const slides = stageSlides(stage);
     slides.forEach((slide, index) => {
       const isFirst = index === 0;
-      if (isFirst) clearForcedHiddenSlideState(slide);
+      if (isFirst && canTemporarilyRevealHiddenSlides()) clearForcedHiddenSlideState(slide);
       slide.classList.toggle("active", isFirst);
       slide.classList.toggle("visible", isFirst);
       slide.toggleAttribute("data-deck-active", isFirst);
@@ -1151,6 +1238,7 @@
     const stage = getStage();
     if (!stage) throw new Error("FrontendSlidesEditor requires #deckStage or .deck-stage");
     const presentation = input || {};
+    presentation.__htmlDeckEditorCleanup?.();
     if (!presentation.stage || !presentation.stage.isConnected || presentation.stage !== stage) {
       presentation.stage = stage;
       delete presentation.showSlide;
@@ -1160,19 +1248,29 @@
       delete presentation.refreshSlides;
       presentation.currentSlide = computeCurrentSlide(stageSlides(stage), stage);
     }
+    const overriddenMethods = ["showSlide", "scaleStage", "setEditorInsets", "setEditorView", "refreshSlides", "injectChrome"];
+    const originalMethods = new Map(overriddenMethods.map((name) => [name, {
+      owned: Object.prototype.hasOwnProperty.call(presentation, name),
+      value: presentation[name]
+    }]));
     presentation.slides = stageSlides(stage);
     if (!Number.isFinite(presentation.currentSlide)) presentation.currentSlide = computeCurrentSlide(presentation.slides, stage);
     presentation.currentSlide = markEditorCurrentSlide(presentation.slides, presentation.currentSlide);
     syncHostCurrentSlide(stage, presentation.currentSlide);
     presentation.editorInsets = normalizeInsets(presentation.editorInsets);
     presentation.editorView = normalizeEditorView(presentation.editorView);
-    installPreservedDeckNavigationBridge(stage, presentation);
+    const removeNavigationBridge = installPreservedDeckNavigationBridge(stage, presentation);
 
     const originalShowSlide = typeof presentation.showSlide === "function" ? presentation.showSlide.bind(presentation) : null;
     presentation.showSlide = function showSlide(index) {
       this.slides = stageSlides(stage);
       const requestedSlide = normalizeSlideIndex(index, this.slides);
-      if (originalShowSlide) {
+      if (isDeckStageElement(stage) && typeof stage.goTo === "function") {
+        stage.goTo(requestedSlide);
+        this.slides = stageSlides(stage);
+        const stageIndex = Number(stage.index);
+        this.currentSlide = markEditorCurrentSlide(this.slides, Number.isFinite(stageIndex) ? stageIndex : requestedSlide);
+      } else if (originalShowSlide) {
         originalShowSlide(requestedSlide);
         this.slides = stageSlides(stage);
         const hostIndex = computeHostCurrentSlide(this.slides, stage);
@@ -1208,7 +1306,8 @@
         defaultScaleStage(stage, presentation.editorInsets, presentation.editorView);
       }
     };
-    window.addEventListener("resize", presentation.scaleStage);
+    const resizeHandler = presentation.scaleStage;
+    window.addEventListener("resize", resizeHandler);
 
     const originalSetEditorInsets = typeof presentation.setEditorInsets === "function" ? presentation.setEditorInsets.bind(presentation) : null;
     presentation.setEditorInsets = (insets) => {
@@ -1238,6 +1337,15 @@
     };
 
     if (typeof presentation.injectChrome !== "function") presentation.injectChrome = () => {};
+    presentation.__htmlDeckEditorCleanup = () => {
+      window.removeEventListener("resize", resizeHandler);
+      removeNavigationBridge();
+      originalMethods.forEach((original, name) => {
+        if (original.owned) presentation[name] = original.value;
+        else delete presentation[name];
+      });
+      delete presentation.__htmlDeckEditorCleanup;
+    };
     return presentation;
   }
 
@@ -1263,6 +1371,7 @@
         this.contentPatches = new Map();
         this.draftStorageWarning = "";
         this.hostSlideObserver = null;
+        this.hostTouchSurfaceStates = new Map();
         this.lastInsert = { x: 720, y: 300 };
         this.snapThreshold = 12;
         this.motionFrameRaf = null;
@@ -1303,6 +1412,7 @@
         this.hotzone = document.querySelector(".edit-hotzone[data-html-deck-editor-ui]");
         this.shell = editorUiElement("editorShell");
         this.stage = presentation.stage || getStage();
+        this.authoredStageLayout = this.captureStageLayout();
         this.frame = this.control("editorFrame");
         this.frameMove = this.control("frameMove");
         this.frameDelete = this.control("frameDelete");
@@ -1619,7 +1729,9 @@
           delete element.dataset.editorSmall;
         });
         this.withEditVisibleElements(() => {
-        const candidates = Array.from(this.stage.querySelectorAll(".slide *")).filter((element) => !this.shouldIgnoreEditorCandidate(element));
+        const candidates = stageSlides(this.stage)
+          .flatMap((slide) => Array.from(slide.querySelectorAll("*")))
+          .filter((element) => !this.shouldIgnoreEditorCandidate(element));
         candidates.forEach((element) => {
           const explicitKind = this.explicitEditorKind(element);
           if (explicitKind) this.markEditorKind(element, explicitKind, false);
@@ -2488,13 +2600,81 @@
         target.addEventListener(type, handler, options);
       }
 
+      captureStageLayout() {
+        const styleNames = [
+          "transform",
+          "transform-origin",
+          "--html-deck-editor-stage-x",
+          "--html-deck-editor-stage-y",
+          "--html-deck-editor-stage-scale",
+          "--html-deck-editor-current-slide",
+          "--html-deck-editor-slide-offset-x"
+        ];
+        const attributeNames = [
+          "data-scale",
+          "data-offset-x",
+          "data-offset-y",
+          "data-html-deck-editor-current-slide",
+          "data-html-deck-editor-navigation"
+        ];
+        return {
+          styles: styleNames.map((name) => ({
+            name,
+            value: this.stage.style.getPropertyValue(name),
+            priority: this.stage.style.getPropertyPriority(name)
+          })),
+          attributes: attributeNames.map((name) => ({ name, value: this.stage.getAttribute(name) }))
+        };
+      }
+
+      restoreStageLayout() {
+        this.applyAuthoredStageLayout(this.stage);
+      }
+
+      applyAuthoredStageLayout(stage) {
+        if (!stage) return;
+        this.authoredStageLayout?.styles.forEach(({ name, value, priority }) => {
+          if (value) stage.style.setProperty(name, value, priority);
+          else stage.style.removeProperty(name);
+        });
+        this.authoredStageLayout?.attributes.forEach(({ name, value }) => {
+          if (value === null) stage.removeAttribute(name);
+          else stage.setAttribute(name, value);
+        });
+      }
+
+      stageInClone(clone) {
+        if (!clone) return null;
+        if (clone.nodeType === Node.ELEMENT_NODE && clone.tagName === this.stage.tagName && (!this.stage.id || clone.id === this.stage.id)) {
+          return clone;
+        }
+        const candidates = Array.from(clone.querySelectorAll?.("[data-html-deck-editor-stage], .deck-stage, #deckStage, #deck") || []);
+        if (this.stage.id) {
+          const sameId = candidates.find((candidate) => candidate.id === this.stage.id);
+          if (sameId) return sameId;
+        }
+        return candidates[0] || null;
+      }
+
       destroy() {
+        this.isActive = false;
+        this.isExportCancelRequested = true;
         this.globalListenerController?.abort();
         this.globalListeners.forEach(({ target, type, handler, options }) => {
           target.removeEventListener(type, handler, options);
         });
         this.globalListeners = [];
-        document.body.classList.remove("editor-canvas-zoomed", "editor-canvas-panning");
+        document.body.classList.remove(
+          "editing",
+          "editor-on",
+          "editor-canvas-zoomed",
+          "editor-canvas-panning",
+          "format-brushing",
+          "commenting",
+          "dragging-file",
+          "html-deck-editor-exporting",
+          "html-deck-editor-export-capturing"
+        );
         this.clearTextSelection();
         this.layoutRefreshTimers.forEach((timer) => window.clearTimeout(timer));
         this.layoutRefreshTimers = [];
@@ -2505,8 +2685,23 @@
         window.clearTimeout(this.hideTimeout);
         window.clearTimeout(this.toastTimer);
         window.clearTimeout(this.textFocusTimer);
+        this.stage.querySelectorAll("[data-editor-bound]").forEach((element) => {
+          if (BOUND_EDITOR_OWNERS.get(element) !== this) return;
+          BOUND_EDITOR_OWNERS.delete(element);
+          delete element.dataset.editorBound;
+          element.removeAttribute("contenteditable");
+          element.classList.remove("editor-selected");
+        });
+        this.presentation.setEditorInsets?.(zeroInsets());
+        this.presentation.setEditorView?.(normalizeEditorView());
+        this.presentation.__htmlDeckEditorCleanup?.();
+        this.setHostTouchSurfacesDisabled(false);
+        restoreForcedHiddenSlideStates(this.stage);
+        this.restoreStageLayout();
+        this.clearExportDownloadLink();
         Object.values(this.colorPickers || {}).forEach((picker) => picker?.destroy?.());
         this.colorPickers = {};
+        [this.shell, this.toggle, this.hotzone].forEach((element) => element?.remove());
         if (window.editor === this) delete window.editor;
       }
 
@@ -2564,9 +2759,10 @@
       }
 
       bindElement(element) {
-        if (element.dataset.editorBound) return;
+        if (BOUND_EDITOR_OWNERS.get(element) === this) return;
+        BOUND_EDITOR_OWNERS.set(element, this);
         element.dataset.editorBound = "true";
-        element.addEventListener("pointerdown", (event) => {
+        this.addGlobalListener(element, "pointerdown", (event) => {
           if (!this.isActive) return;
           const target = this.getEditableTarget(event.target) || element;
           if (this.formatBrush) {
@@ -2597,7 +2793,7 @@
           this.select(target);
           this.startPointerAction(event, "move");
         });
-        element.addEventListener("click", (event) => {
+        this.addGlobalListener(element, "click", (event) => {
           if (!this.isActive) return;
           const target = this.getEditableTarget(event.target) || element;
           event.stopPropagation();
@@ -2618,7 +2814,7 @@
           }
           event.preventDefault();
         });
-        element.addEventListener("dblclick", (event) => {
+        this.addGlobalListener(element, "dblclick", (event) => {
           if (!this.isActive) return;
           const target = this.getEditableTarget(event.target) || element;
           event.stopPropagation();
@@ -2637,7 +2833,7 @@
             this.focusTextLayer(target);
           }
         });
-        element.addEventListener("input", () => {
+        this.addGlobalListener(element, "input", () => {
           if (!this.isActive) return;
           this.recordContentPatch(element);
           this.saveDraft(false);
@@ -2827,6 +3023,18 @@
           this.cancelFormatBrush();
           return;
         }
+        if (event.key === "Escape" && this.isActive && this.selected) {
+          event.preventDefault();
+          event.stopPropagation();
+          this.clearSelection();
+          return;
+        }
+        if (event.key === "Escape" && this.isActive) {
+          event.preventDefault();
+          event.stopPropagation();
+          this.toggleEditMode(false);
+          return;
+        }
         if ((event.metaKey || event.ctrlKey) && event.key.toLowerCase() === "z" && this.isActive && event.shiftKey && !formTarget) {
           event.preventDefault();
           event.stopPropagation();
@@ -2852,10 +3060,11 @@
           this.toggleEditMode();
           return;
         }
-        if ((event.metaKey || event.ctrlKey) && event.key.toLowerCase() === "s") {
+        if ((event.metaKey || event.ctrlKey) && event.key.toLowerCase() === "s" && this.isActive && !formTarget) {
           event.preventDefault();
           event.stopPropagation();
           this.exportHtml();
+          return;
         }
         if (!this.isActive || formTarget) return;
         if (event.key === "Delete" || event.key === "Backspace") {
@@ -2978,13 +3187,15 @@
       }
 
       stopEditorUiEventLeak(event) {
-        if (!this.isActive || !this.isEditorUiElement(event.target)) return;
-        event.stopPropagation();
+        if (!this.isActive) return;
+        if (this.isEditorUiElement(event.target)) event.stopPropagation();
+        else event.stopImmediatePropagation();
       }
 
       isHostDeckShortcut(event) {
         const key = event.key;
         if (["Escape", " ", "Spacebar", "ArrowUp", "ArrowDown", "ArrowLeft", "ArrowRight", "PageUp", "PageDown", "Home", "End"].includes(key)) return true;
+        if (key?.toLowerCase?.() === "r" || /^[0-9]$/.test(key || "")) return true;
         return key?.toLowerCase?.() === "b" && !event.metaKey && !event.ctrlKey && !event.altKey;
       }
 
@@ -2998,7 +3209,7 @@
           return;
         }
         const key = event.key;
-        if ((event.metaKey || event.ctrlKey) && key.toLowerCase() === "s") {
+        if ((event.metaKey || event.ctrlKey) && key.toLowerCase() === "s" && !this.isFormTarget(event.target)) {
           this.handleKeydown(event);
           event.stopImmediatePropagation();
           return;
@@ -3126,6 +3337,14 @@
         this.isActive = typeof force === "boolean" ? force : !this.isActive;
         document.body.classList.toggle("editing", this.isActive);
         document.body.classList.toggle("editor-on", this.isActive);
+        if (
+          this.isActive &&
+          isDeckStageElement(this.stage) &&
+          this.stage.getAttribute("data-html-deck-editor-navigation") === "horizontal"
+        ) {
+          this.stage.removeAttribute("data-html-deck-editor-navigation");
+        }
+        this.setHostTouchSurfacesDisabled(this.isActive);
         this.toggle.classList.toggle("active", this.isActive);
         this.showButtons();
         if (this.isActive) {
@@ -3156,6 +3375,10 @@
           this.cancelFormatBrush(false);
           this.toggleCommentMode(false);
           this.hideGuides();
+          this.presentation.setEditorInsets?.(zeroInsets());
+          this.restoreStageLayout();
+          syncHostCurrentSlide(this.stage, this.presentation.currentSlide);
+          restoreForcedHiddenSlideStates(this.stage);
           this.saveDraft(false);
           this.clearSelection();
           this.motionHold = false;
@@ -5055,7 +5278,39 @@
       }
 
       activeSlide() {
-        return this.presentation.slides[this.presentation.currentSlide];
+        return this.presentation.slides[this.presentation.currentSlide] || null;
+      }
+
+      requireActiveSlide() {
+        const slide = this.activeSlide();
+        if (!slide) this.toastMessage("未检测到可编辑页面");
+        return slide;
+      }
+
+      setHostTouchSurfacesDisabled(disabled) {
+        if (!disabled) {
+          this.hostTouchSurfaceStates.forEach((state, element) => {
+            element.style.pointerEvents = state.pointerEvents;
+            if (state.ariaHidden === null) element.removeAttribute("aria-hidden");
+            else element.setAttribute("aria-hidden", state.ariaHidden);
+          });
+          this.hostTouchSurfaceStates.clear();
+          return;
+        }
+        const selector = ".tapzone, .tap-zone, .tapzones, [data-tapzone], [data-tap-zone], .tap-back, .tap-forward";
+        const surfaces = [
+          ...document.querySelectorAll(selector),
+          ...(this.stage.shadowRoot?.querySelectorAll(`${selector}, .overlay`) || [])
+        ];
+        surfaces.forEach((element) => {
+          if (this.isEditorUiElement(element) || this.hostTouchSurfaceStates.has(element)) return;
+          this.hostTouchSurfaceStates.set(element, {
+            pointerEvents: element.style.pointerEvents,
+            ariaHidden: element.getAttribute("aria-hidden")
+          });
+          element.style.pointerEvents = "none";
+          element.setAttribute("aria-hidden", "true");
+        });
       }
 
       activeSlideDesignSize(slide = this.activeSlide()) {
@@ -5787,6 +6042,8 @@
       }
 
       addText() {
+        const slide = this.requireActiveSlide();
+        if (!slide) return;
         const layer = document.createElement("div");
         const point = this.nextInsertPoint(460, 110);
         layer.className = "editor-layer text-layer editor-anim-rise";
@@ -5800,7 +6057,7 @@
         layer.style.setProperty("--edit-delay", "0ms");
         layer.style.setProperty("--edit-duration", "640ms");
         layer.textContent = "双击编辑文字";
-        this.activeSlide().appendChild(layer);
+        slide.appendChild(layer);
         this.bindElement(layer);
         this.select(layer);
         this.recordContentPatch(layer, { added: true });
@@ -5808,6 +6065,8 @@
       }
 
       addShape(shape = "rect") {
+        const slide = this.requireActiveSlide();
+        if (!slide) return;
         const layer = document.createElement("div");
         const point = this.nextInsertPoint(280, 180);
         layer.className = "editor-layer shape-layer editor-anim-scale";
@@ -5820,7 +6079,7 @@
         layer.style.top = `${Math.round(point.y)}px`;
         layer.style.setProperty("--edit-delay", "0ms");
         layer.style.setProperty("--edit-duration", "640ms");
-        this.activeSlide().appendChild(layer);
+        slide.appendChild(layer);
         this.bindElement(layer);
         this.select(layer);
         this.recordContentPatch(layer, { added: true });
@@ -5828,6 +6087,8 @@
       }
 
       addImage(dataUrl, x = this.lastInsert.x, y = this.lastInsert.y) {
+        const slide = this.requireActiveSlide();
+        if (!slide) return;
         const point = arguments.length > 1 ? this.clampInsertPoint(x, y, 520, 320) : this.nextInsertPoint(520, 320);
         const wrapper = document.createElement("div");
         wrapper.className = "editor-layer image-layer editor-anim-scale";
@@ -5843,7 +6104,7 @@
         image.src = dataUrl;
         image.alt = "用户添加的图片";
         wrapper.appendChild(image);
-        this.activeSlide().appendChild(wrapper);
+        slide.appendChild(wrapper);
         this.bindElement(wrapper);
         this.select(wrapper);
         this.recordContentPatch(wrapper, { added: true });
@@ -5939,6 +6200,7 @@
           this.toastMessage("把图片拖到画布或图片区来添加");
           return;
         }
+        if (!this.requireActiveSlide()) return;
         let point = this.nextInsertPoint(520, 320);
         if (isStageDrop) {
           const rawPoint = this.stagePointFromClient(event.clientX, event.clientY);
@@ -6429,10 +6691,12 @@
           node.style.removeProperty("--html-deck-editor-current-slide");
           node.style.removeProperty("--html-deck-editor-slide-offset-x");
         });
+        restoreForcedHiddenSlideStates(root);
       }
 
       serialize() {
         const stageClone = this.cloneWithoutEditorView(() => this.stage.cloneNode(true));
+        this.applyAuthoredStageLayout(stageClone);
         this.cleanEditorArtifacts(stageClone);
         const data = {
           stage: stageClone.innerHTML,
@@ -6674,6 +6938,70 @@
         this.controls.redo.disabled = this.hasPendingHistoryChange || this.historyIndex >= this.undoStack.length - 1;
       }
 
+      snapshotNodeKey(node) {
+        if (node?.nodeType !== Node.ELEMENT_NODE) return "";
+        if (node.dataset.editId) return `edit:${node.dataset.editId}`;
+        if (node.dataset.aiAnchor) return `anchor:${node.dataset.aiAnchor}`;
+        return node.id ? `id:${node.id}` : "";
+      }
+
+      canPatchSnapshotNode(target, source) {
+        if (!target || !source || target.nodeType !== source.nodeType) return false;
+        if (target.nodeType !== Node.ELEMENT_NODE) return true;
+        const targetKey = this.snapshotNodeKey(target);
+        const sourceKey = this.snapshotNodeKey(source);
+        if (targetKey || sourceKey) return targetKey === sourceKey;
+        return target.tagName === source.tagName;
+      }
+
+      patchSnapshotAttributes(target, source) {
+        const boundToThisEditor = BOUND_EDITOR_OWNERS.get(target) === this;
+        target.getAttributeNames().forEach((name) => {
+          if (boundToThisEditor && name === "data-editor-bound") return;
+          if (!source.hasAttribute(name)) target.removeAttribute(name);
+        });
+        source.getAttributeNames().forEach((name) => target.setAttribute(name, source.getAttribute(name)));
+        if (boundToThisEditor) target.dataset.editorBound = "true";
+      }
+
+      patchSnapshotNode(target, source) {
+        if (target.nodeType !== Node.ELEMENT_NODE) {
+          if (target.nodeValue !== source.nodeValue) target.nodeValue = source.nodeValue;
+          return;
+        }
+        this.patchSnapshotAttributes(target, source);
+        this.patchSnapshotChildren(target, source);
+      }
+
+      patchSnapshotChildren(targetParent, sourceParent) {
+        const sourceNodes = Array.from(sourceParent.childNodes);
+        sourceNodes.forEach((sourceNode, index) => {
+          let targetNode = targetParent.childNodes[index] || null;
+          const sourceKey = this.snapshotNodeKey(sourceNode);
+          if (sourceKey) {
+            const keyedTarget = Array.from(targetParent.childNodes)
+              .slice(index)
+              .find((candidate) => this.snapshotNodeKey(candidate) === sourceKey);
+            if (keyedTarget && keyedTarget !== targetNode) {
+              targetParent.insertBefore(keyedTarget, targetNode);
+              targetNode = keyedTarget;
+            }
+          }
+          if (this.canPatchSnapshotNode(targetNode, sourceNode)) {
+            this.patchSnapshotNode(targetNode, sourceNode);
+          } else {
+            targetParent.insertBefore(sourceNode.cloneNode(true), targetNode);
+          }
+        });
+        while (targetParent.childNodes.length > sourceNodes.length) targetParent.lastChild.remove();
+      }
+
+      restoreStageMarkup(stageHtml) {
+        const template = document.createElement("template");
+        template.innerHTML = String(stageHtml || "");
+        this.patchSnapshotChildren(this.stage, template.content);
+      }
+
       restoreSnapshot(data) {
         this.hasPendingHistoryChange = false;
         this.comments = this.normalizeComments(data.comments);
@@ -6681,8 +7009,13 @@
           const speakerNotes = document.getElementById("speaker-notes");
           if (speakerNotes) speakerNotes.textContent = data.speakerNotes;
         }
-        this.stage.innerHTML = data.stage;
-        this.cleanEditorArtifacts(this.stage);
+        const preserveHostNodes = this.stage.getAttribute("data-html-deck-editor-stage") === "preserve" ||
+          isDeckStageElement(this.stage) || typeof window.__playSlide === "function";
+        if (preserveHostNodes) this.restoreStageMarkup(data.stage);
+        else {
+          this.stage.innerHTML = data.stage;
+          this.cleanEditorArtifacts(this.stage);
+        }
         this.attachFrame();
         this.selected = null;
         this.presentation.slides = stageSlides(this.stage);
@@ -6706,6 +7039,7 @@
 
       cleanCloneForExport(clone, options = {}) {
         const preserveAiAnchors = options.preserveAiAnchors === true;
+        this.applyAuthoredStageLayout(this.stageInClone(clone));
         if (options.stripExportAssets === true) clone.querySelector("#html-deck-editor-export-assets")?.remove();
         clone.querySelectorAll([
           "[data-generated-chrome]",
@@ -6797,6 +7131,7 @@
           node.style.removeProperty("--deck-stage-inset-top");
           node.style.removeProperty("--deck-stage-inset-bottom");
         });
+        restoreForcedHiddenSlideStates(clone);
         const body = clone.querySelector("body");
         if (body) body.classList.remove("editing", "editor-on", "dragging-file", "commenting", "editor-canvas-zoomed", "editor-canvas-panning");
       }
@@ -7161,9 +7496,15 @@
 
       async waitForExportFonts() {
         await this.fontLibraryReady;
-        const pending = Array.from(this.onlineFontPromises.values());
+        const usedFonts = ONLINE_FONTS.filter((font) => {
+          const link = document.querySelector(`link[data-html-deck-editor-online-font="${font.id}"]`);
+          return Boolean(link && this.stageUsesFontFamily(font.family));
+        });
+        const usedIds = new Set(usedFonts.map((font) => font.id));
+        const pending = usedFonts.map((font) => this.onlineFontPromises.get(font.id)).filter(Boolean);
         if (pending.length) await Promise.all(pending);
-        const failed = document.querySelector("link[data-html-deck-editor-online-font][data-html-deck-editor-font-state='error']");
+        const failed = Array.from(document.querySelectorAll("link[data-html-deck-editor-online-font][data-html-deck-editor-font-state='error']"))
+          .find((link) => usedIds.has(link.dataset.htmlDeckEditorOnlineFont));
         if (failed) {
           const font = ONLINE_FONTS.find((item) => item.id === failed.dataset.htmlDeckEditorOnlineFont);
           throw new Error(`联网字体“${font?.label || "未知字体"}”加载失败，已停止导出`);
@@ -7174,6 +7515,21 @@
             new Promise((_, reject) => window.setTimeout(() => reject(new Error("字体加载超时，已停止导出")), 15000))
           ]);
         }
+      }
+
+      stageUsesFontFamily(family) {
+        const expected = String(family || "").trim().toLowerCase();
+        if (!expected || !this.stage) return false;
+        const elements = [this.stage, ...this.stage.querySelectorAll("*")];
+        return elements.some((element) => {
+          let value = "";
+          try {
+            value = getComputedStyle(element).fontFamily || element.style?.fontFamily || "";
+          } catch (error) {
+            value = element.style?.fontFamily || "";
+          }
+          return String(value).split(",").some((name) => name.trim().replace(/^['"]|['"]$/g, "").toLowerCase() === expected);
+        });
       }
 
       waitForAnimationFrames(count = 1) {
@@ -7828,6 +8184,10 @@
       downloadBlob(blob, filename) {
         const link = document.createElement("a");
         const objectUrl = URL.createObjectURL(blob);
+        let revokeTimer = null;
+        const releaseAfterFocus = () => {
+          if (!download.keepAlive) download.revoke();
+        };
         const download = {
           href: objectUrl,
           filename,
@@ -7836,6 +8196,8 @@
           revoke() {
             if (download.revoked) return;
             download.revoked = true;
+            window.clearTimeout(revokeTimer);
+            window.removeEventListener("focus", releaseAfterFocus);
             URL.revokeObjectURL(objectUrl);
           }
         };
@@ -7844,18 +8206,22 @@
         link.style.display = "none";
         document.body.appendChild(link);
         link.click();
-        window.setTimeout(() => {
-          link.remove();
+        window.setTimeout(() => link.remove(), 0);
+        window.addEventListener("focus", releaseAfterFocus, { once: true });
+        revokeTimer = window.setTimeout(() => {
           if (!download.keepAlive) download.revoke();
-        }, 1000);
+        }, 60000);
         return download;
       }
 
       toHex(value) {
         if (!value || value === "transparent" || value === "rgba(0, 0, 0, 0)") return "#ffffff";
-        const match = value.match(/rgba?\((\d+),\s*(\d+),\s*(\d+)/);
+        const match = value.match(/rgba?\(\s*(\d+(?:\.\d+)?)\s*,\s*(\d+(?:\.\d+)?)\s*,\s*(\d+(?:\.\d+)?)(?:\s*,\s*(\d*(?:\.\d+)?))?\s*\)/i);
         if (!match) return value.startsWith("#") ? value : "#111111";
-        return [1, 2, 3].map((index) => Number(match[index]).toString(16).padStart(2, "0")).join("").replace(/^/, "#");
+        const color = [1, 2, 3].map((index) => Math.round(Math.max(0, Math.min(255, Number(match[index])))).toString(16).padStart(2, "0")).join("");
+        if (match[4] === undefined || Number(match[4]) >= 1) return `#${color}`;
+        const alpha = Math.round(Math.max(0, Math.min(1, Number(match[4]) || 0)) * 255).toString(16).padStart(2, "0");
+        return `#${color}${alpha}`;
       }
 
       toastMessage(message, options = {}) {

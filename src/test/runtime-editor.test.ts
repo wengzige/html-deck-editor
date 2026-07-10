@@ -479,6 +479,39 @@ describe("editor runtime", () => {
     expect(scale).toBeLessThan(1);
   });
 
+  it("uses the deck-stage goTo API so its internal index stays synchronized", () => {
+    document.body.innerHTML = `
+      <deck-stage id="deckStage" data-html-deck-editor-stage="preserve" data-html-deck-editor-navigation="horizontal">
+        <section class="slide" data-deck-active><h1>One</h1></section>
+        <section class="slide"><h1>Two</h1></section>
+      </deck-stage>
+    `;
+    const stage = document.getElementById("deckStage") as any;
+    stage.index = 0;
+    stage.goTo = vi.fn((index: number) => {
+      stage.index = index;
+      Array.from(stage.children).forEach((slide: any, slideIndex) => {
+        slide.toggleAttribute("data-deck-active", slideIndex === index);
+      });
+    });
+
+    installRuntime();
+    const editor = (window as any).FrontendSlidesEditor.mount();
+    editor.toggleEditMode(true);
+    expect(stage.hasAttribute("data-html-deck-editor-navigation")).toBe(false);
+    editor.presentation.showSlide(1);
+
+    expect(stage.goTo).toHaveBeenCalledWith(1);
+    expect(stage.index).toBe(1);
+    expect(editor.presentation.currentSlide).toBe(1);
+    expect(stage.children[1].hasAttribute("data-html-deck-editor-current")).toBe(true);
+
+    const html = editor.buildExportHtml();
+    expect(html).toContain('data-html-deck-editor-navigation="horizontal"');
+    editor.toggleEditMode(false);
+    expect(stage.getAttribute("data-html-deck-editor-navigation")).toBe("horizontal");
+  });
+
   it("keeps preserved horizontal slides addressable in edit mode without removing later pages", () => {
     document.body.innerHTML = `
       <div id="deck" data-html-deck-editor-stage="preserve" data-html-deck-editor-navigation="horizontal" style="transform:translateX(-200vw)">
@@ -550,6 +583,29 @@ describe("editor runtime", () => {
     expect(sourceSlides[1].style.visibility).toBe("");
     expect(sourceSlides[1].style.opacity).toBe("");
     expect(sourceSlides[1].hasAttribute("data-html-deck-editor-current")).toBe(true);
+
+    const draftRoot = document.createElement("div");
+    draftRoot.innerHTML = editor.serialize().stage;
+    const draftSlide = draftRoot.querySelectorAll(".slide")[1] as HTMLElement;
+    expect(draftSlide.hasAttribute("hidden")).toBe(true);
+    expect(draftSlide.getAttribute("aria-hidden")).toBeNull();
+    expect(draftSlide.classList.contains("hidden")).toBe(true);
+    expect(draftSlide.classList.contains("opacity-0")).toBe(true);
+    expect(draftSlide.classList.contains("invisible")).toBe(true);
+    expect(draftSlide.style.display).toBe("none");
+    expect(draftSlide.style.visibility).toBe("hidden");
+    expect(draftSlide.style.opacity).toBe("0");
+
+    const exportDoc = new DOMParser().parseFromString(editor.buildExportHtml(), "text/html");
+    const exportedSlide = exportDoc.querySelectorAll(".slide")[1] as HTMLElement;
+    expect(exportedSlide.hasAttribute("hidden")).toBe(true);
+    expect(exportedSlide.classList.contains("hidden")).toBe(true);
+    expect(exportedSlide.style.display).toBe("none");
+
+    editor.toggleEditMode(false);
+    expect(sourceSlides[1].hasAttribute("hidden")).toBe(true);
+    expect(sourceSlides[1].classList.contains("hidden")).toBe(true);
+    expect(sourceSlides[1].style.display).toBe("none");
   });
 
   it("binds editable text after navigating to a slide that was originally hidden", () => {
@@ -1048,6 +1104,30 @@ describe("editor runtime", () => {
     expect(html).not.toContain("--html-deck-editor-current-slide");
   });
 
+  it("restores authored transforms when exporting a non-preserved stage", () => {
+    document.body.innerHTML = `
+      <div id="deckStage" class="deck-stage" style="transform:rotate(2deg);transform-origin:center center">
+        <section class="slide active"><h1>Authored transform</h1></section>
+      </div>
+    `;
+
+    installRuntime();
+    const editor = (window as any).FrontendSlidesEditor.mount();
+    editor.toggleEditMode(true);
+    const liveStage = document.getElementById("deckStage") as HTMLElement;
+    expect(liveStage.style.transform).not.toBe("rotate(2deg)");
+
+    const html = editor.buildExportHtml();
+    const doc = new DOMParser().parseFromString(html, "text/html");
+    const exportedStage = doc.getElementById("deckStage") as HTMLElement;
+
+    expect(exportedStage.style.transform).toBe("rotate(2deg)");
+    expect(exportedStage.style.transformOrigin).toBe("center center");
+    expect(exportedStage.hasAttribute("data-scale")).toBe(false);
+    expect(exportedStage.hasAttribute("data-offset-x")).toBe(false);
+    expect(exportedStage.hasAttribute("data-offset-y")).toBe(false);
+  });
+
   it("exports preserved horizontal decks from a clean first-slide position", () => {
     document.body.innerHTML = `
       <div id="deck" data-html-deck-editor-stage="preserve" data-html-deck-editor-navigation="horizontal">
@@ -1229,6 +1309,7 @@ describe("editor runtime", () => {
     installRuntime();
     const editor = (window as any).FrontendSlidesEditor.mount();
     editor.toggleEditMode(true);
+    editor.select(document.getElementById("title") as HTMLElement);
 
     const keySpy = vi.fn();
     window.addEventListener("keydown", keySpy);
@@ -1237,8 +1318,74 @@ describe("editor runtime", () => {
     document.dispatchEvent(new KeyboardEvent("keydown", { bubbles: true, key: "ArrowRight" }));
     document.dispatchEvent(new KeyboardEvent("keydown", { bubbles: true, key: "PageDown" }));
     document.dispatchEvent(new KeyboardEvent("keydown", { bubbles: true, key: "b" }));
+    document.dispatchEvent(new KeyboardEvent("keydown", { bubbles: true, key: "r" }));
+    document.dispatchEvent(new KeyboardEvent("keydown", { bubbles: true, key: "4" }));
 
     expect(keySpy).not.toHaveBeenCalled();
+  });
+
+  it("handles Escape as popup, selection, then edit-mode exit", () => {
+    document.body.innerHTML = `
+      <div id="deckStage" class="deck-stage">
+        <section class="slide active"><h1 id="title">Escape</h1></section>
+      </div>
+    `;
+
+    installRuntime();
+    const editor = (window as any).FrontendSlidesEditor.mount();
+    editor.toggleEditMode(true);
+    editor.select(document.getElementById("title") as HTMLElement);
+    editor.openHelp();
+
+    document.dispatchEvent(new KeyboardEvent("keydown", { bubbles: true, cancelable: true, key: "Escape" }));
+    expect(editor.controls.helpModal.hidden).toBe(true);
+    expect(editor.selected?.id).toBe("title");
+    expect(editor.isActive).toBe(true);
+
+    document.dispatchEvent(new KeyboardEvent("keydown", { bubbles: true, cancelable: true, key: "Escape" }));
+    expect(editor.selected).toBeNull();
+    expect(editor.isActive).toBe(true);
+
+    document.dispatchEvent(new KeyboardEvent("keydown", { bubbles: true, cancelable: true, key: "Escape" }));
+    expect(editor.isActive).toBe(false);
+  });
+
+  it("blocks host touch navigation and restores tap surfaces after editing", () => {
+    document.body.innerHTML = `
+      <button class="tapzone" style="pointer-events:auto" aria-hidden="false">Next</button>
+      <deck-stage id="deckStage">
+        <section class="slide active"><h1>Touch</h1></section>
+      </deck-stage>
+    `;
+    const stage = document.getElementById("deckStage") as HTMLElement;
+    const shadow = stage.attachShadow({ mode: "open" });
+    shadow.innerHTML = `
+      <button class="tapzone" style="pointer-events:auto">Tap</button>
+      <button class="overlay" style="pointer-events:all">Overlay</button>
+    `;
+    const tapzone = document.querySelector(".tapzone") as HTMLElement;
+    const shadowTapzone = shadow.querySelector(".tapzone") as HTMLElement;
+    const overlay = shadow.querySelector(".overlay") as HTMLElement;
+    const hostTouch = vi.fn();
+    window.addEventListener("touchstart", hostTouch);
+
+    installRuntime();
+    const editor = (window as any).FrontendSlidesEditor.mount();
+    editor.toggleEditMode(true);
+
+    expect(tapzone.style.pointerEvents).toBe("none");
+    expect(tapzone.getAttribute("aria-hidden")).toBe("true");
+    expect(shadowTapzone.style.pointerEvents).toBe("none");
+    expect(overlay.style.pointerEvents).toBe("none");
+    stage.querySelector(".slide")?.dispatchEvent(new Event("touchstart", { bubbles: true }));
+    expect(hostTouch).not.toHaveBeenCalled();
+
+    editor.toggleEditMode(false);
+    expect(tapzone.style.pointerEvents).toBe("auto");
+    expect(tapzone.getAttribute("aria-hidden")).toBe("false");
+    expect(shadowTapzone.style.pointerEvents).toBe("auto");
+    expect(overlay.style.pointerEvents).toBe("all");
+    expect(overlay.hasAttribute("aria-hidden")).toBe(false);
   });
 
   it("handles the physical E shortcut before host capture handlers can swallow it", () => {
@@ -1751,6 +1898,42 @@ describe("editor runtime", () => {
 
     expect(toCanvas).toHaveBeenCalledOnce();
     expect(download).toHaveBeenCalledWith(expect.any(Blob), "OpenMCIA-E2E-Preview-page-01.png");
+  });
+
+  it("does not crop export to a fixed-size shell that is outside the slide", async () => {
+    document.body.innerHTML = `
+      <div id="deckStage" class="deck-stage" data-html-deck-editor-stage="preserve">
+        <section class="slide active">
+          <div id="shell" class="slide-html-shell" style="width:1000px;height:562.5px;position:relative">
+            <h1>Offscreen shell</h1>
+          </div>
+        </section>
+      </div>
+    `;
+    const slide = document.querySelector(".slide") as HTMLElement;
+    const shell = document.getElementById("shell") as HTMLElement;
+    slide.getBoundingClientRect = () => rect({ left: 0, top: 0, width: 1440, height: 900 });
+    shell.getBoundingClientRect = () => rect({ left: 1800, top: 0, width: 1000, height: 562.5 });
+
+    installRuntime();
+    const editor = (window as any).FrontendSlidesEditor.mount();
+    const canvas = {
+      width: 2880,
+      height: 1800,
+      toBlob: vi.fn((callback: (blob: Blob) => void) => callback(new Blob(["png"], { type: "image/png" }))),
+      toDataURL: vi.fn(() => "data:image/png;base64,AA==")
+    };
+    const toCanvas = vi.fn(async (_node: HTMLElement) => canvas);
+    vi.stubGlobal("htmlToImage", { toCanvas });
+    vi.stubGlobal("requestAnimationFrame", (callback: FrameRequestCallback) => { callback(0); return 1; });
+    vi.spyOn(editor, "downloadBlob").mockImplementation(() => undefined);
+
+    editor.openExportModal();
+    (editor.controls.exportModal.querySelector("input[value='png']") as HTMLInputElement).checked = true;
+    await editor.exportSelectedPages();
+
+    expect(toCanvas).toHaveBeenCalledOnce();
+    expect(toCanvas.mock.calls[0][0]).toBe(slide);
   });
 
   it("restores preserved-stage editor zoom layout after export", async () => {
@@ -2453,7 +2636,7 @@ describe("editor runtime", () => {
   });
 
   it("stops export when a managed online font is marked as failed", async () => {
-    document.body.innerHTML = `<div id="deckStage" class="deck-stage"><section class="slide active"><h1>Font</h1></section></div>`;
+    document.body.innerHTML = `<div id="deckStage" class="deck-stage"><section class="slide active"><h1 style="font-family:'Noto Serif SC'">Font</h1></section></div>`;
     installRuntime();
     const editor = (window as any).FrontendSlidesEditor.mount();
     const link = document.createElement("link");
@@ -2461,6 +2644,17 @@ describe("editor runtime", () => {
     link.dataset.htmlDeckEditorFontState = "error";
     document.head.appendChild(link);
     await expect(editor.waitForExportFonts()).rejects.toThrow("思源宋体");
+  });
+
+  it("ignores failed managed online fonts that the deck does not use", async () => {
+    document.body.innerHTML = `<div id="deckStage" class="deck-stage"><section class="slide active"><h1 style="font-family:Arial">Font</h1></section></div>`;
+    installRuntime();
+    const editor = (window as any).FrontendSlidesEditor.mount();
+    const link = document.createElement("link");
+    link.dataset.htmlDeckEditorOnlineFont = "noto-serif-sc";
+    link.dataset.htmlDeckEditorFontState = "error";
+    document.head.appendChild(link);
+    await expect(editor.waitForExportFonts()).resolves.toBeUndefined();
   });
 
   it("renders picker controls and high-contrast edit outlines", () => {
@@ -2723,6 +2917,36 @@ describe("editor runtime", () => {
     expect((document.getElementById("title") as HTMLElement).textContent).toBe("原始标题");
   });
 
+  it("undoes preserved deck edits without replacing cached host nodes", () => {
+    document.body.innerHTML = `
+      <div id="deckStage" class="deck-stage" data-html-deck-editor-stage="preserve">
+        <section class="slide active">
+          <h1 id="title" data-editable>Initial</h1>
+          <button id="hostButton" type="button">Host action</button>
+        </section>
+      </div>
+    `;
+    const hostButton = document.getElementById("hostButton") as HTMLButtonElement;
+    const hostAction = vi.fn();
+    hostButton.addEventListener("click", hostAction);
+
+    installRuntime();
+    const editor = (window as any).FrontendSlidesEditor.mount();
+    editor.toggleEditMode(true);
+    const title = document.getElementById("title") as HTMLElement;
+    title.textContent = "First edit";
+    title.dispatchEvent(new Event("input", { bubbles: true }));
+    title.textContent = "Second edit";
+    title.dispatchEvent(new Event("input", { bubbles: true }));
+
+    editor.undo();
+
+    expect(document.getElementById("title")?.textContent).toBe("First edit");
+    expect(document.getElementById("hostButton")).toBe(hostButton);
+    hostButton.click();
+    expect(hostAction).toHaveBeenCalledOnce();
+  });
+
   it("keeps undo available when browser draft storage is unavailable", () => {
     document.body.innerHTML = `
       <div id="deckStage" class="deck-stage">
@@ -2797,7 +3021,7 @@ describe("editor runtime", () => {
     expect(html).toContain(imageData);
   });
 
-  it("handles Ctrl+S from the inspector instead of opening the browser save dialog", () => {
+  it("handles Ctrl+S only from the active canvas", () => {
     document.body.innerHTML = `
       <div id="deckStage" class="deck-stage">
         <section class="slide active">
@@ -2813,12 +3037,52 @@ describe("editor runtime", () => {
     editor.toggleEditMode(true);
     editor.select(title);
     const exportHtml = vi.spyOn(editor, "exportHtml").mockResolvedValue(undefined);
-    const event = new KeyboardEvent("keydown", { key: "s", ctrlKey: true, bubbles: true, cancelable: true });
+    const canvasEvent = new KeyboardEvent("keydown", { key: "s", ctrlKey: true, bubbles: true, cancelable: true });
 
-    document.getElementById("textInput")?.dispatchEvent(event);
-
-    expect(event.defaultPrevented).toBe(true);
+    document.body.dispatchEvent(canvasEvent);
+    expect(canvasEvent.defaultPrevented).toBe(true);
     expect(exportHtml).toHaveBeenCalledOnce();
+
+    const inspectorEvent = new KeyboardEvent("keydown", { key: "s", ctrlKey: true, bubbles: true, cancelable: true });
+    document.getElementById("textInput")?.dispatchEvent(inspectorEvent);
+    expect(inspectorEvent.defaultPrevented).toBe(false);
+    expect(exportHtml).toHaveBeenCalledOnce();
+
+    editor.toggleEditMode(false);
+    const inactiveEvent = new KeyboardEvent("keydown", { key: "s", ctrlKey: true, bubbles: true, cancelable: true });
+    document.body.dispatchEvent(inactiveEvent);
+    expect(inactiveEvent.defaultPrevented).toBe(false);
+    expect(exportHtml).toHaveBeenCalledOnce();
+  });
+
+  it("uses direct section and article children as slide fallbacks", () => {
+    document.body.innerHTML = `
+      <div id="deckStage" class="deck-stage">
+        <section id="first"><h1>Section page</h1></section>
+        <article id="second"><h1>Article page</h1></article>
+      </div>
+    `;
+
+    installRuntime();
+    const editor = (window as any).FrontendSlidesEditor.mount();
+    editor.toggleEditMode(true);
+
+    expect(editor.presentation.slides.map((slide: HTMLElement) => slide.id)).toEqual(["first", "second"]);
+    editor.addText();
+    expect(document.querySelector("#first .editor-layer.text-layer")).toBeTruthy();
+  });
+
+  it("guards add operations when the stage has no slides", () => {
+    document.body.innerHTML = `<div id="deckStage" class="deck-stage"></div>`;
+
+    installRuntime();
+    const editor = (window as any).FrontendSlidesEditor.mount();
+    editor.toggleEditMode(true);
+
+    expect(() => editor.addText()).not.toThrow();
+    expect(() => editor.addShape()).not.toThrow();
+    expect(() => editor.addImage("data:image/png;base64,AA==")).not.toThrow();
+    expect(document.getElementById("editorToast")?.textContent).toContain("未检测到可编辑页面");
   });
 
   it("clicks a connected download link and revokes its object URL after the click", () => {
@@ -2843,9 +3107,20 @@ describe("editor runtime", () => {
     expect(connectedWhenClicked).toBe(true);
     expect(document.querySelector('a[download="index.html"]')).toBeTruthy();
     expect(revokeObjectURL).not.toHaveBeenCalled();
-    vi.runAllTimers();
+    vi.advanceTimersByTime(1000);
     expect(document.querySelector('a[download="index.html"]')).toBeNull();
+    expect(revokeObjectURL).not.toHaveBeenCalled();
+    window.dispatchEvent(new Event("focus"));
     expect(revokeObjectURL).toHaveBeenCalledWith("blob:test-download");
+  });
+
+  it("preserves alpha when normalizing semi-transparent colors", () => {
+    document.body.innerHTML = `<div id="deckStage" class="deck-stage"><section class="slide active"><h1>Color</h1></section></div>`;
+    installRuntime();
+    const editor = (window as any).FrontendSlidesEditor.mount();
+
+    expect(editor.toHex("rgba(17, 34, 51, 0.5)")).toBe("#11223380");
+    expect(editor.toHex("rgb(17, 34, 51)")).toBe("#112233");
   });
 
   it("does not treat user content with editor-like IDs as editor chrome", () => {
