@@ -385,10 +385,13 @@ This repository open-sources and maintains Anchor Deck's core converter, file de
 ## Development
 
 ```bash
-npm install
+npm ci
 npm test
 npm run typecheck
+npm run test:final-samples
 ```
+
+`test:final-samples` covers Reveal, Impress, regular fixed stages, and content recovery after a host rebuilds the DOM. Public CI runs the full tests and type checks on Linux and Windows.
 
 Code layout:
 
@@ -404,6 +407,18 @@ docs/           HTML deck contract and public documentation
 
 ```bash
 npm --prefix mcp run check:boundary
+```
+
+Editor recognition is exposed through a stable public API. External adapters should not call private `DeckEditor` methods:
+
+```js
+window.HtmlDeckEditor.recognition = {
+  prepare,
+  elements,
+  kindFor,
+  labelFor,
+  getEditableTarget
+};
 ```
 
 ## Acknowledgements

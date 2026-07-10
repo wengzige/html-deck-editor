@@ -16,6 +16,7 @@
   },
   "scripts": {
     "test": "vitest run",
+    "test:final-samples": "vitest run src/test/detector.test.ts src/test/repro-image-loss.test.ts src/test/runtime-lifecycle.test.ts",
     "typecheck": "tsc -b"
   },
   "dependencies": {

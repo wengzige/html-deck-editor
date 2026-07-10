@@ -327,10 +327,13 @@ Anchor Deck 适合这些场景：
 ## 本地开发
 
 ```bash
-npm install
+npm ci
 npm test
 npm run typecheck
+npm run test:final-samples
 ```
+
+`test:final-samples` 覆盖 Reveal、Impress、普通固定舞台，以及宿主重建 DOM 后的内容恢复。公开 CI 会在 Linux 和 Windows 上执行完整测试与类型检查。
 
 代码结构：
 
@@ -346,6 +349,18 @@ docs/           HTML deck 结构契约
 
 ```bash
 npm --prefix mcp run check:boundary
+```
+
+编辑器识别能力通过稳定的公共 API 暴露，外部适配器不应调用 `DeckEditor` 私有方法：
+
+```js
+window.HtmlDeckEditor.recognition = {
+  prepare,
+  elements,
+  kindFor,
+  labelFor,
+  getEditableTarget
+};
 ```
 
 ## 致谢
