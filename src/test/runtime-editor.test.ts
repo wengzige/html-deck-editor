@@ -3139,6 +3139,41 @@ describe("editor runtime", () => {
     expect(exportHtml).toHaveBeenCalledOnce();
   });
 
+  it("reports unsaved file changes until the current source baseline is marked saved", () => {
+    document.body.innerHTML = `
+      <div id="deckStage" class="deck-stage">
+        <section class="slide active"><h1 id="title">Original</h1></section>
+        <section class="slide"><h2>Second</h2></section>
+      </div>
+    `;
+    const title = document.getElementById("title") as HTMLElement;
+    title.getBoundingClientRect = () => rect({ left: 100, top: 100, width: 500, height: 100 });
+
+    installRuntime();
+    const editor = (window as any).FrontendSlidesEditor.mount();
+
+    expect(editor.hasUnsavedChanges()).toBe(false);
+    editor.presentation.showSlide(1);
+    expect(editor.hasUnsavedChanges()).toBe(false);
+    title.textContent = "Changed locally";
+    expect(editor.hasUnsavedChanges()).toBe(true);
+    const discard = vi.fn();
+    editor.showExternalFileChangeWarning(discard);
+    expect(editor.controls.confirmTitle.textContent).toContain("HTML 文件已在外部更新");
+    expect(editor.controls.confirmCancel.textContent).toBe("保留当前编辑");
+    expect(editor.controls.confirmOk.textContent).toBe("放弃并刷新");
+    editor.controls.confirmOk.click();
+    expect(discard).toHaveBeenCalledOnce();
+    editor.saveDraft(false, true);
+    const oldDraft = JSON.parse(localStorage.getItem(editor.storageKey) || "{}");
+    editor.markSourceSaved();
+    expect(editor.hasUnsavedChanges()).toBe(false);
+    const alignedDraft = JSON.parse(localStorage.getItem(editor.storageKey) || "{}");
+    expect(alignedDraft.sourceFingerprint).not.toBe(oldDraft.sourceFingerprint);
+    expect(alignedDraft.sourceFingerprint).toBe(editor.sourceFingerprint);
+    expect(editor.draftRestoreStatus(alignedDraft)).toBe("current");
+  });
+
   it("uses direct section and article children as slide fallbacks", () => {
     document.body.innerHTML = `
       <div id="deckStage" class="deck-stage">
@@ -3246,6 +3281,7 @@ describe("editor runtime", () => {
     document.documentElement.setAttribute("data-codex-fixed-deck-viewport", "true");
     document.documentElement.style.setProperty("--codex-workbench-scale", "0.58");
     document.body.setAttribute("data-codex-workspace-open", "true");
+    document.head.insertAdjacentHTML("beforeend", '<meta name="codex-mtime" content="123" data-codex-editor-runtime>');
     document.body.innerHTML = `
       <style id="codexBridgeStyle">.codex-bridge-selected { outline: 2px solid pink; }</style>
       <style id="codexWorkspaceStyle">.codex-workspace-panel { width: 360px; }</style>
@@ -3283,6 +3319,7 @@ describe("editor runtime", () => {
     expect(html).not.toContain("codex-workspace-panel");
     expect(html).not.toContain("data-codex-save-target");
     expect(html).not.toContain("data-codex-preview-navigation");
+    expect(html).not.toContain("codex-mtime");
     expect(html).not.toContain("codexWorkspaceStyle");
     expect(html).not.toContain("codexBridgeStyle");
     expect(html).not.toContain("codexBridgeBadge");

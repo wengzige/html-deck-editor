@@ -1426,6 +1426,7 @@
         this.historyCharacterLimit = 8_000_000;
         this.contentPatches = new Map();
         this.draftStorageWarning = "";
+        this.sourceStateSignature = "";
         this.hostSlideObserver = null;
         this.hostTouchSurfaceStates = new Map();
         this.lastInsert = { x: 720, y: 300 };
@@ -1589,6 +1590,7 @@
         this.prepareEditableElements();
         this.prepareEditableIds();
         this.sourceFingerprint = this.currentSourceFingerprint();
+        this.sourceStateSignature = this.currentSourceStateSignature();
         const embeddedFonts = this.restoreManagedFonts();
         this.fontLibraryReady = this.restoreReusableFonts(embeddedFonts);
         this.renderTextColorPalette();
@@ -3232,6 +3234,17 @@
         this.controls.confirmOk.textContent = okText;
         this.showModal(this.controls.confirmModal);
         this.controls.confirmCancel.focus({ preventScroll: true });
+      }
+
+      showExternalFileChangeWarning(onDiscard) {
+        this.openConfirm({
+          title: "HTML 文件已在外部更新",
+          message: "检测到 index.html 已被 Codex 或其他程序更新。当前手动编辑尚未写入文件，自动刷新已暂停，避免丢失内容。\n\n选择“保留当前编辑”后，请先保存 HTML，或切换到 Codex 协作完成自动保存；选择“放弃并刷新”会立即载入外部新文件。",
+          cancelText: "保留当前编辑",
+          primaryCancel: true,
+          okText: "放弃并刷新",
+          action: onDiscard
+        });
       }
 
       closeConfirm() {
@@ -6821,6 +6834,27 @@
         const speakerNotes = document.getElementById("speaker-notes");
         if (speakerNotes) data.speakerNotes = speakerNotes.textContent || "";
         return data;
+      }
+
+      currentSourceStateSignature() {
+        const speakerNotes = document.getElementById("speaker-notes");
+        return JSON.stringify({
+          stageFingerprint: this.currentSourceFingerprint(),
+          comments: this.normalizeComments(this.comments),
+          speakerNotes: speakerNotes?.textContent || ""
+        });
+      }
+
+      hasUnsavedChanges() {
+        if (this.hasPendingHistoryChange) return true;
+        return this.currentSourceStateSignature() !== this.sourceStateSignature;
+      }
+
+      markSourceSaved() {
+        this.sourceFingerprint = this.currentSourceFingerprint();
+        this.sourceStateSignature = this.currentSourceStateSignature();
+        this.persistDraftData(this.serialize());
+        return this.sourceFingerprint;
       }
 
       cloneWithoutEditorView(makeClone) {
