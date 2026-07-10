@@ -56,6 +56,7 @@
   const VALIDATE_ATTR = 'no_overflowing_text,no_overlapping_text,slide_sized_text';
 
   const pad2 = (n) => String(n).padStart(2, '0');
+  let printPageSequence = 0;
 
   const stylesheet = `
     :host {
@@ -227,9 +228,9 @@
        The screen layout stacks every slide at inset:0 inside a scaled
        canvas; for print we want them in document flow at the authored
        design size so the browser paginates one slide per sheet. The
-       @page size is set from the width/height attributes via the inline
-       <style id="deck-stage-print-page"> that connectedCallback injects
-       into <head> (the @page at-rule has no effect inside shadow DOM). */
+       @page size is set from the width/height attributes via an instance-owned
+       named-page <style> that connectedCallback injects into <head> (the
+       @page at-rule has no effect inside shadow DOM). */
     @media print {
       :host {
         position: static;
@@ -280,6 +281,10 @@
       this._editorView = { zoom: 1, offsetX: 0, offsetY: 0 };
       this._hideTimer = null;
       this._mouseIdleTimer = null;
+      this._connected = false;
+      const printPageIndex = ++printPageSequence;
+      this._printPageName = `deck-stage-page-${printPageIndex}`;
+      this._printStyleId = `deck-stage-print-page-${printPageIndex}`;
 
       this._onKey = this._onKey.bind(this);
       this._onResize = this._onResize.bind(this);
@@ -287,6 +292,9 @@
       this._onMouseMove = this._onMouseMove.bind(this);
       this._onTapBack = this._onTapBack.bind(this);
       this._onTapForward = this._onTapForward.bind(this);
+      this._onPreviousClick = this._onPreviousClick.bind(this);
+      this._onNextClick = this._onNextClick.bind(this);
+      this._onResetClick = this._onResetClick.bind(this);
     }
 
     get designWidth() {
@@ -298,34 +306,39 @@
 
     connectedCallback() {
       this._render();
+      if (this._connected) return;
+      this._connected = true;
+      this._connectEvents();
       this._loadNotes();
       this._syncPrintPageRule();
-      window.addEventListener('keydown', this._onKey);
-      window.addEventListener('resize', this._onResize);
-      window.addEventListener('mousemove', this._onMouseMove, { passive: true });
-      // Initial collection + layout happens via slotchange, which fires on mount.
+      this.refreshSlides(this._slides[this._index] || null, { reason: 'init' });
     }
 
     disconnectedCallback() {
-      window.removeEventListener('keydown', this._onKey);
-      window.removeEventListener('resize', this._onResize);
-      window.removeEventListener('mousemove', this._onMouseMove);
+      this._connected = false;
+      this._disconnectEvents();
+      this._removePrintPageRule();
       if (this._hideTimer) clearTimeout(this._hideTimer);
       if (this._mouseIdleTimer) clearTimeout(this._mouseIdleTimer);
+      this._hideTimer = null;
+      this._mouseIdleTimer = null;
+      this._overlay?.removeAttribute('data-visible');
     }
 
     attributeChangedCallback() {
       if (this._canvas) {
-        this._canvas.style.width = this.designWidth + 'px';
-        this._canvas.style.height = this.designHeight + 'px';
-        this._canvas.style.setProperty('--deck-design-w', this.designWidth + 'px');
-        this._canvas.style.setProperty('--deck-design-h', this.designHeight + 'px');
+        this._syncCanvasSize();
         this._fit();
         this._syncPrintPageRule();
       }
     }
 
     _render() {
+      if (this._stage && this._canvas && this._slot && this._overlay) {
+        this._syncCanvasSize();
+        return;
+      }
+      this._root.replaceChildren();
       const style = document.createElement('style');
       style.textContent = stylesheet;
 
@@ -334,13 +347,8 @@
 
       const canvas = document.createElement('div');
       canvas.className = 'canvas';
-      canvas.style.width = this.designWidth + 'px';
-      canvas.style.height = this.designHeight + 'px';
-      canvas.style.setProperty('--deck-design-w', this.designWidth + 'px');
-      canvas.style.setProperty('--deck-design-h', this.designHeight + 'px');
 
       const slot = document.createElement('slot');
-      slot.addEventListener('slotchange', this._onSlotChange);
       canvas.appendChild(slot);
       stage.appendChild(canvas);
 
@@ -356,8 +364,6 @@
       tzMid.style.pointerEvents = 'none';
       const tzFwd = document.createElement('div');
       tzFwd.className = 'tapzone tapzone--fwd';
-      tzBack.addEventListener('click', this._onTapBack);
-      tzFwd.addEventListener('click', this._onTapForward);
       tapzones.append(tzBack, tzMid, tzFwd);
 
       // Overlay: compact, solid black, with clickable controls.
@@ -378,35 +384,79 @@
         <button class="btn reset" type="button" aria-label="Reset to first slide" title="Reset (R)">Reset<span class="kbd">R</span></button>
       `;
 
-      overlay.querySelector('.prev').addEventListener('click', () => this._go(this._index - 1, 'click'));
-      overlay.querySelector('.next').addEventListener('click', () => this._go(this._index + 1, 'click'));
-      overlay.querySelector('.reset').addEventListener('click', () => this._go(0, 'click'));
-
       this._root.append(style, stage, tapzones, overlay);
       this._stage = stage;
       this._canvas = canvas;
       this._slot = slot;
       this._overlay = overlay;
+      this._tapBack = tzBack;
+      this._tapForward = tzFwd;
+      this._previousButton = overlay.querySelector('.prev');
+      this._nextButton = overlay.querySelector('.next');
+      this._resetButton = overlay.querySelector('.reset');
       this._countEl = overlay.querySelector('.current');
       this._totalEl = overlay.querySelector('.total');
+      this._syncCanvasSize();
+    }
+
+    _syncCanvasSize() {
+      if (!this._canvas) return;
+      this._canvas.style.width = this.designWidth + 'px';
+      this._canvas.style.height = this.designHeight + 'px';
+      this._canvas.style.setProperty('--deck-design-w', this.designWidth + 'px');
+      this._canvas.style.setProperty('--deck-design-h', this.designHeight + 'px');
+    }
+
+    _connectEvents() {
+      this._slot?.addEventListener('slotchange', this._onSlotChange);
+      this._tapBack?.addEventListener('click', this._onTapBack);
+      this._tapForward?.addEventListener('click', this._onTapForward);
+      this._previousButton?.addEventListener('click', this._onPreviousClick);
+      this._nextButton?.addEventListener('click', this._onNextClick);
+      this._resetButton?.addEventListener('click', this._onResetClick);
+      window.addEventListener('keydown', this._onKey);
+      window.addEventListener('resize', this._onResize);
+      window.addEventListener('mousemove', this._onMouseMove, { passive: true });
+    }
+
+    _disconnectEvents() {
+      this._slot?.removeEventListener('slotchange', this._onSlotChange);
+      this._tapBack?.removeEventListener('click', this._onTapBack);
+      this._tapForward?.removeEventListener('click', this._onTapForward);
+      this._previousButton?.removeEventListener('click', this._onPreviousClick);
+      this._nextButton?.removeEventListener('click', this._onNextClick);
+      this._resetButton?.removeEventListener('click', this._onResetClick);
+      window.removeEventListener('keydown', this._onKey);
+      window.removeEventListener('resize', this._onResize);
+      window.removeEventListener('mousemove', this._onMouseMove);
     }
 
     /** @page must live in the document stylesheet — it's a no-op inside
-     *  shadow DOM. Inject/update a single <head> style tag so the print
-     *  sheet matches the design size and Save-as-PDF yields one slide per
-     *  page with no margins. */
+     *  shadow DOM. Each instance owns a named page and style tag so decks
+     *  with different design sizes cannot overwrite each other. */
     _syncPrintPageRule() {
-      const id = 'deck-stage-print-page';
-      let tag = document.getElementById(id);
+      if (!this.isConnected) return;
+      document.getElementById('deck-stage-print-page')?.remove();
+      this.setAttribute('data-deck-print-page', this._printPageName);
+      let tag = document.getElementById(this._printStyleId);
       if (!tag) {
         tag = document.createElement('style');
-        tag.id = id;
+        tag.id = this._printStyleId;
+        tag.setAttribute('data-deck-stage-print-style', this._printPageName);
         document.head.appendChild(tag);
       }
       tag.textContent =
-        '@page { size: ' + this.designWidth + 'px ' + this.designHeight + 'px; margin: 0; } ' +
+        '@page ' + this._printPageName + ' { size: ' + this.designWidth + 'px ' + this.designHeight + 'px; margin: 0; } ' +
         '@media print { html, body { margin: 0 !important; padding: 0 !important; background: none !important; overflow: visible !important; height: auto !important; } ' +
+        'deck-stage[data-deck-print-page="' + this._printPageName + '"], deck-stage[data-deck-print-page="' + this._printPageName + '"] > * { page: ' + this._printPageName + '; } ' +
         '* { -webkit-print-color-adjust: exact; print-color-adjust: exact; } }';
+    }
+
+    _removePrintPageRule() {
+      document.getElementById(this._printStyleId)?.remove();
+      if (this.getAttribute('data-deck-print-page') === this._printPageName) {
+        this.removeAttribute('data-deck-print-page');
+      }
     }
 
     _onSlotChange() {
@@ -490,7 +540,9 @@
       // Keep the iframe's own hash in sync so an in-iframe location.reload()
       // (reload banner path in viewer-handle.ts) lands on the current slide,
       // not the stale deep-link hash from initial load.
-      try { history.replaceState(null, '', '#' + (curr + 1)); } catch (e) {}
+      if (!location.hash || /^#\d+$/.test(location.hash)) {
+        try { history.replaceState(null, '', '#' + (curr + 1)); } catch (e) {}
+      }
       this._slides.forEach((s, i) => {
         if (i === curr) s.setAttribute('data-deck-active', '');
         else s.removeAttribute('data-deck-active');
@@ -526,11 +578,12 @@
     }
 
     _flashOverlay() {
-      if (!this._overlay) return;
+      if (!this._overlay || !this.isConnected) return;
       this._overlay.setAttribute('data-visible', '');
       if (this._hideTimer) clearTimeout(this._hideTimer);
       this._hideTimer = setTimeout(() => {
         this._overlay.removeAttribute('data-visible');
+        this._hideTimer = null;
       }, OVERLAY_HIDE_MS);
     }
 
@@ -559,22 +612,47 @@
     }
 
     _onTapBack(e) {
+      if (this._isEditingMode()) return;
       e.preventDefault();
       this._go(this._index - 1, 'tap');
     }
 
     _onTapForward(e) {
+      if (this._isEditingMode()) return;
       e.preventDefault();
       this._go(this._index + 1, 'tap');
     }
 
+    _onPreviousClick() { this._go(this._index - 1, 'click'); }
+    _onNextClick() { this._go(this._index + 1, 'click'); }
+    _onResetClick() { this._go(0, 'click'); }
+
+    _isEditingMode() {
+      return Boolean(
+        window.editor?.isActive ||
+        document.body?.classList.contains('editing') ||
+        document.body?.classList.contains('editor-on')
+      );
+    }
+
+    _isInteractiveKeyTarget(e) {
+      const path = typeof e.composedPath === 'function' ? e.composedPath() : [e.target];
+      return path.some((node) => {
+        if (!(node instanceof Element)) return false;
+        if (node.isContentEditable) return true;
+        const editable = node.getAttribute('contenteditable');
+        if (editable !== null && editable.toLowerCase() !== 'false') return true;
+        if (/^(INPUT|TEXTAREA|SELECT|BUTTON)$/.test(node.tagName)) return true;
+        return (node.getAttribute('role') || '').trim().toLowerCase() === 'button';
+      });
+    }
+
     _onKey(e) {
-      // Ignore when the user is typing.
-      const t = e.target;
-      if (t && (t.isContentEditable || /^(INPUT|TEXTAREA|SELECT)$/.test(t.tagName))) return;
+      if (e.defaultPrevented || this._isInteractiveKeyTarget(e)) return;
       if (e.metaKey || e.ctrlKey || e.altKey) return;
 
       const key = e.key;
+      if (this._isEditingMode() && (key === ' ' || key === 'Spacebar' || key === 'r' || key === 'R' || /^[0-9]$/.test(key))) return;
       let handled = true;
 
       if (key === 'ArrowRight' || key === 'PageDown' || key === ' ' || key === 'Spacebar') {
@@ -605,7 +683,7 @@
       if (!this._slides.length) return;
       const clamped = Math.max(0, Math.min(this._slides.length - 1, i));
       if (clamped === this._index) {
-        this._flashOverlay();
+        this._applyIndex({ showOverlay: true, broadcast: false, reason });
         return;
       }
       this._index = clamped;
