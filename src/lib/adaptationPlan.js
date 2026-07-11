@@ -1,3 +1,7 @@
+import { cssEscape, selectorForElement } from "./selectorContract.js";
+
+export { cssEscape, selectorForElement };
+
 const unsafeTargetSelector = "script, style, template, meta, link, title, head";
 const maxSummaryCandidates = 180;
 const maxTextLength = 80;
@@ -48,80 +52,6 @@ export function applyAdaptationPlan(doc, plan, options = {}) {
 
 export function validateAdaptationPlan(doc, plan, options = {}) {
   return resolveAdaptationPlan(doc, plan, options).plan;
-}
-
-export function selectorForElement(element) {
-  const doc = element.ownerDocument;
-  const id = element.getAttribute("id");
-  if (id) {
-    const selector = idSelector(id, doc.defaultView?.CSS);
-    if (safeQuerySelectorAll(doc, selector).length === 1) return selector;
-  }
-
-  const parts = [];
-  let current = element;
-  while (current && current.tagName.toLowerCase() !== "html") {
-    const tag = current.tagName.toLowerCase();
-    if (tag === "body") {
-      parts.unshift("body");
-      break;
-    }
-    const className = Array.from(current.classList || []).find((item) => item && item !== "codex-bridge-selected");
-    let part = tag;
-    if (className) {
-      part += isCssIdentifier(className)
-        ? `.${cssEscape(className, doc.defaultView?.CSS)}`
-        : `[class~="${cssString(className)}"]`;
-    }
-    const siblings = Array.from(current.parentElement?.children || []).filter((sibling) => sibling.tagName === current.tagName);
-    if (siblings.length > 1) part += `:nth-of-type(${siblings.indexOf(current) + 1})`;
-    parts.unshift(part);
-    const selector = parts.join(" > ");
-    if (safeQuerySelectorAll(doc, selector).length === 1) return selector;
-    current = current.parentElement;
-  }
-  return parts.join(" > ");
-}
-
-export function cssEscape(value, cssApi = globalThis.CSS) {
-  if (cssApi && typeof cssApi.escape === "function") return cssApi.escape(String(value));
-  const string = String(value);
-  const length = string.length;
-  const firstCodeUnit = string.charCodeAt(0);
-  let result = "";
-  for (let index = 0; index < length; index += 1) {
-    const codeUnit = string.charCodeAt(index);
-    if (codeUnit === 0x0000) {
-      result += "\uFFFD";
-      continue;
-    }
-    if (
-      (codeUnit >= 0x0001 && codeUnit <= 0x001f) ||
-      codeUnit === 0x007f ||
-      (index === 0 && codeUnit >= 0x0030 && codeUnit <= 0x0039) ||
-      (index === 1 && codeUnit >= 0x0030 && codeUnit <= 0x0039 && firstCodeUnit === 0x002d)
-    ) {
-      result += `\\${codeUnit.toString(16)} `;
-      continue;
-    }
-    if (index === 0 && codeUnit === 0x002d && length === 1) {
-      result += `\\${string.charAt(index)}`;
-      continue;
-    }
-    if (
-      codeUnit >= 0x0080 ||
-      codeUnit === 0x002d ||
-      codeUnit === 0x005f ||
-      (codeUnit >= 0x0030 && codeUnit <= 0x0039) ||
-      (codeUnit >= 0x0041 && codeUnit <= 0x005a) ||
-      (codeUnit >= 0x0061 && codeUnit <= 0x007a)
-    ) {
-      result += string.charAt(index);
-      continue;
-    }
-    result += `\\${string.charAt(index)}`;
-  }
-  return result;
 }
 
 function resolveAdaptationPlan(doc, plan, options) {
@@ -451,18 +381,6 @@ function clearHiddenState(element) {
 
 function slideTitle(element, index) {
   return compactWhitespace(element.querySelector("h1, h2, h3, [data-title]")?.textContent || "") || `Slide ${index + 1}`;
-}
-
-function idSelector(id, cssApi) {
-  return isCssIdentifier(id) ? `#${cssEscape(id, cssApi)}` : `[id="${cssString(id)}"]`;
-}
-
-function isCssIdentifier(value) {
-  return /^-?[_a-zA-Z][-_a-zA-Z0-9]*$/.test(String(value));
-}
-
-function cssString(value) {
-  return String(value).replace(/\\/g, "\\\\").replace(/"/g, '\\"');
 }
 
 function extractJsonText(raw) {
