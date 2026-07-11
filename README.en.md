@@ -13,7 +13,7 @@ Anchor Deck can be used through the web converter or the MCP workspace. Both use
 | Web converter | MCP workspace |
 | --- | --- |
 | <img src="https://cdn.jsdelivr.net/gh/wengzige/html-deck-editor@main/docs/images/readme/web-converter.jpg" alt="Web screenshot" width="100%" loading="lazy" decoding="async"> | <img src="https://cdn.jsdelivr.net/gh/wengzige/html-deck-editor@main/docs/images/readme/codex-workspace.jpg" alt="MCP screenshot" width="100%" loading="lazy" decoding="async"> |
-| Upload HTML / ZIP / folder and download an editable ZIP. | Open a local workspace from Codex / Claude and let the agent edit the current deck. |
+| Upload HTML / ZIP / folder and download an editable ZIP. | Open a local workspace from Codex, Claude, or WorkBuddy and let the agent edit the current deck. |
 
 ## Two Ways To Use Anchor Deck
 
@@ -39,7 +39,7 @@ Use **Anchor Deck MCP** when you want Codex, Claude Code, Claude Desktop, or Wor
   </tr>
   <tr>
     <td>Import ZIP / HTML files or manage local decks.</td>
-    <td>In Codex collaboration mode, hold Option / Alt and click an element.</td>
+    <td>In AI collaboration mode, hold Option / Alt and click an element.</td>
   </tr>
 </table>
 
@@ -138,7 +138,7 @@ Please use Anchor Deck MCP. First open the local workspace; if no deck has been 
 
 Common tool names include `deck_state`, `list_elements`, `get_html`, `replace_text`, `set_attribute`, `replace_outer_html`, and `save_full_html`. Most users do not need to name these tools manually; use them only when the client does not choose the MCP tools by itself.
 
-In Codex collaboration mode, hold `Option` on macOS or `Alt` on Windows, then click an element in the deck. When the pink outline appears, tell Codex or Claude what to change.
+In AI collaboration mode, hold `Option` on macOS or `Alt` on Windows, then click an element in the deck. When the pink outline appears, return to your current AI client and describe the change.
 
 ### 4. Confirm it is working
 
@@ -211,7 +211,7 @@ AI Smart Adapt helps with:
 
 The AI is used to understand complex HTML; the local converter validates selectors, writes markers, preserves assets, and packages the result. This can significantly improve adaptation success for complex decks. For very messy structures or screenshot-only slides, still review the preview before downloading.
 
-If you are using Anchor Deck MCP from Codex, Claude Code, or Claude Desktop, you do not need to configure the web API. Ask the host AI to call `prepare_ai_adaptation`, generate the structure plan itself, then call `apply_ai_adaptation` to write the markers locally.
+If you are using Anchor Deck MCP from Codex, Claude, or WorkBuddy, you do not need to configure the web API. Ask the host AI to call `prepare_ai_adaptation`, generate the structure plan itself, then call `apply_ai_adaptation` to write the markers locally.
 
 ### Web usage steps
 
@@ -225,7 +225,7 @@ If you are using Anchor Deck MCP from Codex, Claude Code, or Claude Desktop, you
 ### MCP usage steps
 
 1. Open the MCP workspace and import the HTML.
-2. Click **复制智能适配指令** in the import panel, then paste and send the copied prompt in Codex / Claude.
+2. Click **复制智能适配指令** in the import panel, then paste and send the copied prompt in your current AI client.
 3. The AI reads the summary, generates a JSON plan, and asks MCP to apply it locally.
 4. Review page count, order, and editable areas in the workspace.
 
@@ -240,13 +240,13 @@ Web AI Smart Adapt uses BYOK: bring your own API key and configure it once in th
 
 If a provider or relay does not allow direct browser requests, use a browser-compatible relay or your own proxy URL.
 
-In MCP mode, Codex / Claude is already the agent, so the web page does not ask for an API key.
+In MCP mode, the connected AI client is already the agent, so the web page does not ask for an API key.
 
 ## Other Highlights
 
 - **Local first**: files are read, rewritten, and packaged in your browser by default.
 - **One-click editable ZIP**: upload HTML / ZIP / folder, download a new editable deck.
-- **AI Smart Adapt**: use your own API key in web mode, or let Codex / Claude generate the adaptation plan in MCP mode.
+- **AI Smart Adapt**: use your own API key in web mode, or let the connected AI client generate the adaptation plan in MCP mode.
 - **Preserve assets**: keep original CSS, JavaScript, images, fonts, and relative paths as much as possible.
 - **Static output**: the result is still plain HTML that you can save, share, or host.
 - **BYOK AI / MCP agent**: bring your own key on the web page; use the host agent when connected through MCP.
@@ -373,7 +373,7 @@ Create a complete static HTML presentation. It must have exactly one <deck-stage
 - Files are processed locally in the browser by default.
 - The project does not include the author's API key.
 - Web AI Adapt only calls the provider or proxy configured by the user.
-- MCP AI Adapt does not require a web API key; Codex / Claude reads the structure summary, generates a plan, and MCP applies it locally.
+- MCP AI Adapt does not require a web API key; the connected AI client reads the structure summary, generates a plan, and MCP applies it locally.
 - API keys are not stored long-term by default.
 - AI Adapt sends the necessary HTML structure summary, not image binaries or the full resource package by default.
 - The editor contacts the external jsDelivr CDN only after the user selects an online font. Imported fonts and PDF/image rendering stay in the browser.

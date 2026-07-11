@@ -32,7 +32,7 @@ Local storage means the key stays in that browser profile until it is cleared. U
 
 ## AI Smart Adapt In MCP Mode
 
-When Anchor Deck MCP is used from Codex or Claude, the web page does not ask for an API key. The MCP tools send a compact HTML structure summary to the host AI client as tool output. Codex or Claude generates the JSON adaptation plan, then MCP applies that plan locally and creates a backup before saving.
+When Anchor Deck MCP is used from Codex, Claude, or WorkBuddy, the web page does not ask for an API key. The MCP tools send a compact HTML structure summary to the host AI client as tool output. That client generates the JSON adaptation plan, then MCP applies the plan locally and creates a backup before saving.
 
 ## for-ai.md
 

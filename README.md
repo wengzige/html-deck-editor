@@ -15,7 +15,7 @@ Anchor Deck 提供网页转换和 MCP 工作区两种用法。两者共享同一
 | 网页转换 | MCP 工作区 |
 | --- | --- |
 | <img src="https://cdn.jsdelivr.net/gh/wengzige/html-deck-editor@main/docs/images/readme/web-converter.jpg" alt="网页转换截图" width="100%" loading="lazy" decoding="async"> | <img src="https://cdn.jsdelivr.net/gh/wengzige/html-deck-editor@main/docs/images/readme/codex-workspace.jpg" alt="MCP 工作区截图" width="100%" loading="lazy" decoding="async"> |
-| 上传 HTML / ZIP / 文件夹，生成可编辑 ZIP。 | 在 Codex / Claude 里打开本地工作区，直接让 AI 修改当前 deck。 |
+| 上传 HTML / ZIP / 文件夹，生成可编辑 ZIP。 | 在 Codex、Claude 或 WorkBuddy 里打开本地工作区，直接让 AI 修改当前 deck。 |
 
 ## 两种使用方式
 
@@ -39,7 +39,7 @@ Anchor Deck MCP 不是第二套编辑器。它把 AI 客户端接到本地工作
   </tr>
   <tr>
     <td>导入 ZIP、HTML，或管理本地 deck。</td>
-    <td>在 Codex 协作模式里按住 Option / Alt 选择元素。</td>
+    <td>在 AI 协作模式里按住 Option / Alt 选择元素。</td>
   </tr>
 </table>
 
@@ -91,13 +91,22 @@ Claude Desktop 用户直接安装 `.mcpb`：打开 `设置 → 扩展 → 高级
 - 修改元素：选中后说 `用 Anchor Deck MCP 把我选中的标题改成……`
 - 协作模式选择：macOS 按住 `⌥ Option`，Windows 按住 `Alt`，再点击元素。
 - 精确改字：直接拖选文字，再告诉 AI 修改内容。
-- 智能适配：在工作区导入区域点击 **复制智能适配指令**，回到 Codex / Claude 输入框粘贴并发送。MCP 模式不需要网页 API Key。
+- 智能适配：在工作区导入区域点击 **复制智能适配指令**，回到当前 AI 客户端输入框粘贴并发送。MCP 模式不需要网页 API Key。
 
 大多数时候不需要输入工具名。客户端没有自动调用 MCP 时再明确说明：
 
 ```text
 请使用 Anchor Deck MCP，先读取当前 deck 状态和选中元素，再执行修改。
 ```
+
+同一套工作流适用于下列客户端：
+
+| 客户端 | 连接方式 | 验证方法 |
+| --- | --- | --- |
+| Codex App / CLI | 自动配置脚本 | `codex mcp list` 显示 `anchor_deck` |
+| Claude Code | 自动配置脚本 | `claude mcp get anchor-deck` 返回服务配置 |
+| WorkBuddy | 自动配置脚本，需选择项目目录 | 项目中的 `workbuddy.mcp.json` 包含 `anchor-deck` |
+| Claude Desktop | 直接安装 `.mcpb` | 扩展设置中显示 Anchor Deck MCP |
 
 ### 验证与排错
 
@@ -106,7 +115,10 @@ Claude Desktop 用户直接安装 `.mcpb`：打开 `设置 → 扩展 → 高级
 
 - 运行 `anchor-deck-mcp version`，能看到版本号。
 - 运行 `anchor-deck-mcp where`，能看到 App、命令行入口、本地数据目录和卸载命令。
-- Codex 运行 `codex mcp list`，应看到 `anchor_deck`；Claude Code 运行 `claude mcp get anchor-deck`。
+- Codex 运行 `codex mcp list`，应看到 `anchor_deck`。
+- Claude Code 运行 `claude mcp get anchor-deck`，应返回 Anchor Deck MCP 配置。
+- WorkBuddy 项目的 `workbuddy.mcp.json` 中应包含 `anchor-deck`。
+- Claude Desktop 的扩展设置中应显示 Anchor Deck MCP。
 - 看不到 MCP：重新运行配置脚本，然后完全重启客户端。
 - 终端能看到 MCP，但当前 Codex 对话没有工具：新建本地工作区/项目对话。`deck_state`、`open_workspace` 是 MCP 工具，不是项目文件。
 - 只能打开网页、不能调用工具：说明当前 AI 会话没有加载 MCP；手动启动 App 不会改变该会话的工具列表。
@@ -155,7 +167,7 @@ AI 智能适配主要完成：
 | 模式 | 谁分析 HTML | 怎么启动 |
 | --- | --- | --- |
 | 网页 | 你配置的 API | 点击 **AI 智能适配** |
-| MCP | 当前 Codex / Claude | 点击 **复制智能适配指令**，粘贴到 AI 输入框并发送 |
+| MCP | 当前 AI 客户端（Codex / Claude / WorkBuddy） | 点击 **复制智能适配指令**，粘贴到 AI 输入框并发送 |
 
 ### 网页使用步骤
 
@@ -169,7 +181,7 @@ AI 智能适配主要完成：
 ### MCP 使用步骤
 
 1. 打开 MCP 工作区并导入 HTML。
-2. 点击 **复制智能适配指令**，回到 Codex / Claude 粘贴并发送。
+2. 点击 **复制智能适配指令**，回到当前 AI 客户端粘贴并发送。
 3. AI 调用 `prepare_ai_adaptation` 读取摘要，生成计划，再调用 `apply_ai_adaptation` 写入本地 HTML。
 4. 打开工作区复核页数、顺序和可编辑区域。
 
@@ -191,7 +203,7 @@ AI 智能适配主要完成：
 - **AI 智能适配**：复杂 HTML 可以先用 AI 识别页面、文本、图片和视觉块，再生成更适合编辑器的结构。
 - **保留原资源**：尽量保留原始 CSS、JS、图片、字体和相对路径。
 - **静态文件输出**：生成结果仍然是普通 HTML，可保存、转发、托管。
-- **BYOK AI / MCP 智能体**：网页模式使用你自己的 API Key；MCP 模式由 Codex / Claude 生成适配计划。
+- **BYOK AI / MCP 智能体**：网页模式使用你自己的 API Key；MCP 模式由当前 AI 客户端生成适配计划。
 - **for-ai.md 交接**：在编辑器里给元素写批注，一键导出给外部 AI 的修改上下文。
 - **字体库与字体导入**：内置常用中文字体栈，可选联网开源字体，也可导入 WOFF2 / WOFF / TTF / OTF。
 - **PDF / 图片导出**：自由勾选页面，导出 PDF、PNG 或 JPG；多页图片自动打包 ZIP。
@@ -315,7 +327,7 @@ Anchor Deck 适合这些场景：
 - 文件默认只在浏览器本地处理。
 - 项目不会内置作者 API Key。
 - 网页模式的 AI 适配只在用户配置 API 后才会调用用户选择的服务商或代理。
-- MCP 模式不要求网页 API Key；Codex / Claude 读取结构摘要、生成计划，MCP 在本机应用计划。
+- MCP 模式不要求网页 API Key；当前 AI 客户端读取结构摘要、生成计划，MCP 在本机应用计划。
 - API Key 默认不长期保存。
 - AI 调用只发送必要的 HTML 结构摘要，不默认发送图片二进制或完整资源包。
 - 只有用户主动选择联网字体时，页面才会访问外部 jsDelivr CDN；本地导入字体和 PDF / 图片导出都在浏览器内完成。

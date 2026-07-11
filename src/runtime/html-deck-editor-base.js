@@ -3247,7 +3247,7 @@
       showExternalFileChangeWarning(onDiscard) {
         this.openConfirm({
           title: "HTML 文件已在外部更新",
-          message: "检测到 index.html 已被 Codex 或其他程序更新。当前手动编辑尚未写入文件，自动刷新已暂停，避免丢失内容。\n\n选择“保留当前编辑”后，请先保存 HTML，或切换到 Codex 协作完成自动保存；选择“放弃并刷新”会立即载入外部新文件。",
+          message: "检测到 index.html 已被 AI 客户端或其他程序更新。当前手动编辑尚未写入文件，自动刷新已暂停，避免丢失内容。\n\n选择“保留当前编辑”后，请先保存 HTML，或切换到 AI 协作完成自动保存；选择“放弃并刷新”会立即载入外部新文件。",
           cancelText: "保留当前编辑",
           primaryCancel: true,
           okText: "放弃并刷新",
