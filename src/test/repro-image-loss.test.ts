@@ -146,11 +146,14 @@ describe("repro: replaced image survives slide navigation", () => {
 
     expect((document.querySelector("#deckStage .slide h1") as HTMLElement).textContent).toBe("Externally updated page");
     expect(document.getElementById("editorConfirm")?.hidden).toBe(false);
-    expect(document.getElementById("editorConfirmTitle")?.textContent).toBe("旧草稿与当前 HTML 不兼容");
-    expect(document.getElementById("editorConfirmMessage")?.textContent).toContain("不会载入这份旧草稿");
-    expect(document.getElementById("editorConfirmCancelBtn")?.textContent).toBe("继续使用当前文件");
+    expect(document.getElementById("editorConfirmTitle")?.textContent).toBe("发现旧的编辑记录");
+    expect(document.getElementById("editorConfirmMessage")?.textContent).toContain("当前 HTML 文件已经更新");
+    expect(document.getElementById("editorConfirmMessage")?.textContent).toContain("没有自动恢复");
+    expect(document.getElementById("editorConfirmMessage")?.textContent).toContain("尚未保存到 HTML 的修改");
+    expect(document.getElementById("editorConfirmCancelBtn")?.textContent).toBe("使用当前 HTML（推荐）");
     expect(document.getElementById("editorConfirmCancelBtn")?.classList.contains("primary")).toBe(true);
-    expect(document.getElementById("editorConfirmOkBtn")?.textContent).toBe("清除旧草稿");
+    expect(document.getElementById("editorConfirmOkBtn")?.textContent).toBe("永久删除旧记录");
+    expect(document.getElementById("editorConfirmOkBtn")?.classList.contains("danger")).toBe(true);
     expect(storage.has(remounted.storageKey)).toBe(true);
     remounted.runConfirmedAction();
     expect((document.querySelector("#deckStage .slide h1") as HTMLElement).textContent).toBe("Externally updated page");
@@ -201,7 +204,7 @@ describe("repro: replaced image survives slide navigation", () => {
     const remounted = (window as any).FrontendSlidesEditor.mount();
 
     expect(document.querySelectorAll("#deckStage .slide")).toHaveLength(2);
-    expect(document.getElementById("editorConfirmTitle")?.textContent).toBe("旧草稿与当前 HTML 不兼容");
+    expect(document.getElementById("editorConfirmTitle")?.textContent).toBe("发现旧的编辑记录");
     remounted.destroy?.();
   });
 

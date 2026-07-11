@@ -6901,14 +6901,14 @@
           const restoreStatus = data.stage ? this.draftRestoreStatus(data) : "current";
           if (restoreStatus === "incompatible") {
             this.openConfirm({
-              title: "旧草稿与当前 HTML 不兼容",
-              message: "这份浏览器草稿无法确认与当前页面结构兼容。直接恢复可能破坏布局，因此编辑器不会载入这份旧草稿。\n\n当前页面仍是 HTML 文件内容。请选择“继续使用当前文件”，或在确定不再需要草稿时清除它。",
-              cancelText: "继续使用当前文件",
+              title: "发现旧的编辑记录",
+              message: "浏览器里还保存着一份之前的编辑记录，但当前 HTML 文件已经更新，两边内容对不上。为了避免页面错乱或内容丢失，编辑器没有自动恢复它。\n\n建议继续使用当前 HTML。旧记录可能包含尚未保存到 HTML 的修改；只有确认不再需要这些修改时，才永久删除旧记录。",
+              cancelText: "使用当前 HTML（推荐）",
               primaryCancel: true,
-              okText: "清除旧草稿",
+              okText: "永久删除旧记录",
               action: () => {
                 this.discardStoredDrafts();
-                this.toastMessage("已清除不兼容的旧草稿；当前 HTML 文件未改动");
+                this.toastMessage("已永久删除旧编辑记录；当前 HTML 未改动");
               }
             });
             return;
