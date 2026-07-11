@@ -45,33 +45,77 @@ Anchor Deck MCP 不是第二套编辑器。它把 AI 客户端接到本地工作
 
 ### 安装
 
-打开 [GitHub Releases](https://github.com/wengzige/html-deck-editor/releases/latest)，按自己的系统下载：
+#### macOS（推荐：Homebrew）
 
-| 系统 / 客户端 | 下载文件 |
-| --- | --- |
-| macOS | `anchor-deck-mcp-*-macos-universal.pkg` |
-| Windows | `anchor-deck-mcp-*-windows-x64-setup.exe` |
-| Claude Desktop | `anchor-deck-mcp-*-claude-desktop.mcpb` |
+Homebrew 是 macOS 常用的软件安装工具。用它安装后，升级和卸载都只需要一条命令，也不需要打开未签名的 `.pkg`。
 
-同一个 Release 还包括：
+1. 打开 Finder → **应用程序 → 实用工具 → 终端**。
+2. 输入 `brew --version` 并按回车。如果能看到版本号，直接进行下一步。
+3. 如果提示 `command not found: brew`，复制 [Homebrew 官网](https://brew.sh/zh-cn/) 提供的这条命令到终端：
 
-- `anchor-deck-mcp-configure-macos.command` / `anchor-deck-mcp-configure-windows.ps1`：自动配置 Codex、Claude Code 或 WorkBuddy。
-- `anchor-deck-mcp-uninstall-macos.command` / `anchor-deck-mcp-uninstall-windows.ps1`：卸载辅助脚本。
-- `SHA256SUMS.txt`：校验安装包是否完整。
+```bash
+/bin/bash -c "$(curl -fsSL https://raw.githubusercontent.com/Homebrew/install/HEAD/install.sh)"
+```
 
-安装包负责安装 App 和命令行入口，配置脚本负责把 MCP 接到 AI 客户端。安装后可用以下入口：
+安装过程中可能会要求输入 Mac 登录密码；输入时终端不会显示字符，这是正常的，输入完成后按回车。安装结束后，按照终端里 **Next steps** 的提示执行命令，再重新打开终端。
+4. 复制下面这一整行到终端并按回车：
 
-- macOS 应用：`/Applications/Anchor Deck MCP.app`
-- Windows：开始菜单里的 **Anchor Deck MCP → 打开 Anchor Deck 工作区**
-- 命令行：`anchor-deck-mcp serve --open`
-- 查看本机安装位置：运行 `anchor-deck-mcp where`
-- 卸载默认保留本地 deck；需要同时删除数据时使用 `--delete-data`
+```bash
+brew install wengzige/tap/anchor-deck-mcp
+```
 
-Claude Desktop 用户直接安装 `.mcpb`：打开 `设置 → 扩展 → 高级设置 → 安装扩展`，选择文件后重启 Claude Desktop。
+5. 安装完成后检查版本：
+
+```bash
+anchor-deck-mcp version
+```
+
+6. 根据正在使用的 AI 客户端，选择一条配置命令：
+
+```bash
+# Codex App / CLI
+anchor-deck-mcp configure codex
+
+# Claude Code
+anchor-deck-mcp configure claude-code
+
+# WorkBuddy（把路径换成自己的项目文件夹）
+anchor-deck-mcp configure workbuddy --project "/完整/项目路径"
+```
+
+配置完成后，必须完全退出并重新打开对应的 AI 客户端。Homebrew 版不会在“应用程序”里增加图标，这是正常的；平时直接让 AI 打开工作区，或在终端运行：
+
+```bash
+anchor-deck-mcp serve --open
+```
+
+常用维护命令：
+
+```bash
+# 升级
+brew update && brew upgrade anchor-deck-mcp
+
+# 卸载程序和 MCP 配置，默认保留本地 deck
+anchor-deck-mcp uninstall --yes
+```
+
+#### macOS 备用：未签名 `.pkg`
+
+如果不想安装 Homebrew，可以从 [GitHub Releases](https://github.com/wengzige/html-deck-editor/releases/latest) 下载 `anchor-deck-mcp-*-macos-universal.pkg`。这个备用安装包目前没有 Apple Developer ID 签名和公证，因此 macOS 可能显示“Apple 无法验证是否包含恶意软件”。请只从本项目的 GitHub Releases 下载，并用同一 Release 中的 `SHA256SUMS.txt` 核验文件。
+
+确认来源无误后：先尝试打开一次安装包，再进入 **系统设置 → 隐私与安全性 → 安全性 → 仍要打开**。安装后可从 `/Applications/Anchor Deck MCP.app` 启动，并使用 Release 中的 `anchor-deck-mcp-configure-macos.command` 完成客户端配置。
+
+#### Windows
+
+从 [GitHub Releases](https://github.com/wengzige/html-deck-editor/releases/latest) 下载 `anchor-deck-mcp-*-windows-x64-setup.exe`。安装后从开始菜单打开 **Anchor Deck MCP**，再运行 `anchor-deck-mcp-configure-windows.ps1` 配置 AI 客户端。
+
+#### Claude Desktop
+
+下载 `anchor-deck-mcp-*-claude-desktop.mcpb`，打开 `设置 → 扩展 → 高级设置 → 安装扩展`，选择文件后重启 Claude Desktop。
 
 ### 首次使用
 
-1. 运行自动配置脚本，把 MCP 接到 Codex、Claude Code 或 WorkBuddy。
+1. 如果还没有配置，运行上面的 Homebrew 配置命令或 Release 中的自动配置脚本，把 MCP 接到 Codex、Claude Code 或 WorkBuddy。
 2. 完全退出并重启对应的 AI 客户端。已打开的会话通常不会热更新 MCP 工具。
 3. Codex 用户新建一个本地工作区/项目对话；无项目的纯聊天可能不会加载本机 MCP。
 4. 发送：
@@ -83,7 +127,7 @@ Claude Desktop 用户直接安装 `.mcpb`：打开 `设置 → 扩展 → 高级
 5. 在右侧工作区导入 ZIP 或单个 HTML。完整文件夹建议先压缩为 ZIP，也可以切到“打开”并填写本机路径。
 6. 导入后可在工作区下拉框中切换引导页和演示稿。
 
-浏览器没有自动打开时，手动启动 App 或运行 `anchor-deck-mcp serve --open`。
+浏览器没有自动打开时，运行 `anchor-deck-mcp serve --open`；使用备用 `.pkg` 安装的用户也可以手动启动 App。
 
 ### 日常使用
 
@@ -103,9 +147,9 @@ Claude Desktop 用户直接安装 `.mcpb`：打开 `设置 → 扩展 → 高级
 
 | 客户端 | 连接方式 | 验证方法 |
 | --- | --- | --- |
-| Codex App / CLI | 自动配置脚本 | `codex mcp list` 显示 `anchor_deck` |
-| Claude Code | 自动配置脚本 | `claude mcp get anchor-deck` 返回服务配置 |
-| WorkBuddy | 自动配置脚本，需选择项目目录 | 项目中的 `workbuddy.mcp.json` 包含 `anchor-deck` |
+| Codex App / CLI | `anchor-deck-mcp configure codex` | `codex mcp list` 显示 `anchor_deck` |
+| Claude Code | `anchor-deck-mcp configure claude-code` | `claude mcp get anchor-deck` 返回服务配置 |
+| WorkBuddy | `anchor-deck-mcp configure workbuddy --project ...` | 项目中的 `workbuddy.mcp.json` 包含 `anchor-deck` |
 | Claude Desktop | 直接安装 `.mcpb` | 扩展设置中显示 Anchor Deck MCP |
 
 ### 验证与排错
@@ -131,7 +175,7 @@ chmod 700 "$HOME/.codex"
 chmod 600 "$HOME/.codex/config.toml"
 ```
 
-然后重新运行自动配置脚本。
+然后重新运行对应的 `anchor-deck-mcp configure ...` 命令；备用安装包用户也可以重新运行自动配置脚本。
 
 </details>
 

@@ -43,45 +43,81 @@ Use **Anchor Deck MCP** when you want Codex, Claude Code, Claude Desktop, or Wor
   </tr>
 </table>
 
-### 1. Download and install
+### 1. Install
 
-Open [GitHub Releases](https://github.com/wengzige/html-deck-editor/releases/latest) and download the file for your system or client:
+#### macOS (recommended: Homebrew)
 
-| System / client | Download |
-| --- | --- |
-| macOS | `anchor-deck-mcp-*-macos-universal.pkg` |
-| Windows | `anchor-deck-mcp-*-windows-x64-setup.exe` |
-| Claude Desktop | `anchor-deck-mcp-*-claude-desktop.mcpb` |
+Homebrew is a popular package manager for macOS. It gives you one-command installation, upgrades, and uninstall without opening the unsigned `.pkg`.
 
-Each Release also includes:
+1. Open Finder → **Applications → Utilities → Terminal**.
+2. Run `brew --version`. If it prints a version, continue to the next step.
+3. If Terminal says `command not found: brew`, copy the official command from the [Homebrew website](https://brew.sh/) into Terminal:
 
-- `anchor-deck-mcp-configure-macos.command` / `anchor-deck-mcp-configure-windows.ps1`: automatically configure Codex, Claude Code, or WorkBuddy.
-- `anchor-deck-mcp-uninstall-macos.command` / `anchor-deck-mcp-uninstall-windows.ps1`: helper scripts for uninstalling.
-- `SHA256SUMS.txt`: verify the installer or `.mcpb` download.
+```bash
+/bin/bash -c "$(curl -fsSL https://raw.githubusercontent.com/Homebrew/install/HEAD/install.sh)"
+```
 
-macOS and Windows users can run the installer directly. The installer only places the app and command-line entry on your machine; the automatic configuration script only connects MCP to Codex, Claude Code, or WorkBuddy. It is normal for configuration to succeed even if you have not opened the app first.
+The installer may ask for your Mac login password. Terminal does not display characters while you type the password; this is normal. When installation finishes, follow the **Next steps** printed by Homebrew, then reopen Terminal.
+4. Copy and run this line:
 
-There are two ways to open the workspace:
+```bash
+brew install wengzige/tap/anchor-deck-mcp
+```
 
-- Recommended: in your AI client, say `Use Anchor Deck MCP to open the workspace`; MCP starts the local workspace and opens the browser.
-- Manual: open **Anchor Deck MCP** from Applications or the Start menu. This is the same as running `anchor-deck-mcp serve --open`.
+5. Confirm the installation:
 
-Install locations and uninstall:
+```bash
+anchor-deck-mcp version
+```
 
-- macOS app: `/Applications/Anchor Deck MCP.app`
-- macOS command: `/usr/local/bin/anchor-deck-mcp`
-- Windows program: `C:\Program Files\Anchor Deck MCP\anchor-deck-mcp.exe`
-- Windows entry: Start menu → **Anchor Deck MCP → 打开 Anchor Deck 工作区**
-- Show local install paths: run `anchor-deck-mcp where`
-- macOS uninstall: run `sudo /usr/local/bin/anchor-deck-mcp uninstall --yes`, or double-click `anchor-deck-mcp-uninstall-macos.command`
-- Windows uninstall: choose **卸载 Anchor Deck MCP** from the Start menu, or run `anchor-deck-mcp-uninstall-windows.ps1`
-- Uninstall keeps local deck data by default. Add `--delete-data` only if you also want to remove local data.
+6. Run the command for your AI client:
+
+```bash
+# Codex App / CLI
+anchor-deck-mcp configure codex
+
+# Claude Code
+anchor-deck-mcp configure claude-code
+
+# WorkBuddy (replace the path with your project folder)
+anchor-deck-mcp configure workbuddy --project "/full/path/to/project"
+```
+
+Fully quit and reopen the AI client after configuration. The Homebrew version does not add an Applications icon; this is normal. Ask your AI client to open the workspace, or run:
+
+```bash
+anchor-deck-mcp serve --open
+```
+
+Maintenance commands:
+
+```bash
+# Upgrade
+brew update && brew upgrade anchor-deck-mcp
+
+# Remove the program and MCP configuration; local decks are kept by default
+anchor-deck-mcp uninstall --yes
+```
+
+#### macOS fallback: unsigned `.pkg`
+
+If you do not want Homebrew, download `anchor-deck-mcp-*-macos-universal.pkg` from [GitHub Releases](https://github.com/wengzige/html-deck-editor/releases/latest). This fallback package is not currently signed with an Apple Developer ID or notarized, so macOS may say that Apple cannot verify it for malicious software. Download it only from this project's GitHub Releases and verify it against `SHA256SUMS.txt` from the same Release.
+
+After trying to open the package once, go to **System Settings → Privacy & Security → Security → Open Anyway**. The package installs `/Applications/Anchor Deck MCP.app`; use `anchor-deck-mcp-configure-macos.command` from the Release to connect your AI client.
+
+#### Windows
+
+Download `anchor-deck-mcp-*-windows-x64-setup.exe` from [GitHub Releases](https://github.com/wengzige/html-deck-editor/releases/latest). Open **Anchor Deck MCP** from the Start menu after installation, then run `anchor-deck-mcp-configure-windows.ps1` to configure your AI client.
+
+#### Claude Desktop
+
+Download `anchor-deck-mcp-*-claude-desktop.mcpb`, then open `Settings → Extensions → Advanced settings → Install extension`, select the file, and restart Claude Desktop.
 
 ### 2. What to do after installation
 
 For the first use, follow this order:
 
-1. Run the automatic configuration script to connect MCP to Codex, Claude Code, or WorkBuddy.
+1. If you have not configured it yet, run the Homebrew configuration command above or the automatic configuration script from the Release.
 2. Fully quit and restart that AI client. Already-open windows, threads, or sessions usually do not hot-reload MCP tools.
 3. For Codex, test from a local workspace/project conversation. Any local folder is fine. Do not use a no-project, pure chat, or cloud-style empty conversation to judge whether local MCP is installed; those conversations may not load local MCP tools.
 4. In the AI client, say: `Use Anchor Deck MCP to open the workspace. I want to upload HTML.`
@@ -90,16 +126,16 @@ For the first use, follow this order:
 7. Import a ZIP or single HTML file. For a complete folder, use a ZIP or open its local path from the workspace panel.
 8. After upload, the workspace list keeps both the upload guide and your deck, so you can switch between them.
 
-If the browser does not pop up automatically, open `/Applications/Anchor Deck MCP.app` manually or run `anchor-deck-mcp serve --open` in Terminal.
+If the browser does not pop up automatically, run `anchor-deck-mcp serve --open` in Terminal. Users of the fallback `.pkg` can also open `/Applications/Anchor Deck MCP.app` manually.
 
-Configuration scripts:
+Fallback installer configuration scripts:
 
 - macOS: `anchor-deck-mcp-configure-macos.command`
 - Windows: `anchor-deck-mcp-configure-windows.ps1`
 
 The script lets you choose Codex, Claude Code, or WorkBuddy. It only manages the Anchor Deck MCP entry and does not delete other MCP servers. Before modifying an existing configuration, it creates a local backup.
 
-In Codex, the MCP server name should be `anchor_deck`. The old development name `html_deck_codex` is removed automatically so the tool list does not expose a confusing legacy entry. If the tool disappears after switching Codex providers, reinstalling Codex, or syncing configuration, run the configuration script again.
+In Codex, the MCP server name should be `anchor_deck`. The old development name `html_deck_codex` is removed automatically so the tool list does not expose a confusing legacy entry. If the tool disappears after switching Codex providers, reinstalling Codex, or syncing configuration, run `anchor-deck-mcp configure codex` again.
 
 One more Codex-specific trap: `deck_state` and `open_workspace` are MCP tools, not files in your project. If the AI starts searching an empty folder for `deck_state`, the current conversation did not receive the Anchor Deck MCP tool table. Restart Codex and open a local workspace conversation instead of searching project files or manually launching the MCP stdio service.
 
@@ -160,14 +196,14 @@ If these checks pass, the MCP service, original browser editor, and local worksp
 
 First check `codex mcp list`:
 
-- If it does not show `anchor_deck`, configuration did not finish correctly. Run the automatic configuration script again.
+- If it does not show `anchor_deck`, configuration did not finish correctly. Run `anchor-deck-mcp configure codex` again, or rerun the fallback installer's configuration script.
 - If it shows `anchor_deck enabled`, but the current conversation only has tools such as `node_repl`, `computer_use`, or `codex_app` and no `anchor_deck` / `deck_state`, then **this Codex conversation did not inject user-level MCP tools**. This is not an installer failure and it does not mean a project file is missing.
 
 For the second case:
 
 1. Try a local workspace/project conversation. Do not use a no-project, pure chat, or cloud-style empty conversation.
 2. If Anchor Deck still does not appear after fully quitting Codex with `Cmd + Q`, this Codex surface currently cannot use this MCP. Do not keep searching the project for `deck_state`; it is a tool, not a file.
-3. You can still open the workspace manually with `anchor-deck-mcp serve --open`, or by opening `/Applications/Anchor Deck MCP.app`. This lets you upload and edit in the browser, but it cannot make the current Codex conversation suddenly gain the `deck_state` tool.
+3. You can still open the workspace manually with `anchor-deck-mcp serve --open`; fallback `.pkg` users can also open `/Applications/Anchor Deck MCP.app`. This lets you upload and edit in the browser, but it cannot make the current Codex conversation suddenly gain the `deck_state` tool.
 4. If you need AI to call MCP tools, use a client that does load local MCP, such as Claude Code, WorkBuddy, or Claude Desktop; or try Codex again after a Codex update/fix.
 
 If Codex configuration fails with `EACCES: permission denied, copyfile ~/.codex/config.toml`, the Codex config file is usually owned by root because a previous command was run with `sudo`. Open Terminal and run:
@@ -178,7 +214,7 @@ chmod 700 "$HOME/.codex"
 chmod 600 "$HOME/.codex/config.toml"
 ```
 
-Then run the configuration script again.
+Then run `anchor-deck-mcp configure codex` again, or rerun the fallback installer's configuration script.
 
 </details>
 
