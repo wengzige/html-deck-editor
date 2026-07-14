@@ -1,0 +1,22 @@
+{
+  "name": {
+    "zh-CN": "帆页",
+    "en": "Anchor Deck",
+    "display": "帆页 Anchor Deck"
+  },
+  "description": "让每一页，重新可编辑。",
+  "logo": {
+    "svg": "./anchor-deck-icon.svg",
+    "png1024": "./anchor-deck-icon-1024.png",
+    "alt": "帆页 Anchor Deck 图标"
+  },
+  "colors": {
+    "pine": "#17624A",
+    "warmIvory": "#F3F0E7",
+    "ink": "#17251F"
+  },
+  "typography": {
+    "zh-CN": "PingFang SC, Microsoft YaHei, system-ui, sans-serif",
+    "en": "Inter, ui-sans-serif, system-ui, sans-serif"
+  }
+}
