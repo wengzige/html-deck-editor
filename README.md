@@ -1,30 +1,35 @@
-# Anchor Deck
+<p align="center">
+  <img src="docs/brand/anchor-deck-icon.svg" alt="帆页 Anchor Deck 图标" width="112" height="112">
+</p>
 
-**把“能看”的 HTML 演示稿，变成“还能继续改”的本地 deck。**
+<h1 align="center">帆页 Anchor Deck</h1>
 
-Turn AI-generated HTML presentations into editable local decks.
+<p align="center"><strong>让每一页，重新可编辑。</strong></p>
 
-[在线体验](https://wengzige.github.io/html-deck-editor/) · [English](README.en.md) · [结构契约](docs/html-deck-contract.md) · [隐私说明](docs/privacy.md)
+Turn AI-generated HTML presentations into editable decks.
+
+[在线工作台](https://anchordeck.dpdns.org/) · [网页转换器](https://wengzige.github.io/html-deck-editor/) · [English](README.en.md) · [品牌规范](docs/brand/README.md) · [结构契约](docs/html-deck-contract.md) · [隐私说明](docs/privacy.md)
 
 ![License](https://img.shields.io/badge/license-MIT-0f172a) ![Local First](https://img.shields.io/badge/local--first-browser-2563eb) ![AI Adaptation](https://img.shields.io/badge/AI-smart%20adaptation-14b8a6)
 
-AI 很会生成漂亮的 HTML slides，但后续改字、换图、挪布局通常很痛苦。Anchor Deck 解决的就是这一步：上传、适配、下载，然后直接在浏览器里继续编辑。
+AI 很会生成漂亮的 HTML slides，但后续改字、换图、挪布局通常很痛苦。帆页 Anchor Deck 解决的就是这一步：上传、适配、编辑和保存，让一次性 HTML 可以继续修改。
 
-Anchor Deck 提供网页转换和 MCP 工作区两种用法。两者共享同一个浏览器编辑器，但入口、AI 来源和配置彼此独立。
+帆页围绕同一套 HTML 检测、转换和浏览器编辑器，提供在线工作台、网页转换器和 MCP 工作区三种入口。在线工作台适合直接续做账户项目；网页转换器和 MCP 则保留本地优先的工作流：
 
 | 网页转换 | MCP 工作区 |
 | --- | --- |
 | <img src="https://cdn.jsdelivr.net/gh/wengzige/html-deck-editor@main/docs/images/readme/web-converter.jpg" alt="网页转换截图" width="100%" loading="lazy" decoding="async"> | <img src="https://cdn.jsdelivr.net/gh/wengzige/html-deck-editor@main/docs/images/readme/codex-workspace.jpg" alt="MCP 工作区截图" width="100%" loading="lazy" decoding="async"> |
 | 上传 HTML / ZIP / 文件夹，生成可编辑 ZIP。 | 在 Codex、Claude 或 WorkBuddy 里打开本地工作区，直接让 AI 修改当前 deck。 |
 
-## 两种使用方式
+## 三种使用方式
 
 | 方式 | 适合场景 | AI 来源 | API 配置 |
 | --- | --- | --- | --- |
+| **在线工作台** | 在线打开单个 HTML，在账户项目中继续编辑并按需同步 | 平台 AI 或自己的 API | 平台 AI 可直接使用账户额度；自己的配置加密保存到账户 |
 | **网页转换** | 上传 HTML / ZIP / 文件夹，生成可编辑 ZIP | 网页调用你选择的模型 | AI 智能适配需要自己的 API Key |
 | **MCP 工作区** | 让 Codex、Claude Code、Claude Desktop 或 WorkBuddy 直接修改本地 deck | 当前 AI 客户端 | 不需要在网页配置 API |
 
-两条线可以单独使用。网页转换不依赖 MCP；MCP 复用同一套文件检测、转换和浏览器编辑器，并额外提供本地工作区与智能体工具。
+三种入口可以单独使用，但不是三套编辑器。在线工作台在公共编辑核心之上增加账户项目、跨浏览器同步、平台额度和 AI 助手；网页转换器专注浏览器本地转换；MCP 工作区再接入本机文件与当前 AI 客户端。
 
 <a id="anchor-deck-mcp"></a>
 
@@ -206,14 +211,22 @@ AI 智能适配主要完成：
 
 这套流程把 AI 用在“理解复杂 HTML”上，再由本地转换器校验 selector、写入标记、保留资源并完成打包。它能显著提升复杂 HTML 的适配成功率；遇到结构特别混乱或只有整页截图的文件时，仍建议在预览里复核页数、顺序和可编辑区域。
 
-网页模式和 MCP 模式的 AI 来源不同：
+三种入口的 AI 来源不同：
 
 | 模式 | 谁分析 HTML | 怎么启动 |
 | --- | --- | --- |
+| 在线工作台 | 平台 AI 或账户中加密保存的自有 API | 从工作区启动 **AI 智能适配**，或在编辑器中打开 **AI 助手** |
 | 网页 | 你配置的 API | 点击 **AI 智能适配** |
 | MCP | 当前 AI 客户端（Codex / Claude / WorkBuddy） | 点击 **复制智能适配指令**，粘贴到 AI 输入框并发送 |
 
-### 网页使用步骤
+### 在线工作台使用步骤
+
+1. 打开[在线工作台](https://anchordeck.dpdns.org/)，登录后导入单个 HTML / HTM。
+2. 在设置中选择平台 AI 或自己的 API；平台 AI 按成功调用扣除账户额度，失败自动退款。
+3. 需要优化复杂结构时启动 **AI 智能适配** 并先核对预览；进入编辑器后也可以用 **AI 助手** 做小范围修改。
+4. 完成一轮修改后点击 **保存到账户** 或 **同步当前修改**；编辑过程不是实时自动保存，重要项目请同时导出本地 HTML。
+
+### 网页转换器使用步骤
 
 1. 打开在线页面或本地页面。
 2. 上传 HTML / ZIP / 文件夹。
@@ -229,7 +242,7 @@ AI 智能适配主要完成：
 3. AI 调用 `prepare_ai_adaptation` 读取摘要，生成计划，再调用 `apply_ai_adaptation` 写入本地 HTML。
 4. 打开工作区复核页数、顺序和可编辑区域。
 
-### 网页模式 AI API 配置
+### 网页转换器 AI API 配置
 
 网页模式采用 BYOK（Bring Your Own Key）：
 
@@ -242,12 +255,13 @@ AI 智能适配主要完成：
 
 ## 其他功能亮点
 
-- **本地优先**：文件默认只在浏览器里读取、改写和打包。
+- **网页转换本地优先**：文件默认只在浏览器里读取、改写和打包。
 - **一键转可编辑**：上传 HTML / ZIP / 文件夹，下载新的可编辑 ZIP。
 - **AI 智能适配**：复杂 HTML 可以先用 AI 识别页面、文本、图片和视觉块，再生成更适合编辑器的结构。
+- **在线账户工作区**：在线版支持账户项目、跨浏览器读取最近一次同步版本、平台 AI 额度或自有 API，并继续复用同一套编辑器。
 - **保留原资源**：尽量保留原始 CSS、JS、图片、字体和相对路径。
 - **静态文件输出**：生成结果仍然是普通 HTML，可保存、转发、托管。
-- **BYOK AI / MCP 智能体**：网页模式使用你自己的 API Key；MCP 模式由当前 AI 客户端生成适配计划。
+- **灵活的 AI 来源**：在线版可选平台额度或自有 API，网页转换器使用自己的 API Key，MCP 则由当前 AI 客户端生成适配计划。
 - **for-ai.md 交接**：在编辑器里给元素写批注，一键导出给外部 AI 的修改上下文。
 - **字体库与字体导入**：内置常用中文字体栈，可选联网开源字体，也可导入 WOFF2 / WOFF / TTF / OTF。
 - **PDF / 图片导出**：自由勾选页面，导出 PDF、PNG 或 JPG；多页图片自动打包 ZIP。
@@ -284,7 +298,15 @@ Anchor Deck 适合这些场景：
 - 你想把静态 HTML 演示稿做成可编辑交付物，而不是一次性页面。
 - 你正在做 AI PPT / HTML deck 工作流，需要一个“生成后可编辑”的落地点。
 
-## 在线使用
+## 在线工作台与网页转换器
+
+### 在线工作台
+
+[https://anchordeck.dpdns.org/](https://anchordeck.dpdns.org/)
+
+当前在线版面向横屏 PC，支持导入单个 HTML / HTM，完成编辑、批注、智能适配、AI 辅助、账户保存和导出。登录后的账户项目可在不同浏览器间读取最近一次成功同步的版本；当前修改需要主动点击保存，尚不提供实时自动保存、历史版本或分享链接。ZIP 和文件夹请继续使用下面的网页转换器或 MCP 工作区。
+
+### 网页转换器
 
 打开：
 
@@ -368,8 +390,10 @@ Anchor Deck 适合这些场景：
 
 ## 隐私与安全
 
-- 文件默认只在浏览器本地处理。
+- 使用网页转换器时，文件默认只在浏览器本地处理。
+- 使用在线工作台时，登录、账户项目、平台 AI 和主动保存需要由服务器处理；未登录项目只保存在当前浏览器。兼容性改进的数据范围和开关会在在线版设置中明确显示。
 - 项目不会内置作者 API Key。
+- 在线工作台可以使用平台 AI，也可以把自己的 API 配置加密保存到账户；页面不会返回密钥明文。
 - 网页模式的 AI 适配只在用户配置 API 后才会调用用户选择的服务商或代理。
 - MCP 模式不要求网页 API Key；当前 AI 客户端读取结构摘要、生成计划，MCP 在本机应用计划。
 - API Key 默认不长期保存。
