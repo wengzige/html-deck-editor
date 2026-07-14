@@ -18,7 +18,7 @@
       width: 42px;
       height: 42px;
       border: 1.5px solid var(--ink, #111111);
-      background: var(--paper, #f8f6ef);
+      background: var(--paper, #f3f0e7);
       color: var(--ink, #111111);
       font: 500 18px/1 var(--font-mono, ui-monospace, SFMono-Regular, Menlo, Monaco, Consolas, "Liberation Mono", monospace);
       opacity: 0;
@@ -120,7 +120,7 @@
       pointer-events: auto;
       border: 1px solid rgba(17, 17, 17, 0.12);
       border-radius: 8px;
-      background: rgba(248, 246, 239, 0.97);
+      background: rgba(243, 240, 231, 0.97);
       box-shadow: 0 10px 26px rgba(17, 17, 17, 0.10);
       backdrop-filter: blur(10px);
     }
@@ -213,7 +213,7 @@
     .editor-shell[data-html-deck-editor-ui] .toolbar-help-button:focus-visible,
     .editor-shell[data-html-deck-editor-ui] .frame-delete:focus-visible,
     .editor-shell[data-html-deck-editor-ui] .shape-choice:focus-visible {
-      outline: 2px solid rgba(31, 43, 224, 0.34);
+      outline: 2px solid rgba(23, 98, 74, 0.34);
       outline-offset: 2px;
     }
 
@@ -238,9 +238,9 @@
     }
 
     .editor-shell[data-html-deck-editor-ui] .format-brush-button[aria-pressed="true"] {
-      border-color: rgba(31, 43, 224, 0.45);
-      background: rgba(31, 43, 224, 0.08);
-      color: #1f2be0;
+      border-color: rgba(23, 98, 74, 0.45);
+      background: rgba(23, 98, 74, 0.08);
+      color: #17624a;
     }
 
     .editor-shell[data-html-deck-editor-ui] .shape-picker-wrap {
@@ -355,7 +355,7 @@
       right: 0;
       height: 3px;
       border-radius: 2px;
-      background: #1f2be0;
+      background: #17624a;
       pointer-events: none;
     }
 
@@ -369,7 +369,7 @@
 
     .editor-shell[data-html-deck-editor-ui] .slide-chip.active {
       border-color: var(--ink, #111111);
-      background: rgba(31, 43, 224, 0.08);
+      background: rgba(23, 98, 74, 0.08);
     }
 
     .editor-shell[data-html-deck-editor-ui] .slide-chip-num {
@@ -482,7 +482,7 @@
 
     .editor-shell[data-html-deck-editor-ui] .text-style-button[aria-pressed="true"] {
       border-color: var(--ink, #111111);
-      background: rgba(31, 43, 224, 0.1);
+      background: rgba(23, 98, 74, 0.1);
     }
 
     .editor-shell[data-html-deck-editor-ui] .text-style-italic {
@@ -531,7 +531,7 @@
 
     .editor-shell[data-html-deck-editor-ui] .color-preset[aria-checked="true"] {
       border-color: #111111;
-      box-shadow: 0 0 0 2px rgba(31, 43, 224, 0.18), inset 0 0 0 1px rgba(255, 255, 255, 0.42);
+      box-shadow: 0 0 0 2px rgba(23, 98, 74, 0.18), inset 0 0 0 1px rgba(255, 255, 255, 0.42);
     }
 
     .editor-shell[data-html-deck-editor-ui] .background-field {
@@ -705,9 +705,9 @@
       place-items: center;
       min-height: 78px;
       padding: 12px;
-      border: 1.5px dashed rgba(31, 43, 224, 0.5);
+      border: 1.5px dashed rgba(23, 98, 74, 0.5);
       border-radius: 8px;
-      background: rgba(31, 43, 224, 0.05);
+      background: rgba(23, 98, 74, 0.05);
       color: rgba(17, 17, 17, 0.68);
       font-size: 13px;
       line-height: 1.38;
@@ -716,7 +716,7 @@
 
     .editor-shell[data-html-deck-editor-ui] .drop-zone.dragging {
       border-color: var(--ink, #111111);
-      background: rgba(31, 43, 224, 0.13);
+      background: rgba(23, 98, 74, 0.13);
       color: var(--ink, #111111);
     }
 
@@ -766,7 +766,7 @@
 
     .editor-shell[data-html-deck-editor-ui] .comment-card:hover,
     .editor-shell[data-html-deck-editor-ui] .comment-card:focus-visible {
-      border-color: rgba(31, 43, 224, 0.34);
+      border-color: rgba(23, 98, 74, 0.34);
       outline: none;
     }
 
@@ -896,11 +896,11 @@
     }
 
     .editor-shell[data-html-deck-editor-ui] .editor-zoom-reset:hover {
-      background: #1f2be0;
+      background: #17624a;
     }
 
     .editor-shell[data-html-deck-editor-ui] .editor-zoom-reset:focus-visible {
-      outline: 2px solid rgba(31, 43, 224, 0.42);
+      outline: 2px solid rgba(23, 98, 74, 0.42);
       outline-offset: 3px;
     }
 
@@ -1042,8 +1042,8 @@
     }
 
     .editor-shell[data-html-deck-editor-ui] .editor-export-page:has(input:checked) {
-      border-color: rgba(31, 43, 224, 0.46);
-      background: rgba(31, 43, 224, 0.055);
+      border-color: rgba(23, 98, 74, 0.46);
+      background: rgba(23, 98, 74, 0.055);
     }
 
     .editor-shell[data-html-deck-editor-ui] .editor-export-page-number {
@@ -1083,27 +1083,27 @@
       width: max-content;
       min-height: 34px;
       padding: 0 13px;
-      border: 1px solid #1f2be0;
+      border: 1px solid #17624a;
       border-radius: 6px;
-      background: #1f2be0;
+      background: #17624a;
       color: #ffffff;
       font: 700 13px/1 var(--font-body, system-ui, -apple-system, BlinkMacSystemFont, "Segoe UI", sans-serif);
       text-decoration: none;
     }
 
     .editor-shell[data-html-deck-editor-ui] .editor-export-download.secondary {
-      border-color: rgba(31, 43, 224, 0.24);
-      background: rgba(31, 43, 224, 0.07);
-      color: #1f2be0;
+      border-color: rgba(23, 98, 74, 0.24);
+      background: rgba(23, 98, 74, 0.07);
+      color: #17624a;
     }
 
     .editor-shell[data-html-deck-editor-ui] .editor-export-progress-panel {
       display: grid;
       gap: 9px;
       padding: 12px 14px;
-      border: 1px solid rgba(31, 43, 224, 0.18);
+      border: 1px solid rgba(23, 98, 74, 0.18);
       border-radius: 6px;
-      background: rgba(31, 43, 224, 0.05);
+      background: rgba(23, 98, 74, 0.05);
     }
 
     .editor-shell[data-html-deck-editor-ui] .editor-export-modal[aria-busy="true"] .editor-export-progress-panel {
@@ -1111,8 +1111,8 @@
       align-content: center;
       gap: 12px;
       padding: 24px;
-      border-color: rgba(31, 43, 224, 0.24);
-      background: rgba(31, 43, 224, 0.06);
+      border-color: rgba(23, 98, 74, 0.24);
+      background: rgba(23, 98, 74, 0.06);
     }
 
     .editor-shell[data-html-deck-editor-ui] .editor-export-progress-panel[hidden] {
@@ -1129,7 +1129,7 @@
     }
 
     .editor-shell[data-html-deck-editor-ui] .editor-export-progress-kicker {
-      color: #1f2be0;
+      color: #17624a;
       font: 700 12px/1.3 var(--font-body, system-ui, -apple-system, BlinkMacSystemFont, "Segoe UI", sans-serif);
       letter-spacing: 0.04em;
     }
@@ -1146,23 +1146,23 @@
       overflow: hidden;
       border: 0;
       border-radius: 999px;
-      background: rgba(31, 43, 224, 0.12);
-      accent-color: #1f2be0;
+      background: rgba(23, 98, 74, 0.12);
+      accent-color: #17624a;
     }
 
     .editor-shell[data-html-deck-editor-ui] .editor-export-progress::-webkit-progress-bar {
       border-radius: 999px;
-      background: rgba(31, 43, 224, 0.12);
+      background: rgba(23, 98, 74, 0.12);
     }
 
     .editor-shell[data-html-deck-editor-ui] .editor-export-progress::-webkit-progress-value {
       border-radius: 999px;
-      background: #1f2be0;
+      background: #17624a;
     }
 
     .editor-shell[data-html-deck-editor-ui] .editor-export-progress::-moz-progress-bar {
       border-radius: 999px;
-      background: #1f2be0;
+      background: #17624a;
     }
 
     .editor-shell[data-html-deck-editor-ui] .editor-export-progress-panel p {
@@ -1181,7 +1181,7 @@
     .editor-shell[data-html-deck-editor-ui] .editor-export-cancel-running {
       flex: 0 0 auto;
       min-width: 88px;
-      border-color: rgba(31, 43, 224, 0.28);
+      border-color: rgba(23, 98, 74, 0.28);
     }
 
     .editor-shell[data-html-deck-editor-ui] .editor-export-modal[data-export-cancel="pending"] .editor-export-progress-panel {
@@ -1291,7 +1291,7 @@
       width: 520px;
       height: 320px;
       border: 1.5px solid var(--ink, #111111);
-      background: var(--paper, #f8f6ef);
+      background: var(--paper, #f3f0e7);
       overflow: hidden;
     }
 
@@ -1306,7 +1306,7 @@
       width: 280px;
       height: 180px;
       border: 1.5px solid var(--ink, #111111);
-      background: rgba(31, 43, 224, 0.16);
+      background: rgba(23, 98, 74, 0.16);
     }
 
     .shape-layer[data-shape="roundRect"] {
@@ -1865,7 +1865,7 @@
 
     body.editing:not(.html-deck-editor-exporting) [data-editable],
     body.editing:not(.html-deck-editor-exporting) [data-editor-kind="text"] {
-      outline: 1px dashed rgba(31, 43, 224, 0.92);
+      outline: 1px dashed rgba(23, 98, 74, 0.92);
       outline-offset: 4px;
       box-shadow:
         0 0 0 2px rgba(255, 255, 255, 0.92),
@@ -1886,7 +1886,7 @@
     body.editing:not(.html-deck-editor-exporting) [data-editor-kind="media"],
     body.editing:not(.html-deck-editor-exporting) [data-editor-kind="box"],
     body.editing:not(.html-deck-editor-exporting) .editor-layer {
-      outline: 1px dashed rgba(31, 43, 224, 0.92);
+      outline: 1px dashed rgba(23, 98, 74, 0.92);
       outline-offset: 4px;
       box-shadow:
         0 0 0 2px rgba(255, 255, 255, 0.92),
@@ -1919,7 +1919,7 @@
     }
 
     body.editing:not(.html-deck-editor-exporting).dragging-file .slide.active {
-      box-shadow: inset 0 0 0 12px rgba(31, 43, 224, 0.14);
+      box-shadow: inset 0 0 0 12px rgba(23, 98, 74, 0.14);
     }
 
     @media (max-width: 960px) {
