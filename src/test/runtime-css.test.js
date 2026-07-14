@@ -24,9 +24,16 @@ describe("editor runtime css", () => {
 
   it("keeps edit outlines normally but disables every editing-only rule during export", () => {
     expect(editorCss).toContain("body.editing:not(.html-deck-editor-exporting) [data-editable]");
-    expect(editorCss).toContain("outline: 1px dashed rgba(31, 43, 224, 0.92);");
+    expect(editorCss).toContain("outline: 1px dashed rgba(23, 98, 74, 0.92);");
     const unguardedEditingSelectors = editorCss.match(/body\.editing(?!:not\(\.html-deck-editor-exporting\))/g) || [];
     expect(unguardedEditingSelectors).toEqual([]);
+  });
+
+  it("uses the shared brand palette for injected editor chrome", () => {
+    expect(editorCss).toContain("background: var(--paper, #f3f0e7);");
+    expect(editorCss).toContain("background: #17624a;");
+    expect(editorCss).not.toContain("#1f2be0");
+    expect(editorCss).not.toContain("rgba(31, 43, 224");
   });
 
   it("hides preserved host chrome only while the editor is active", () => {
